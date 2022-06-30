@@ -30,7 +30,7 @@
              If you use 1.8 then your plugin will work on newer versions,
              but if you use "11" or "16" then it will not load on servers
              with previous Java version. We recommend you stick with 1.8. -->
-        <java.version>17</java.version>
+        <java.version>18</java.version>
 
         <!-- Change foundation.version to the latest one from
              https://github.com/kangarko/Foundation/releases -->
@@ -104,21 +104,21 @@ NB: Edit the <systemPath> to point out to your patched server file on your disk.
             <artifactId>Paper-1.16</artifactId>
             <version>1</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/../library/patched_1.16.5.jar</systemPath>
+            <systemPath>${project.basedir}/library/patched_1.16.5.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>coob.games.server</groupId>
             <artifactId>Paper-1.12</artifactId>
             <version>1</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/../library/patched_1.12.2.jar</systemPath>
+            <systemPath>${project.basedir}/library/patched_1.12.2.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>coob.games.server</groupId>
             <artifactId>Paper-1.8</artifactId>
             <version>1</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/../library/patched_1.8.8.jar</systemPath>
+            <systemPath>${project.basedir}/library/patched_1.8.8.jar</systemPath>
         </dependency>
     </dependencies>
 
