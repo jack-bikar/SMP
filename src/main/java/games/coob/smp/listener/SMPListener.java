@@ -1,10 +1,9 @@
 package games.coob.smp.listener;
 
 import de.slikey.effectlib.effect.*;
-import games.coob.smp.hologram.Hologram;
-import games.coob.smp.hologram.HologramRegistryInterface;
+import games.coob.smp.hologram.BukkitHologram;
+import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.PlayerCache;
-import games.coob.smp.hologram.HologramRegistryProvider;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import lombok.AccessLevel;
@@ -251,7 +250,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
 	public void onPlayerQuit(final PlayerQuitEvent event) {
 		final Player player = event.getPlayer();
 		final PlayerCache cache = PlayerCache.from(player);
-		final HologramRegistryInterface registry = HologramRegistryProvider.getHologramRegistryInstance();
+		final HologramRegistry registry = HologramRegistry.getInstance();
 
 		if (cache.isDrawingAxe()) {
 			player.removePotionEffect(PotionEffectType.SLOW);
@@ -264,7 +263,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
 			player.setHealth(0);
 		}
 
-		for (final Hologram hologram : registry.getLoadedHolograms())
+		for (final BukkitHologram hologram : registry.getLoadedHolograms())
 			if (player.hasMetadata(hologram.getUniqueId().toString()))
 				player.removeMetadata(hologram.getUniqueId().toString(), SimplePlugin.getInstance());
 
@@ -287,10 +286,9 @@ public final class SMPListener implements Listener { // TODO add the register ev
 
 		if (manager != null) {
 			final Scoreboard board = manager.getNewScoreboard();
-			final Objective objective = board.registerNewObjective("showhealth", Criterias.HEALTH);
+			final Objective objective = board.registerNewObjective("showhealth", Criterias.HEALTH, Common.colorize("&c❤"));
 
 			objective.setDisplaySlot(DisplaySlot.BELOW_NAME);
-			objective.setDisplayName(Common.colorize("&c❤"));
 
 			player.setHealth(player.getHealth());
 			player.setScoreboard(board);

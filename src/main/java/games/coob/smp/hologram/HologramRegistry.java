@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * Registry for managing holograms using Paper 1.21+ API
  */
-public class HologramRegistry extends YamlConfig implements HologramRegistryInterface {
+public class HologramRegistry extends YamlConfig {
 
 	@Getter
 	private static final HologramRegistry instance = new HologramRegistry();
@@ -22,7 +22,7 @@ public class HologramRegistry extends YamlConfig implements HologramRegistryInte
 	/**
 	 * Represents currently loaded Holograms
 	 */
-	private List<Hologram> loadedHolograms = new ArrayList<>();
+	private List<BukkitHologram> loadedHolograms = new ArrayList<>();
 
 	/**
 	 * Create a new registry and load
@@ -35,24 +35,21 @@ public class HologramRegistry extends YamlConfig implements HologramRegistryInte
 	/**
 	 * Automatically loads stored disk Holograms and spawns them
 	 */
-	@Override
 	public void spawnFromDisk() {
 		// Load holograms from disk
 		this.loadedHolograms = loadHolograms();
 
 		System.out.println("@Found " + this.loadedHolograms.size() + " Holograms on the disk");
 
-		for (final Hologram hologram : this.loadedHolograms)
+		for (final BukkitHologram hologram : this.loadedHolograms)
 			System.out.println("\tspawned " + hologram + " at " + hologram.getLocation());
 	}
 
-	@Override
-	public List<Hologram> loadHolograms() {
-		final List<Hologram> loadedHologram = new ArrayList<>();
+	public List<BukkitHologram> loadHolograms() {
+		final List<BukkitHologram> loadedHologram = new ArrayList<>();
 
 		for (final SerializedMap map : getMapList("Saved_Holograms")) {
-			final Hologram hologram = HologramProvider.deserialize(map);
-
+			final BukkitHologram hologram = BukkitHologram.deserialize(map);
 			loadedHologram.add(hologram);
 		}
 
@@ -62,38 +59,33 @@ public class HologramRegistry extends YamlConfig implements HologramRegistryInte
 	/**
 	 * Registers a new hologram to our map
 	 *
-	 * @param hologram
+	 * @param hologram The hologram to register
 	 */
-	@Override
-	public void register(final Hologram hologram) {
+	public void register(final BukkitHologram hologram) {
 		Valid.checkBoolean(!this.isRegistered(hologram), hologram + " is already registered!");
 
 		this.loadedHolograms.add(hologram);
 		this.save();
 	}
 
-	@Override
-	public void unregister(final Hologram hologram) {
+	public void unregister(final BukkitHologram hologram) {
 		this.loadedHolograms.remove(hologram);
 		this.save();
 	}
 
-	@Override
-	public boolean isRegistered(final Hologram hologram) {
+	public boolean isRegistered(final BukkitHologram hologram) {
 		return this.isRegistered(hologram.getUniqueId());
 	}
 
-	@Override
 	public boolean isRegistered(final UUID entityUniqueId) {
-		for (final Hologram hologram : this.loadedHolograms)
+		for (final BukkitHologram hologram : this.loadedHolograms)
 			if (hologram != null && hologram.getUniqueId().equals(entityUniqueId))
 				return true;
 
 		return false;
 	}
 
-	@Override
-	public List<Hologram> getLoadedHolograms() {
+	public List<BukkitHologram> getLoadedHolograms() {
 		return Collections.unmodifiableList(loadedHolograms);
 	}
 

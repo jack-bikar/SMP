@@ -146,7 +146,7 @@ public final class AxeListener implements Listener { // TODO figure out why ther
 				} else {
 					swingArm(player);
 					throwAxe(player, vector.add(new Vector(0, 0.4, 0)), item);
-					player.setItemInHand(null);
+					player.getInventory().setItemInMainHand(null);
 					player.removePotionEffect(PotionEffectType.SLOW);
 					player.removePotionEffect(PotionEffectType.JUMP);
 					cache.setDrawingAxe(false);
@@ -164,7 +164,7 @@ public final class AxeListener implements Listener { // TODO figure out why ther
 			armorStand.setArms(false);
 			CompProperty.GRAVITY.apply(armorStand, false);
 			armorStand.setMarker(true);
-			armorStand.setItemInHand(itemStack);
+			armorStand.getEquipment().setItemInMainHand(itemStack);
 			armorStand.setMetadata("Throwing_Axe", new FixedMetadataValue(SimplePlugin.getInstance(), ""));
 		};
 

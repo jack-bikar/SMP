@@ -33,6 +33,7 @@
              https://github.com/kangarko/Foundation/releases -->
         <foundation.version>6.0.1</foundation.version>
         <effectlib.version>9.4</effectlib.version>
+        <lombok.version>1.18.30</lombok.version>
 
         <!-- DO NOT EDIT -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -51,12 +52,6 @@
     </repositories>
 
     <dependencies>
-        <dependency>
-            <groupId>games.coob</groupId>
-            <artifactId>nmsinterface</artifactId>
-            <version>1.0.0</version>
-            <scope>compile</scope>
-        </dependency>
         <!-- Use our Foundation library -->
         <dependency>
             <groupId>com.github.kangarko</groupId>
@@ -85,13 +80,22 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-
-                <!-- Change version to the latest one from
-                     https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
-                <version>3.10.1</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <release>21</release>
+                    <encoding>UTF-8</encoding>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                    <showWarnings>true</showWarnings>
+                    <showDeprecation>true</showDeprecation>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -118,17 +122,12 @@
                                  if you pull Foundation from the Internet use com.github.kangarko  -->
                             <include>com.github.kangarko:Foundation*</include>
                             <include>com.elmakers.mine.bukkit:EffectLib</include>
-                            <include>games.coob:nmsinterface*</include>
                         </includes>
                     </artifactSet>
                     <relocations>
                         <relocation>
                             <pattern>org.mineacademy.fo</pattern>
                             <shadedPattern>${project.groupId}.smp.lib</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>games.coob.nmsinterface</pattern>
-                            <shadedPattern>${project.groupId}.smp.lib.nmsinterface</shadedPattern>
                         </relocation>
                         <relocation>
                             <pattern>de.slikey</pattern>

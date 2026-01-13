@@ -8,8 +8,7 @@ import org.bukkit.inventory.Inventory;
 import org.mineacademy.fo.collection.SerializedMap;
 import org.mineacademy.fo.model.ConfigSerializable;
 
-import games.coob.smp.hologram.Hologram;
-import games.coob.smp.hologram.HologramProvider;
+import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.util.InventorySerialization;
 import lombok.Getter;
 
@@ -22,7 +21,7 @@ public class DeathChestData implements ConfigSerializable {
 
 	private Inventory inventory;
 
-	private Hologram hologram;
+	private BukkitHologram hologram;
 
 	public void setLocation(final Location location) {
 		this.location = location;
@@ -36,7 +35,7 @@ public class DeathChestData implements ConfigSerializable {
 		this.uuid = uuid;
 	}
 
-	public void setHologram(final Hologram hologram) {
+	public void setHologram(final BukkitHologram hologram) {
 		this.hologram = hologram;
 	}
 
@@ -54,7 +53,7 @@ public class DeathChestData implements ConfigSerializable {
 		final Inventory inventory = InventorySerialization.fromBase64(inventoryString);
 		final Location location = map.getLocation("Location");
 		final UUID uuid = map.getUUID("UUID");
-		final Hologram hologram = HologramProvider.deserialize(map.getMap("Hologram"));
+		final BukkitHologram hologram = BukkitHologram.deserialize(map.getMap("Hologram"));
 		final DeathChestData deathChestData = new DeathChestData();
 
 		deathChestData.setLocation(location);

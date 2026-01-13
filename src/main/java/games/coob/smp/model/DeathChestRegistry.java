@@ -1,6 +1,6 @@
 package games.coob.smp.model;
 
-import games.coob.smp.hologram.Hologram;
+import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.PlayerCache;
 import lombok.Getter;
 import org.bukkit.Location;
@@ -37,7 +37,7 @@ public class DeathChestRegistry extends YamlConfig {
 		this.set("Death_Chests", this.registeredDeathChests);
 	}
 
-	public void register(final Block block, final Player player, final Hologram hologram) {
+	public void register(final Block block, final Player player, final BukkitHologram hologram) {
 		final DeathChestData deathChestData = new DeathChestData();
 		final PlayerCache cache = PlayerCache.from(player);
 
@@ -85,7 +85,7 @@ public class DeathChestRegistry extends YamlConfig {
 		return null;
 	}
 
-	public Hologram getHologram(final Block block) {
+	public BukkitHologram getHologram(final Block block) {
 		for (final DeathChestData deathChestData : this.registeredDeathChests)
 			if (deathChestData.getLocation().equals(block.getLocation()))
 				return deathChestData.getHologram();

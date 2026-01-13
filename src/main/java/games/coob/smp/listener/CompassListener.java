@@ -35,7 +35,7 @@ public final class CompassListener implements Listener {
 		final Player player = event.getPlayer();
 
 		if (Settings.CompassSection.ENABLE_COMPASS) {
-			if (player.getItemInHand().getType() == Material.COMPASS) {
+			if (player.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
 				if (action.equals(Action.RIGHT_CLICK_AIR) || action.equals(Action.RIGHT_CLICK_BLOCK) || action.equals(Action.PHYSICAL)) {
 					CompSound.LAVA_POP.play(player.getLocation());
 

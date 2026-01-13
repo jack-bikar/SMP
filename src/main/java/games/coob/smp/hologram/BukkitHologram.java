@@ -1,5 +1,7 @@
 package games.coob.smp.hologram;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
@@ -7,19 +9,22 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.mineacademy.fo.Common;
 import org.mineacademy.fo.Valid;
 import org.mineacademy.fo.collection.SerializedMap;
+import org.mineacademy.fo.model.ConfigSerializable;
 import org.mineacademy.fo.plugin.SimplePlugin;
 
 import java.util.*;
 
 /**
- * Bukkit/Paper API implementation of holograms for Minecraft 1.21+
+ * Hologram implementation using Paper 1.21+ API
  * Uses ArmorStands with Paper's showEntity/hideEntity API for per-player visibility
  */
-public class BukkitHologram implements Hologram {
+public class BukkitHologram implements ConfigSerializable {
 
-	private final UUID uniqueId;
+	@Getter
+    private final UUID uniqueId;
 	private Location location;
-	private String[] lines;
+	@Setter
+    private String[] lines;
 	private final List<ArmorStand> armorStands = new ArrayList<>();
 	private final Set<Player> visibleToPlayers = new HashSet<>();
 
@@ -33,7 +38,7 @@ public class BukkitHologram implements Hologram {
 		this.lines = lines;
 	}
 
-	@Override
+	@SuppressWarnings("deprecation")
 	public void show(Location location, Player player, String... linesOfText) {
 		// Set location and lines if not already set (first time)
 		if (this.location == null) {
@@ -60,9 +65,9 @@ public class BukkitHologram implements Hologram {
 		}
 
 		// Show to this specific player using Paper 1.21+ API
+		// Note: showEntity is deprecated but still the standard way for per-player visibility in Paper
 		if (!visibleToPlayers.contains(player)) {
 			for (ArmorStand stand : armorStands) {
-				// Paper API: showEntity is the correct method for 1.19+
 				player.showEntity(SimplePlugin.getInstance(), stand);
 			}
 			visibleToPlayers.add(player);
@@ -70,14 +75,14 @@ public class BukkitHologram implements Hologram {
 		}
 	}
 
-	@Override
+	@SuppressWarnings("deprecation")
 	public void hide(Player player) {
 		if (!visibleToPlayers.contains(player))
 			return;
 
 		// Hide all armor stands from this player using Paper 1.21+ API
+		// Note: hideEntity is deprecated but still the standard way for per-player visibility in Paper
 		for (ArmorStand stand : armorStands) {
-			// Paper API: hideEntity is the correct method for 1.19+
 			player.hideEntity(SimplePlugin.getInstance(), stand);
 		}
 
@@ -85,7 +90,6 @@ public class BukkitHologram implements Hologram {
 		player.removeMetadata(uniqueId.toString(), SimplePlugin.getInstance());
 	}
 
-	@Override
 	public void remove(Player player) {
 		hide(player);
 	}
@@ -106,24 +110,12 @@ public class BukkitHologram implements Hologram {
 		armorStands.clear();
 	}
 
-	@Override
-	public UUID getUniqueId() {
-		return uniqueId;
-	}
-
-	@Override
-	public Location getLocation() {
+    public Location getLocation() {
 		Valid.checkBoolean(location != null, "Cannot call getLocation when location is not set");
 		return location.clone();
 	}
 
-	@Override
-	public void setLines(String[] lines) {
-		this.lines = lines;
-	}
-
-	@Override
-	public String[] getLines() {
+    public String[] getLines() {
 		return lines != null ? lines.clone() : new String[0];
 	}
 

@@ -1,8 +1,7 @@
 package games.coob.smp.task;
 
-import games.coob.smp.hologram.Hologram;
-import games.coob.smp.hologram.HologramRegistryInterface;
-import games.coob.smp.hologram.HologramRegistryProvider;
+import games.coob.smp.hologram.BukkitHologram;
+import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.settings.Settings;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Location;
@@ -18,10 +17,10 @@ public final class HologramTask extends BukkitRunnable {
 
 	@Override
 	public void run() {
-		final HologramRegistryInterface registry = HologramRegistryProvider.getHologramRegistryInstance();
+		final HologramRegistry registry = HologramRegistry.getInstance();
 
 		for (final Player player : Remain.getOnlinePlayers()) {
-			for (final Hologram hologram : registry.getLoadedHolograms()) {
+			for (final BukkitHologram hologram : registry.getLoadedHolograms()) {
 				if (!player.hasMetadata(hologram.getUniqueId().toString()) && registry.isRegistered(hologram))
 					showPlayersInRange(hologram, player);
 
@@ -34,7 +33,7 @@ public final class HologramTask extends BukkitRunnable {
 	/*
 	 * Shows the hologram to players within the set range
 	 */
-	private void showPlayersInRange(final Hologram hologram, final Player player) {
+	private void showPlayersInRange(final BukkitHologram hologram, final Player player) {
 		final Location hologramLocation = hologram.getLocation();
 		final Location playerLocation = player.getLocation();
 

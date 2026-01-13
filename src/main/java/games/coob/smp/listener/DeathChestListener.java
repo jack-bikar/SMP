@@ -1,7 +1,7 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.PlayerCache;
-import games.coob.smp.hologram.Hologram;
+import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.hologram.HologramProvider;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.settings.Settings;
@@ -64,7 +64,7 @@ public final class DeathChestListener implements Listener {
 			final Block block = location.getBlock();
 			final PlayerCache cache = PlayerCache.from(player);
 			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-			final Hologram hologram = HologramProvider.createHologram();
+			final BukkitHologram hologram = HologramProvider.createHologram();
 			final ItemStack[] drops = Stream.of(player.getInventory().getContents()) // Create a stream of ItemStack
 					.filter(Objects::nonNull) // Filter all non null values (removing empty slot)
 					.toArray(ItemStack[]::new); // Convert the result to ItemStack array
@@ -130,10 +130,10 @@ public final class DeathChestListener implements Listener {
 				if (registry.getInventory(block).isEmpty()) {
 					block.setType(Material.AIR);
 
-					final Hologram hologram = registry.getHologram(block);
-					if (hologram != null && hologram instanceof BukkitHologram) {
+					final BukkitHologram hologram = registry.getHologram(block);
+					if (hologram != null) {
 						// Hide from all players and remove armor stands
-						((BukkitHologram) hologram).removeAll();
+						hologram.removeAll();
 					}
 
 					registry.unregister(block);
@@ -163,10 +163,10 @@ public final class DeathChestListener implements Listener {
 						item.setType(Material.AIR);
 				}
 
-				final Hologram hologram = registry.getHologram(block);
-				if (hologram != null && hologram instanceof BukkitHologram) {
+				final BukkitHologram hologram = registry.getHologram(block);
+				if (hologram != null) {
 					// Hide from all players and remove armor stands
-					((BukkitHologram) hologram).removeAll();
+					hologram.removeAll();
 				}
 
 				registry.unregister(block);

@@ -45,11 +45,14 @@ public final class InvEditCommand extends SimpleCommand {
 		final String param = args[0];
 		final String name = args[1];
 
-		final OfflinePlayer targetOfflinePlayer = Bukkit.getOfflinePlayer(name);
-		final boolean isOnline = targetOfflinePlayer.isOnline();
-		final Player targetPlayer = targetOfflinePlayer.getPlayer();
+		// Try to get online player first (non-blocking)
+		Player targetPlayer = Bukkit.getPlayer(name);
+		// Note: getOfflinePlayer is deprecated but still needed for offline player lookup
+		@SuppressWarnings("deprecation")
+		final OfflinePlayer targetOfflinePlayer = targetPlayer != null ? targetPlayer : Bukkit.getOfflinePlayer(name);
+		final boolean isOnline = targetPlayer != null;
 
-		checkBoolean(targetOfflinePlayer.hasPlayedBefore(), "{1} has never played before nor is online.");
+		checkBoolean(targetOfflinePlayer != null && (targetOfflinePlayer.hasPlayedBefore() || isOnline), "{1} has never played before nor is online.");
 
 		if ("inv".equals(param)) {
 			if (isOnline)

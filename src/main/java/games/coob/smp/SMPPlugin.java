@@ -2,7 +2,7 @@ package games.coob.smp;
 
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SpawnCommand;
-import games.coob.smp.hologram.HologramRegistryProvider;
+import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.listener.AxeListener;
 import games.coob.smp.listener.CompassListener;
 import games.coob.smp.listener.DeathChestListener;
@@ -19,7 +19,7 @@ public final class SMPPlugin extends SimplePlugin { // TODO auto register anotat
 	@Override
 	protected void onPluginStart() {
 		Common.runLater(DeathChestRegistry::getInstance);
-		HologramRegistryProvider.getHologramRegistryInstance().spawnFromDisk();
+		HologramRegistry.getInstance().spawnFromDisk();
 	}
 
 	@Override
