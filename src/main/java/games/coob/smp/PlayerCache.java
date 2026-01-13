@@ -1,13 +1,12 @@
 package games.coob.smp;
 
+import games.coob.smp.config.ConfigFile;
 import lombok.Getter;
 import lombok.Setter;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
-import org.mineacademy.fo.constants.FoConstants;
-import org.mineacademy.fo.remain.Remain;
-import org.mineacademy.fo.settings.YamlConfig;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -15,7 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Getter
-public final class PlayerCache extends YamlConfig {
+public final class PlayerCache extends ConfigFile {
 
 	private static final Map<UUID, PlayerCache> cacheMap = new HashMap<>();
 
@@ -59,36 +58,38 @@ public final class PlayerCache extends YamlConfig {
 	 * Creates a new player cache (see the bottom)
 	 */
 	private PlayerCache(final String name, final UUID uniqueId) {
-		setPathPrefix("Players." + uniqueId.toString());
+		super("data.yml");
 
 		this.playerName = name;
 		this.uniqueId = uniqueId;
-
-		this.loadConfiguration(NO_DEFAULT, FoConstants.File.DATA);
 	}
 
 	/**
 	 * Automatically called when loading data from disk.
-	 *
-	 * @see org.mineacademy.fo.settings.YamlConfig#onLoad()
 	 */
 	@Override
 	protected void onLoad() {
-		// Load any custom fields here, example:
-		// this.chatColor = get("Chat_Color", CompChatColor.class);
-		this.deathLocation = getLocation("Death_Location");
-		this.portalLocation = getLocation("Portal_Location");
-		this.trackingLocation = getString("Tracking_Location");
-		this.targetByUUID = get("Track_Player", UUID.class);
-		//this.deathDrops = get("Death_Drops", ItemStack[].class);
+		String path = "Players." + uniqueId.toString() + ".";
+		this.deathLocation = getConfig().getLocation(path + "Death_Location");
+		this.portalLocation = getConfig().getLocation(path + "Portal_Location");
+		this.trackingLocation = getConfig().getString(path + "Tracking_Location");
+		String uuidStr = getConfig().getString(path + "Track_Player");
+		if (uuidStr != null) {
+			try {
+				this.targetByUUID = UUID.fromString(uuidStr);
+			} catch (IllegalArgumentException e) {
+				this.targetByUUID = null;
+			}
+		}
 	}
 
 	@Override
 	protected void onSave() {
-		this.set("Death_Location", deathLocation);
-		this.set("Portal_Location", portalLocation);
-		this.set("Tracking_Location", trackingLocation);
-		this.set("Track_Player", targetByUUID);
+		String path = "Players." + uniqueId.toString() + ".";
+		getConfig().set(path + "Death_Location", deathLocation);
+		getConfig().set(path + "Portal_Location", portalLocation);
+		getConfig().set(path + "Tracking_Location", trackingLocation);
+		getConfig().set(path + "Track_Player", targetByUUID != null ? targetByUUID.toString() : null);
 	}
 
 	/**
@@ -98,9 +99,7 @@ public final class PlayerCache extends YamlConfig {
 	 */
 	@Nullable
 	public Player toPlayer() {
-		final Player player = Remain.getPlayerByUUID(this.uniqueId);
-
-		return player != null && player.isOnline() ? player : null;
+		return Bukkit.getPlayer(this.uniqueId);
 	}
 
 	/**

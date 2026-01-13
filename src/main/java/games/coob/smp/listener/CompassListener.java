@@ -19,15 +19,18 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
-import org.mineacademy.fo.Common;
-import org.mineacademy.fo.remain.CompMaterial;
-import org.mineacademy.fo.remain.CompSound;
+import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.Material;
+import org.bukkit.Sound;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class CompassListener implements Listener {
 
-	@Getter
-	private static final Listener instance = new CompassListener();
+	private static final CompassListener instance = new CompassListener();
+
+	public static CompassListener getInstance() {
+		return instance;
+	}
 
 	@EventHandler
 	public void onPlayerInteract(final PlayerInteractEvent event) {
@@ -37,7 +40,7 @@ public final class CompassListener implements Listener {
 		if (Settings.CompassSection.ENABLE_COMPASS) {
 			if (player.getInventory().getItemInMainHand().getType() == Material.COMPASS) {
 				if (action.equals(Action.RIGHT_CLICK_AIR) || action.equals(Action.RIGHT_CLICK_BLOCK) || action.equals(Action.PHYSICAL)) {
-					CompSound.LAVA_POP.play(player.getLocation());
+					player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 1.0f, 1.0f);
 
 					CompassMenu.openMenu(player);
 				}
@@ -56,15 +59,20 @@ public final class CompassListener implements Listener {
 					if (cache.getTrackingLocation() != null) {
 						if (cache.getTrackingLocation().equals("Death"))
 							player.setCompassTarget(cache.getDeathLocation());
-						else if (cache.getTrackingLocation().equals("Bed") && player.getBedSpawnLocation() != null)
-							Common.runLater(() -> player.setCompassTarget(player.getBedSpawnLocation()));
+						else if (cache.getTrackingLocation().equals("Bed")) {
+							@SuppressWarnings("deprecation")
+							Location bedLocation = player.getBedSpawnLocation();
+							if (bedLocation != null) {
+								SchedulerUtil.runLater(1, () -> player.setCompassTarget(bedLocation));
+							}
+						}
 
 						if (cache.getPortalLocation() != null) {
-							if (player.getInventory().contains(CompMaterial.COMPASS.getMaterial()))
-								for (int i = 0; i <= player.getInventory().getSize(); i++) {
-									final ItemStack item = player.getInventory().getItem(i);
+						if (player.getInventory().contains(Material.COMPASS))
+							for (int i = 0; i <= player.getInventory().getSize(); i++) {
+								final ItemStack item = player.getInventory().getItem(i);
 
-									if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
+								if (item != null && item.getType() == Material.COMPASS) {
 										final CompassMeta compass = (CompassMeta) item.getItemMeta();
 
 										if (compass.hasLodestone()) {
@@ -77,11 +85,11 @@ public final class CompassListener implements Listener {
 					}
 				} else {
 					if (Settings.CompassSection.ALLOWED_ENVIRONEMENTS.equals("nether") || Settings.CompassSection.ALLOWED_ENVIRONEMENTS.equals("all")) {
-						if (player.getInventory().contains(CompMaterial.COMPASS.getMaterial()) && cache.getPortalLocation() != null) {
+						if (player.getInventory().contains(Material.COMPASS) && cache.getPortalLocation() != null) {
 							for (int i = 0; i <= player.getInventory().getSize(); i++) {
 								final ItemStack item = player.getInventory().getItem(i);
 
-								if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
+								if (item != null && item.getType() == Material.COMPASS) {
 									final CompassMeta compass = (CompassMeta) item.getItemMeta();
 
 									if (cache.getTrackingLocation() != null) {

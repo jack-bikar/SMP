@@ -1,47 +1,70 @@
 package games.coob.smp.model;
 
-import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.PlayerCache;
+import games.coob.smp.config.ConfigFile;
+import games.coob.smp.config.SerializedMap;
+import games.coob.smp.hologram.BukkitHologram;
+import games.coob.smp.util.ValidationUtil;
 import lombok.Getter;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
-import org.mineacademy.fo.Valid;
-import org.mineacademy.fo.constants.FoConstants;
-import org.mineacademy.fo.settings.YamlConfig;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-public class DeathChestRegistry extends YamlConfig {
+public class DeathChestRegistry extends ConfigFile {
 
-	@Getter
 	private static final DeathChestRegistry instance = new DeathChestRegistry();
+
+	public static DeathChestRegistry getInstance() {
+		return instance;
+	}
 
 	private Set<DeathChestData> registeredDeathChests = new HashSet<>();
 
 	private DeathChestRegistry() {
-		this.loadConfiguration(NO_DEFAULT, FoConstants.File.DATA);
+		super("data.yml");
 	}
 
 	@Override
 	protected void onLoad() {
-		this.registeredDeathChests = this.getSet("Death_Chests", DeathChestData.class);
+		this.registeredDeathChests = new HashSet<>();
+		ConfigurationSection section = getConfig().getConfigurationSection("Death_Chests");
+		if (section != null) {
+			for (String key : section.getKeys(false)) {
+				try {
+					Map<String, Object> mapData = section.getConfigurationSection(key).getValues(true);
+					SerializedMap map = SerializedMap.of(mapData);
+					DeathChestData data = DeathChestData.deserialize(map);
+					this.registeredDeathChests.add(data);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 
 	@Override
 	protected void onSave() {
-		this.set("Death_Chests", this.registeredDeathChests);
+		List<Map<String, Object>> serialized = new ArrayList<>();
+		for (DeathChestData data : registeredDeathChests) {
+			serialized.add(data.serialize());
+		}
+		getConfig().set("Death_Chests", serialized);
 	}
 
 	public void register(final Block block, final Player player, final BukkitHologram hologram) {
 		final DeathChestData deathChestData = new DeathChestData();
 		final PlayerCache cache = PlayerCache.from(player);
 
-		Valid.checkBoolean(!this.registeredDeathChests.contains(deathChestData), block + " has already been registered");
+		ValidationUtil.checkBoolean(!this.registeredDeathChests.contains(deathChestData), block + " has already been registered");
 
 		deathChestData.setInventory(cache.getDeathChestInventory());
 		deathChestData.setLocation(block.getLocation());

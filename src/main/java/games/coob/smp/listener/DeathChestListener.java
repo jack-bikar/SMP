@@ -24,7 +24,6 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.mineacademy.fo.remain.Remain;
 
 import games.coob.smp.hologram.BukkitHologram;
 
@@ -35,8 +34,11 @@ import java.util.stream.Stream;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DeathChestListener implements Listener {
 
-	@Getter
 	private static final DeathChestListener instance = new DeathChestListener();
+
+	public static DeathChestListener getInstance() {
+		return instance;
+	}
 
 	@EventHandler
 	public void onPlayerInteract(final PlayerInteractEvent event) {
@@ -46,12 +48,10 @@ public final class DeathChestListener implements Listener {
 			final Block block = event.getClickedBlock();
 			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
 
-			if (block != null && block.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL.getMaterial() && registry.isRegistered(block)) {
+			if (block != null && block.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL && registry.isRegistered(block)) {
 				event.setCancelled(true);
 				player.openInventory(registry.getInventory(block));
-
-				if (block.getType().toString().contains("CHEST"))
-					Remain.sendChestOpen(block);
+				// Chest open sound is handled automatically by Bukkit
 			}
 		}
 	}
@@ -96,11 +96,11 @@ public final class DeathChestListener implements Listener {
 				inventory = Bukkit.createInventory(player, 45);
 
 			assert inventory != null;
-			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL.getMaterial());
+			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL);
 
-			for (final Player closePlayers : Remain.getOnlinePlayers()) // TODO
+			for (final Player closePlayers : org.bukkit.Bukkit.getOnlinePlayers())
 				if (closePlayers.getLocation().distance(block.getLocation().clone().add(0.5, -0.75, 0.5)) < Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)
-					hologram.show(block.getLocation().clone().add(0.5, -0.75, 0.5), player, chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player));
+					hologram.show(block.getLocation().clone().add(0.5, -0.75, 0.5), closePlayers, chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player));
 
 			inventory.setContents(drops);
 			cache.setDeathChestInventory(inventory);
@@ -139,8 +139,6 @@ public final class DeathChestListener implements Listener {
 					registry.unregister(block);
 				}
 
-				if (block.getType().toString().contains("CHEST"))
-					Remain.sendChestClose(block);
 			}
 		}
 	}
@@ -157,10 +155,10 @@ public final class DeathChestListener implements Listener {
 						.toArray(ItemStack[]::new); // Convert the result to ItemStack array
 
 				for (final ItemStack item : items) {
-					block.getWorld().dropItem(block.getLocation(), item);
-
-					if (item.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL.getMaterial())
-						item.setType(Material.AIR);
+					// Don't drop the storage material itself
+					if (item.getType() != Settings.DeathStorageSection.STORAGE_MATERIAL) {
+						block.getWorld().dropItem(block.getLocation(), item);
+					}
 				}
 
 				final BukkitHologram hologram = registry.getHologram(block);

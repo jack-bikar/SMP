@@ -1,19 +1,20 @@
 package games.coob.smp.model;
 
-import java.io.IOException;
-import java.util.UUID;
-
-import org.bukkit.Location;
-import org.bukkit.inventory.Inventory;
-import org.mineacademy.fo.collection.SerializedMap;
-import org.mineacademy.fo.model.ConfigSerializable;
-
+import games.coob.smp.config.Serializable;
+import games.coob.smp.config.SerializedMap;
 import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.util.InventorySerialization;
 import lombok.Getter;
+import org.bukkit.Location;
+import org.bukkit.inventory.Inventory;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @Getter
-public class DeathChestData implements ConfigSerializable {
+public class DeathChestData implements Serializable {
 
 	private Location location;
 
@@ -40,12 +41,15 @@ public class DeathChestData implements ConfigSerializable {
 	}
 
 	@Override
-	public SerializedMap serialize() {
-		return SerializedMap.ofArray(
-				"Location", this.location,
-				"UUID", this.uuid,
-				"Inventory", InventorySerialization.toBase64(this.inventory),
-				"Hologram", this.hologram);
+	public Map<String, Object> serialize() {
+		Map<String, Object> map = new LinkedHashMap<>();
+		map.put("Location", this.location);
+		map.put("UUID", this.uuid != null ? this.uuid.toString() : null);
+		map.put("Inventory", InventorySerialization.toBase64(this.inventory));
+		if (this.hologram != null) {
+			map.put("Hologram", this.hologram.serialize());
+		}
+		return map;
 	}
 
 	public static DeathChestData deserialize(final SerializedMap map) throws IOException {
@@ -53,7 +57,8 @@ public class DeathChestData implements ConfigSerializable {
 		final Inventory inventory = InventorySerialization.fromBase64(inventoryString);
 		final Location location = map.getLocation("Location");
 		final UUID uuid = map.getUUID("UUID");
-		final BukkitHologram hologram = BukkitHologram.deserialize(map.getMap("Hologram"));
+		final SerializedMap hologramMap = map.getMap("Hologram");
+		final BukkitHologram hologram = hologramMap != null ? BukkitHologram.deserialize(hologramMap) : null;
 		final DeathChestData deathChestData = new DeathChestData();
 
 		deathChestData.setLocation(location);

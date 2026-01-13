@@ -1,20 +1,19 @@
 package games.coob.smp.task;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.mineacademy.fo.remain.CompParticle;
-import org.mineacademy.fo.remain.Remain;
 
 public class GlidingTask extends BukkitRunnable {
 
 	@Override
 	public void run() {
-		for (final Player player : Remain.getOnlinePlayers()) {
+		for (final Player player : Bukkit.getOnlinePlayers()) {
 			if (player.isGliding()) {
 				final Location location = player.getLocation();
-
-				CompParticle.FLASH.spawn(location);
+				location.getWorld().spawnParticle(Particle.FLASH, location, 1);
 			}
 		}
 	}

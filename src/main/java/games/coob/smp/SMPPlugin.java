@@ -9,63 +9,66 @@ import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.SMPListener;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
+import games.coob.smp.settings.Settings;
 import games.coob.smp.task.CompassTask;
 import games.coob.smp.task.HologramTask;
-import org.mineacademy.fo.Common;
-import org.mineacademy.fo.plugin.SimplePlugin;
+import games.coob.smp.util.PluginUtil;
+import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.plugin.java.JavaPlugin;
 
-public final class SMPPlugin extends SimplePlugin { // TODO auto register anotation
+public final class SMPPlugin extends JavaPlugin {
 
-	@Override
-	protected void onPluginStart() {
-		Common.runLater(DeathChestRegistry::getInstance);
-		HologramRegistry.getInstance().spawnFromDisk();
-	}
+	private static SMPPlugin instance;
 
 	@Override
-	protected void onReloadablesStart() {
-		if (Common.doesPluginExist("EffectLib"))
+	public void onEnable() {
+		instance = this;
+
+		// Load settings
+		Settings.loadSettings();
+
+		// Initialize registries
+		SchedulerUtil.runLater(1, () -> {
+			DeathChestRegistry.getInstance();
+			HologramRegistry.getInstance().spawnFromDisk();
+		});
+
+		// Load EffectLib if available
+		if (PluginUtil.isPluginEnabled("EffectLib")) {
 			Effects.load();
+		}
 
 		// Register commands
-		registerCommand(new InvEditCommand());
-		registerCommand(new SpawnCommand());
+		getCommand("inv").setExecutor(new InvEditCommand());
+		getCommand("inventory").setExecutor(new InvEditCommand());
+		getCommand("spawn").setExecutor(new SpawnCommand());
 
 		// Register events
-		registerEvents(SMPListener.getInstance());
-		registerEvents(CompassListener.getInstance());
-		registerEvents(DeathChestListener.getInstance());
-		registerEvents(AxeListener.getInstance());
+		getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
+		getServer().getPluginManager().registerEvents(CompassListener.getInstance(), this);
+		getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
+		getServer().getPluginManager().registerEvents(AxeListener.getInstance(), this);
 
-		Common.runTimer(20, new CompassTask());
-		Common.runTimer(20, new HologramTask());
+		// Start tasks
+		SchedulerUtil.runTimer(20, new CompassTask());
+		SchedulerUtil.runTimer(20, new HologramTask());
 	}
 
 	@Override
-	protected void onPluginStop() {
-		DeathChestRegistry.getInstance().save();
-	}
-
-	@Override
-	protected void onPluginReload() {
+	public void onDisable() {
 		DeathChestRegistry.getInstance().save();
 
-		if (Common.doesPluginExist("EffectLib"))
+		if (PluginUtil.isPluginEnabled("EffectLib")) {
 			Effects.disable();
+		}
 	}
 
-	/* ------------------------------------------------------------------------------- */
-	/* Static */
-	/* ------------------------------------------------------------------------------- */
+	@Override
+	public void onLoad() {
+		instance = this;
+	}
 
-	/**
-	 * Return the instance of this plugin, which simply refers to a static
-	 * field already created for you in SimplePlugin but casts it to your
-	 * specific plugin instance for your convenience.
-	 *
-	 * @return
-	 */
 	public static SMPPlugin getInstance() {
-		return (SMPPlugin) SimplePlugin.getInstance();
+		return instance;
 	}
 }

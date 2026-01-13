@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.mineacademy.fo.remain.Remain;
+import org.bukkit.Bukkit;
 
 /**
  * Represents a self-repeating task managing hologram.
@@ -19,7 +19,7 @@ public final class HologramTask extends BukkitRunnable {
 	public void run() {
 		final HologramRegistry registry = HologramRegistry.getInstance();
 
-		for (final Player player : Remain.getOnlinePlayers()) {
+		for (final Player player : Bukkit.getOnlinePlayers()) {
 			for (final BukkitHologram hologram : registry.getLoadedHolograms()) {
 				if (!player.hasMetadata(hologram.getUniqueId().toString()) && registry.isRegistered(hologram))
 					showPlayersInRange(hologram, player);

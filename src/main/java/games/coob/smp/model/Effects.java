@@ -1,8 +1,8 @@
 package games.coob.smp.model;
 
 import de.slikey.effectlib.EffectManager;
+import games.coob.smp.SMPPlugin;
 import lombok.Getter;
-import org.mineacademy.fo.plugin.SimplePlugin;
 
 public class Effects {
 
@@ -10,10 +10,12 @@ public class Effects {
 	private static EffectManager effectManager;
 
 	public static void load() {
-		effectManager = new EffectManager(SimplePlugin.getInstance());
+		effectManager = new EffectManager(SMPPlugin.getInstance());
 	}
 
 	public static void disable() {
-		effectManager.dispose();
+		if (effectManager != null) {
+			effectManager.dispose();
+		}
 	}
 }

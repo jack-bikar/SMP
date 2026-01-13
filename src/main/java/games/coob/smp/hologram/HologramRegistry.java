@@ -1,23 +1,28 @@
 package games.coob.smp.hologram;
 
+import games.coob.smp.config.ConfigFile;
+import games.coob.smp.config.SerializedMap;
+import games.coob.smp.util.ValidationUtil;
 import lombok.Getter;
-import org.mineacademy.fo.Valid;
-import org.mineacademy.fo.collection.SerializedMap;
-import org.mineacademy.fo.constants.FoConstants;
-import org.mineacademy.fo.settings.YamlConfig;
+import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * Registry for managing holograms using Paper 1.21+ API
  */
-public class HologramRegistry extends YamlConfig {
+public class HologramRegistry extends ConfigFile {
 
-	@Getter
 	private static final HologramRegistry instance = new HologramRegistry();
+
+	public static HologramRegistry getInstance() {
+		return instance;
+	}
 
 	/**
 	 * Represents currently loaded Holograms
@@ -28,7 +33,7 @@ public class HologramRegistry extends YamlConfig {
 	 * Create a new registry and load
 	 */
 	private HologramRegistry() {
-		this.loadConfiguration(NO_DEFAULT, FoConstants.File.DATA);
+		super("data.yml");
 	}
 
 
@@ -48,9 +53,14 @@ public class HologramRegistry extends YamlConfig {
 	public List<BukkitHologram> loadHolograms() {
 		final List<BukkitHologram> loadedHologram = new ArrayList<>();
 
-		for (final SerializedMap map : getMapList("Saved_Holograms")) {
-			final BukkitHologram hologram = BukkitHologram.deserialize(map);
-			loadedHologram.add(hologram);
+		ConfigurationSection section = getConfig().getConfigurationSection("Saved_Holograms");
+		if (section != null) {
+			for (String key : section.getKeys(false)) {
+				Map<String, Object> mapData = section.getConfigurationSection(key).getValues(true);
+				SerializedMap map = SerializedMap.of(mapData);
+				final BukkitHologram hologram = BukkitHologram.deserialize(map);
+				loadedHologram.add(hologram);
+			}
 		}
 
 		return loadedHologram;
@@ -62,7 +72,7 @@ public class HologramRegistry extends YamlConfig {
 	 * @param hologram The hologram to register
 	 */
 	public void register(final BukkitHologram hologram) {
-		Valid.checkBoolean(!this.isRegistered(hologram), hologram + " is already registered!");
+		ValidationUtil.checkBoolean(!this.isRegistered(hologram), hologram + " is already registered!");
 
 		this.loadedHolograms.add(hologram);
 		this.save();
@@ -91,6 +101,10 @@ public class HologramRegistry extends YamlConfig {
 
 	@Override
 	protected void onSave() {
-		this.set("Saved_Holograms", this.getLoadedHolograms());
+		List<Map<String, Object>> serialized = new ArrayList<>();
+		for (BukkitHologram hologram : loadedHolograms) {
+			serialized.add(hologram.serialize());
+		}
+		getConfig().set("Saved_Holograms", serialized);
 	}
 }

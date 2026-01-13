@@ -1,99 +1,136 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.util.ItemCreator;
+import games.coob.smp.util.Messenger;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
-import org.mineacademy.fo.Messenger;
-import org.mineacademy.fo.menu.MenuPagged;
-import org.mineacademy.fo.menu.model.ItemCreator;
-import org.mineacademy.fo.remain.CompMaterial;
 
 import java.util.List;
 
 /**
- * The menu used to select players to teleport to when spectating
+ * Menu for selecting players to track
  */
-public class CompassPlayersMenu extends MenuPagged<Player> {
+public class CompassPlayersMenu extends SimpleMenu {
 
-	/**
-	 * Create a new spectate menu
-	 */
-	CompassPlayersMenu(final Player viewer) {
-		super(compilePlayers(viewer));
+	private final List<Player> players;
+	private int currentPage = 0;
+	private static final int ITEMS_PER_PAGE = 27;
 
-		setTitle("&lSelect a player to track");
+	public CompassPlayersMenu(final Player viewer) {
+		super(viewer, 9 * 4, "&lSelect a player to track");
+		this.players = compilePlayers(viewer);
+		setupItems();
 	}
 
-	/*
-	 * Get a list of players we can spectate
-	 */
 	private static List<Player> compilePlayers(final Player viewer) {
-		final World world = viewer.getWorld();
-
-		return world.getPlayers();
+		return viewer.getWorld().getPlayers();
 	}
 
-	/**
-	 * @see MenuPagged#convertToItemStack(Object)
-	 */
-	@Override
-	protected ItemStack convertToItemStack(final Player player) {
+	private void setupItems() {
+		inventory.clear();
+		int startIndex = currentPage * ITEMS_PER_PAGE;
+		int endIndex = Math.min(startIndex + ITEMS_PER_PAGE, players.size());
+
+		// Add player heads
+		for (int i = startIndex; i < endIndex; i++) {
+			Player player = players.get(i);
+			int slot = i - startIndex;
+			inventory.setItem(slot, createPlayerItem(player));
+		}
+
+		// Navigation buttons
+		if (currentPage > 0) {
+			inventory.setItem(27, ItemCreator.of(Material.ARROW, "&aPrevious Page").make());
+		}
+		if (endIndex < players.size()) {
+			inventory.setItem(35, ItemCreator.of(Material.ARROW, "&aNext Page").make());
+		}
+	}
+
+	private ItemStack createPlayerItem(Player player) {
 		return ItemCreator.of(
-						CompMaterial.PLAYER_HEAD,
-						player.getName(),
-						"",
-						"Click to track",
-						player.getName())
+				Material.PLAYER_HEAD,
+				player.getName(),
+				"",
+				"Click to track",
+				player.getName())
 				.skullOwner(player.getName()).make();
 	}
 
-	/**
-	 * @see MenuPagged#onPageClick(Player, Object, ClickType)
-	 */
 	@Override
-	protected void onPageClick(final Player viewer, final Player clickedPlayer, final ClickType click) {
+	protected void onMenuClick(Player viewer, int slot, ItemStack clicked) {
+		if (clicked == null) return;
+
+		// Handle navigation
+		if (clicked.getType() == Material.ARROW) {
+			if (slot == 27 && currentPage > 0) {
+				currentPage--;
+				setupItems();
+			} else if (slot == 35) {
+				int startIndex = (currentPage + 1) * ITEMS_PER_PAGE;
+				if (startIndex < players.size()) {
+					currentPage++;
+					setupItems();
+				}
+			}
+			return;
+		}
+
+		// Handle player selection
+		if (clicked.getType() == Material.PLAYER_HEAD) {
+			int playerIndex = currentPage * ITEMS_PER_PAGE + slot;
+			if (playerIndex < players.size()) {
+				Player clickedPlayer = players.get(playerIndex);
+				handlePlayerSelection(viewer, clickedPlayer);
+			}
+		}
+	}
+
+	private void handlePlayerSelection(Player viewer, Player clickedPlayer) {
 		final PlayerCache cache = PlayerCache.from(viewer);
 		final Location location = clickedPlayer.getLocation();
 		location.setY(1);
 
 		if (clickedPlayer.getWorld() == viewer.getWorld()) {
-			if (viewer.getWorld().getEnvironment() == World.Environment.NORMAL)
+			if (viewer.getWorld().getEnvironment() == World.Environment.NORMAL) {
 				viewer.setCompassTarget(clickedPlayer.getLocation());
-			else {
-				if (viewer.getInventory().contains(CompMaterial.COMPASS.getMaterial())) {
-					for (int i = 0; i <= viewer.getInventory().getSize(); i++) {
-						final ItemStack item = viewer.getInventory().getItem(i);
-
-						if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
-							final CompassMeta compass = (CompassMeta) item.getItemMeta();
-
-							compass.setLodestone(location);
-							compass.setLodestoneTracked(false); // we do not want a real lodestone to be present at that location.
-							item.setItemMeta(compass);
-						}
-					}
-				}
+			} else {
+				updateCompassLodestone(viewer, location);
 			}
 
 			cache.setTrackingLocation("Player");
 			cache.setTargetByUUID(clickedPlayer.getUniqueId());
 			viewer.closeInventory();
-			Messenger.success(viewer, "&aYou are now tracking &3" + clickedPlayer.getName() + "'s &alocation.");
+			Messenger.success(viewer, "You are now tracking &3" + clickedPlayer.getName() + "'s &alocation.");
+		} else {
+			Messenger.info(viewer, "You must be in the same world as the player you want to track.");
+		}
+	}
 
-		} else Messenger.info(viewer, "&cYou must be in the same world as the player you want to track.");
+	private void updateCompassLodestone(Player player, Location location) {
+		if (player.getInventory().contains(Material.COMPASS)) {
+			for (int i = 0; i <= player.getInventory().getSize(); i++) {
+				final ItemStack item = player.getInventory().getItem(i);
+
+				if (item != null && item.getType() == Material.COMPASS) {
+					final CompassMeta compass = (CompassMeta) item.getItemMeta();
+					compass.setLodestone(location);
+					compass.setLodestoneTracked(false);
+					item.setItemMeta(compass);
+				}
+			}
+		}
 	}
 
 	/**
-	 * @see org.mineacademy.fo.menu.Menu#getInfo()
+	 * Open the player selection menu to the given player
 	 */
-	@Override
-	protected String[] getInfo() {
-		return new String[]{
-				"Click to track a player"
-		};
+	public static void openMenu(final Player player) {
+		new CompassPlayersMenu(player).displayTo(player);
 	}
 }

@@ -2,26 +2,26 @@ package games.coob.smp.task;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.mineacademy.fo.remain.CompMaterial;
-import org.mineacademy.fo.remain.Remain;
 
 public class CompassTask extends BukkitRunnable {
 	@Override
 	public void run() {
-		for (final Player player : Remain.getOnlinePlayers()) {
+		for (final Player player : Bukkit.getOnlinePlayers()) {
 			final PlayerCache cache = PlayerCache.from(player);
 
 			if (cache.getTrackingLocation() != null) {
-				final Player target = Remain.getPlayerByUUID(cache.getTargetByUUID());
+				final Player target = cache.getTargetByUUID() != null ? Bukkit.getPlayer(cache.getTargetByUUID()) : null;
 
 				if (target != null) {
-					if (cache.getTrackingLocation().equals("Player") && player.getInventory().contains(CompMaterial.COMPASS.getMaterial())) {
+					if (cache.getTrackingLocation().equals("Player") && player.getInventory().contains(Material.COMPASS)) {
 						final Location location = target.getLocation();
 
 						if (player.getWorld().getEnvironment() == World.Environment.NORMAL) {
@@ -32,7 +32,7 @@ public class CompassTask extends BukkitRunnable {
 								for (int i = 0; i <= player.getInventory().getSize(); i++) {
 									final ItemStack item = player.getInventory().getItem(i);
 
-									if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
+									if (item != null && item.getType() == Material.COMPASS) {
 										final CompassMeta compass = (CompassMeta) item.getItemMeta();
 
 										if (compass.hasLodestone()) {
@@ -47,7 +47,7 @@ public class CompassTask extends BukkitRunnable {
 									for (int i = 0; i <= player.getInventory().getSize(); i++) {
 										final ItemStack item = player.getInventory().getItem(i);
 
-										if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
+										if (item != null && item.getType() == Material.COMPASS) {
 											final CompassMeta compass = (CompassMeta) item.getItemMeta();
 
 											if (compass.hasLodestone()) {

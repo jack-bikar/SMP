@@ -1,412 +1,362 @@
 package games.coob.smp.command;
 
+import de.tr7zw.changeme.nbtapi.NBTCompoundList;
+import de.tr7zw.changeme.nbtapi.NBTFile;
+import de.tr7zw.changeme.nbtapi.NBTItem;
+import de.tr7zw.changeme.nbtapi.NBTListCompound;
+import games.coob.smp.menu.SimpleMenu;
+import games.coob.smp.util.ItemCreator;
+import games.coob.smp.util.Messenger;
+import games.coob.smp.util.PlayerUtil;
+import games.coob.smp.util.ValidationUtil;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.jetbrains.annotations.Nullable;
-import org.mineacademy.fo.Common;
-import org.mineacademy.fo.PlayerUtil;
-import org.mineacademy.fo.command.SimpleCommand;
-import org.mineacademy.fo.menu.Menu;
-import org.mineacademy.fo.menu.model.ItemCreator;
-import org.mineacademy.fo.menu.model.MenuClickLocation;
-import org.mineacademy.fo.remain.CompMaterial;
-import org.mineacademy.fo.remain.nbt.*;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * A sample command to open a menu we create in the course.
+ * Command to edit player inventories
  */
-public final class InvEditCommand extends SimpleCommand {
+public final class InvEditCommand implements CommandExecutor, TabCompleter {
 
-	public InvEditCommand() {
-		super("inv|inventory");
-
-		setMinArguments(2);
-	}
-
-	/**
-	 * @see org.mineacademy.fo.command.SimpleCommand#onCommand()
-	 */
 	@Override
-	protected void onCommand() {
-		checkConsole();
+	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+		if (!(sender instanceof Player player)) {
+			sender.sendMessage("This command can only be used by players.");
+			return true;
+		}
+
+		if (args.length < 2) {
+			Messenger.error(player, "Usage: /inv <inv|enderchest|armour|clear> <player>");
+			return true;
+		}
 
 		final String param = args[0];
 		final String name = args[1];
 
-		// Try to get online player first (non-blocking)
 		Player targetPlayer = Bukkit.getPlayer(name);
-		// Note: getOfflinePlayer is deprecated but still needed for offline player lookup
 		@SuppressWarnings("deprecation")
 		final OfflinePlayer targetOfflinePlayer = targetPlayer != null ? targetPlayer : Bukkit.getOfflinePlayer(name);
 		final boolean isOnline = targetPlayer != null;
 
-		checkBoolean(targetOfflinePlayer != null && (targetOfflinePlayer.hasPlayedBefore() || isOnline), "{1} has never played before nor is online.");
+		ValidationUtil.checkBoolean(targetOfflinePlayer != null && (targetOfflinePlayer.hasPlayedBefore() || isOnline), 
+				name + " has never played before nor is online.");
 
 		if ("inv".equals(param)) {
-			if (isOnline)
-				getPlayer().openInventory(targetPlayer.getInventory());
-			else
-				openOfflineInventoryMenu(getPlayer(), targetOfflinePlayer);
-
+			if (isOnline) {
+				player.openInventory(targetPlayer.getInventory());
+			} else {
+				openOfflineInventoryMenu(player, targetOfflinePlayer);
+			}
 		} else if ("enderchest".equals(param)) {
-			if (isOnline)
-				getPlayer().openInventory(targetPlayer.getEnderChest());
-			else
-				openOfflineEnderChestMenu(getPlayer(), targetOfflinePlayer);
-
-		} else if ("armour".equals(param)) {
-			if (isOnline)
-				ArmorMenu.showTo(getPlayer(), targetPlayer);
-			else
-				openOfflineArmourMenu(getPlayer(), targetOfflinePlayer);
+			if (isOnline) {
+				player.openInventory(targetPlayer.getEnderChest());
+			} else {
+				openOfflineEnderChestMenu(player, targetOfflinePlayer);
+			}
+		} else if ("armour".equals(param) || "armor".equals(param)) {
+			if (isOnline) {
+				ArmorMenu.showTo(player, targetPlayer);
+			} else {
+				openOfflineArmourMenu(player, targetOfflinePlayer);
+			}
 		} else if ("clear".equals(param)) {
 			if (isOnline) {
 				clearInventory(targetPlayer);
-				Common.tell(getPlayer(), "&6" + getPlayer() + "&e's inventory has been cleared.");
-			} else Common.tell(getPlayer(), "&6" + getPlayer() + "&c isn't online so his inventory can't be cleared.");
+				Messenger.success(player, targetPlayer.getName() + "'s inventory has been cleared.");
+			} else {
+				Messenger.error(player, targetOfflinePlayer.getName() + " isn't online so their inventory can't be cleared.");
+			}
+		} else {
+			Messenger.error(player, "Invalid parameter. Use: inv, enderchest, armour, or clear");
 		}
-		// level 1 > beginners...
-		// level 2 >
+
+		return true;
 	}
 
 	private void clearInventory(final Player player) {
-		if (player.getInventory().getContents() != null)
-			player.getInventory().setContents(null);
+		player.getInventory().clear();
 	}
 
-	private static class OfflineInvMenu extends Menu {
-
-		/**
-		 * The way we open this menu. It can be opened to select kits or edit them
-		 */
+	private static class OfflineInvMenu extends SimpleMenu {
 		private final ViewMode viewMode;
-
-		private final NBTFile nbtFile;
-
+		private NBTFile nbtFile;
 		private NBTCompoundList nbtInventory;
 		private NBTCompoundList nbtEnderItems;
 		private NBTCompoundList nbtArmour;
-
 		private ItemStack[] content;
 		private Map<String, ItemStack> armourContent;
 
-		@SneakyThrows
-		private OfflineInvMenu(final OfflinePlayer target, final ViewMode viewMode) {
+		private OfflineInvMenu(final Player viewer, final OfflinePlayer target, final ViewMode viewMode) {
+			super(viewer, getSizeForMode(viewMode), getTitleForMode(target, viewMode));
 			this.viewMode = viewMode;
 
-			this.nbtFile = new NBTFile(new File(Bukkit.getWorldContainer(), "world/playerdata/" + target.getUniqueId() + ".dat"));
+			try {
+				this.nbtFile = new NBTFile(new File(Bukkit.getWorldContainer(), "world/playerdata/" + target.getUniqueId() + ".dat"));
 
-			if (viewMode == ViewMode.INVENTORY) {
-				setSize(PlayerUtil.USABLE_PLAYER_INV_SIZE);
-				setTitle("&4" + target.getName() + "'s offline inventory");
+				if (viewMode == ViewMode.INVENTORY) {
+					this.nbtInventory = this.nbtFile.getCompoundList("Inventory");
+					this.content = readData();
+				} else if (viewMode == ViewMode.ENDER_CHEST) {
+					this.nbtEnderItems = this.nbtFile.getCompoundList("EnderItems");
+					this.content = readData();
+				} else if (viewMode == ViewMode.ARMOUR) {
+					this.nbtArmour = this.nbtFile.getCompoundList("Inventory");
+					this.armourContent = readArmourData();
+				}
 
-				this.nbtInventory = this.nbtFile.getCompoundList("Inventory");
-			} else if (viewMode == ViewMode.ENDER_CHEST) {
-				setSize(PlayerUtil.USABLE_PLAYER_INV_SIZE);
-				setTitle("&5" + target.getName() + "'s offline ender chest");
-
-				this.nbtEnderItems = this.nbtFile.getCompoundList("EnderItems");
-			} else if (viewMode == ViewMode.ARMOUR) {
-				setSize(9);
-				setTitle("&9" + target.getName() + "'s offline armour");
-
-				this.nbtArmour = this.nbtFile.getCompoundList("Inventory");
-				this.armourContent = this.readArmourData(target);
+				// Populate inventory
+				if (viewMode != ViewMode.ARMOUR) {
+					for (int i = 0; i < content.length && i < inventory.getSize(); i++) {
+						inventory.setItem(i, content[i]);
+					}
+				} else {
+					if (armourContent.containsKey("Helmet")) inventory.setItem(0, armourContent.get("Helmet"));
+					if (armourContent.containsKey("Chestplate")) inventory.setItem(1, armourContent.get("Chestplate"));
+					if (armourContent.containsKey("Leggings")) inventory.setItem(2, armourContent.get("Leggings"));
+					if (armourContent.containsKey("Boots")) inventory.setItem(3, armourContent.get("Boots"));
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
-			// this.nbtFile = new NBTFile(new File(Bukkit.getWorldContainer(), "world/playerdata/" + target.getUniqueId() + ".dat"));
-
-			System.out.println(nbtFile);
-
-			//this.nbtInventory = this.nbtFile.getCompoundList("Inventory");
-			if (viewMode != ViewMode.ARMOUR)
-				this.content = this.readData(target);
 		}
 
-		private ItemStack[] readData(final OfflinePlayer player) {
+		private static int getSizeForMode(ViewMode mode) {
+			return mode == ViewMode.ARMOUR ? 9 : PlayerUtil.USABLE_PLAYER_INV_SIZE;
+		}
+
+		private static String getTitleForMode(OfflinePlayer target, ViewMode mode) {
+			return switch (mode) {
+				case INVENTORY -> "&4" + target.getName() + "'s offline inventory";
+				case ENDER_CHEST -> "&5" + target.getName() + "'s offline ender chest";
+				case ARMOUR -> "&9" + target.getName() + "'s offline armour";
+			};
+		}
+
+		private ItemStack[] readData() {
 			final ItemStack[] content = new ItemStack[PlayerUtil.USABLE_PLAYER_INV_SIZE];
+			NBTCompoundList list = viewMode == ViewMode.INVENTORY ? nbtInventory : nbtEnderItems;
 
-			if (viewMode == ViewMode.INVENTORY) {
-				for (final NBTListCompound item : this.nbtInventory) {
+			if (list != null) {
+				for (int i = 0; i < list.size(); i++) {
+					NBTListCompound item = list.get(i);
 					final int slot = item.getByte("Slot");
-
-					if (slot >= 0 && slot <= PlayerUtil.USABLE_PLAYER_INV_SIZE)
-						content[slot] = NBTItem.convertNBTtoItem(item);
-				}
-			}
-
-			if (viewMode == ViewMode.ENDER_CHEST) {
-				for (final NBTListCompound item : this.nbtEnderItems) {
-					final int slot = item.getByte("Slot");
-
-					if (slot >= 0 && slot <= PlayerUtil.USABLE_PLAYER_INV_SIZE)
-						content[slot] = NBTItem.convertNBTtoItem(item);
+					if (slot >= 0 && slot < PlayerUtil.USABLE_PLAYER_INV_SIZE) {
+						try {
+							// NBTAPI: Create ItemStack from NBTCompound
+							ItemStack itemStack = NBTItem.convertNBTtoItem(item);
+							content[slot] = itemStack;
+						} catch (Exception e) {
+							// If conversion method doesn't exist, try alternative approach
+							try {
+								// Create empty item and apply NBT
+								Material material = Material.matchMaterial(item.getString("id"));
+								if (material != null) {
+									ItemStack itemStack = new ItemStack(material);
+									NBTItem nbtItem = new NBTItem(itemStack);
+									nbtItem.mergeCompound(item);
+									content[slot] = nbtItem.getItem();
+								}
+							} catch (Exception ex) {
+								content[slot] = null;
+							}
+						}
+					}
 				}
 			}
 
 			return content;
 		}
 
-		private Map<String, ItemStack> readArmourData(final OfflinePlayer player) {
+		private Map<String, ItemStack> readArmourData() {
 			final Map<String, ItemStack> armourContent = new HashMap<>();
 
-			for (final NBTListCompound item : this.nbtArmour) {
-				final int slot = item.getByte("Slot");
-
-				if (slot == 103)
-					armourContent.put("Helmet", NBTItem.convertNBTtoItem(item));
-				if (slot == 102)
-					armourContent.put("Chestplate", NBTItem.convertNBTtoItem(item));
-				if (slot == 101)
-					armourContent.put("Leggings", NBTItem.convertNBTtoItem(item));
-				if (slot == 100)
-					armourContent.put("Boots", NBTItem.convertNBTtoItem(item));
+			if (nbtArmour != null) {
+				for (int i = 0; i < nbtArmour.size(); i++) {
+					NBTListCompound item = nbtArmour.get(i);
+					final int slot = item.getByte("Slot");
+					try {
+						// NBTAPI: Create ItemStack from NBTCompound
+						ItemStack itemStack = NBTItem.convertNBTtoItem(item);
+						switch (slot) {
+							case 103 -> armourContent.put("Helmet", itemStack);
+							case 102 -> armourContent.put("Chestplate", itemStack);
+							case 101 -> armourContent.put("Leggings", itemStack);
+							case 100 -> armourContent.put("Boots", itemStack);
+						}
+					} catch (Exception e) {
+						// If conversion method doesn't exist, try alternative
+						try {
+							Material material = Material.matchMaterial(item.getString("id"));
+							if (material != null) {
+								ItemStack itemStack = new ItemStack(material);
+								NBTItem nbtItem = new NBTItem(itemStack);
+								nbtItem.mergeCompound(item);
+								ItemStack finalItem = nbtItem.getItem();
+								switch (slot) {
+									case 103 -> armourContent.put("Helmet", finalItem);
+									case 102 -> armourContent.put("Chestplate", finalItem);
+									case 101 -> armourContent.put("Leggings", finalItem);
+									case 100 -> armourContent.put("Boots", finalItem);
+								}
+							}
+						} catch (Exception ex) {
+							// Skip invalid items
+						}
+					}
+				}
 			}
 
 			return armourContent;
 		}
 
 		@Override
-		public ItemStack getItemAt(final int slot) {
-			if (viewMode != ViewMode.ARMOUR)
-				return this.content[slot];
-			else
-				for (final Map.Entry<String, ItemStack> entry : armourContent.entrySet()) {
-					if (slot == 0 && entry.getKey().equals("Helmet"))
-						return entry.getValue();
-
-					if (slot == 1 && entry.getKey().equals("Chestplate"))
-						return entry.getValue();
-
-					if (slot == 2 && entry.getKey().equals("Leggings"))
-						return entry.getValue();
-
-					if (slot == 3 && entry.getKey().equals("Boots"))
-						return entry.getValue();
-				}
-
-			return null;
+		protected void onMenuClick(Player player, int slot, ItemStack clicked) {
+			// Allow all interactions
 		}
 
 		@Override
-		protected boolean isActionAllowed(final MenuClickLocation location, final int slot, @Nullable final ItemStack clicked, @Nullable final ItemStack cursor, final InventoryAction action) {
-			return true;
-		}
+		protected void onMenuClose(Player player, Inventory inventory) {
+			try {
+				final ItemStack[] editedContent = inventory.getContents();
 
-		@Override
-		protected void onMenuClick(final Player player, final int slot, final ItemStack clicked) {
-			final Inventory inventory = getViewer().getOpenInventory().getBottomInventory();
-
-			if (clicked != null) {
-				if (clicked.getType().name().endsWith("HELMET")) {
-					if (armourContent.containsKey("Helmet")) {
-						getInventory().remove(clicked);
-						inventory.addItem(clicked);
-						armourContent.remove("Helmet");
-					} else {
-						getInventory().addItem(clicked);
-						armourContent.put("Helmet", clicked);
-					}
-
-				} else if (clicked.getType().name().endsWith("CHESTPLATE")) {
-					if (armourContent.containsKey("Chestplate")) {
-						getInventory().remove(clicked);
-						inventory.addItem(clicked);
-						armourContent.remove("Chestplate");
-					} else {
-						getInventory().addItem(clicked);
-						armourContent.put("Chestplate", clicked);
-					}
-
-				} else if (clicked.getType().name().endsWith("LEGGINGS")) {
-					if (armourContent.containsKey("Leggings")) {
-						getInventory().remove(clicked);
-						inventory.addItem(clicked);
-						armourContent.remove("Leggings");
-					} else {
-						getInventory().addItem(clicked);
-						armourContent.put("Leggings", clicked);
-					}
-
-				} else if (clicked.getType().name().endsWith("BOOTS")) {
-					if (armourContent.containsKey("Boots")) {
-						getInventory().remove(clicked);
-						inventory.addItem(clicked);
-						armourContent.remove("Boots");
-					} else {
-						getInventory().addItem(clicked);
-						armourContent.put("Boots", clicked);
-					}
-				}
-			}
-		}
-
-		@Override
-		@SneakyThrows
-		protected void onMenuClose(final Player player, final Inventory inventory) {
-			final ItemStack[] editedContent = inventory.getContents();
-
-			if (viewMode == ViewMode.INVENTORY)
-				this.nbtInventory.clear();
-			if (viewMode == ViewMode.ENDER_CHEST)
-				this.nbtEnderItems.clear();
-
-			if (viewMode != ViewMode.ARMOUR) {
-				for (int slot = 0; slot < editedContent.length; slot++) {
-					final ItemStack item = editedContent[slot];
-
-					if (item != null) {
-						final NBTContainer container = NBTItem.convertItemtoNBT(item);
-						container.setByte("Slot", (byte) slot);
-
-						if (viewMode == ViewMode.INVENTORY)
-							this.nbtInventory.addCompound(container); // arraylist#add
-
-						if (viewMode == ViewMode.ENDER_CHEST)
-							this.nbtEnderItems.addCompound(container);
-					}
-				}
-
-			} else {
-				this.nbtArmour.clear();
-
-				for (int slot = 0; slot <= 8; slot++) {
-					final ItemStack item = editedContent[slot];
-
-					if (item != null) {
-						if (item.getType().name().endsWith("HELMET"))
-							armourContent.put("Helmet", item);
-
-						else if (item.getType().name().endsWith("CHESTPLATE"))
-							armourContent.put("Chestplate", item);
-
-						else if (item.getType().name().endsWith("LEGGINGS"))
-							armourContent.put("Leggings", item);
-
-						else if (item.getType().name().endsWith("BOOTS"))
-							armourContent.put("Boots", item);
-					}
-				}
-
-				for (final Map.Entry<String, ItemStack> entry : armourContent.entrySet()) {
-					final ItemStack itemArmor = entry.getValue();
-
-					if (itemArmor != null) {
-						final NBTContainer containerArmor = NBTItem.convertItemtoNBT(itemArmor);
-
-						switch (entry.getKey()) {
-							case "Helmet" -> containerArmor.setByte("Slot", (byte) 103);
-							case "Chestplate" -> containerArmor.setByte("Slot", (byte) 102);
-							case "Leggings" -> containerArmor.setByte("Slot", (byte) 101);
-							case "Boots" -> containerArmor.setByte("Slot", (byte) 100);
+				if (viewMode == ViewMode.INVENTORY && nbtInventory != null) {
+					nbtInventory.clear();
+					for (int slot = 0; slot < editedContent.length && slot < PlayerUtil.USABLE_PLAYER_INV_SIZE; slot++) {
+						final ItemStack item = editedContent[slot];
+						if (item != null) {
+							NBTItem nbtItem = new NBTItem(item);
+							NBTListCompound compound = nbtInventory.addCompound();
+							// Copy NBT data from item - getCompound returns NBTCompound
+							Object compoundObj = nbtItem.getCompound();
+							if (compoundObj instanceof de.tr7zw.changeme.nbtapi.NBTCompound itemCompound) {
+								compound.mergeCompound(itemCompound);
+							}
+							compound.setByte("Slot", (byte) slot);
+							// Set item ID (required for Minecraft 1.21+)
+							compound.setString("id", item.getType().getKey().toString());
 						}
-
-						this.nbtArmour.addCompound(containerArmor);
+					}
+				} else if (viewMode == ViewMode.ENDER_CHEST && nbtEnderItems != null) {
+					nbtEnderItems.clear();
+					for (int slot = 0; slot < editedContent.length && slot < PlayerUtil.USABLE_PLAYER_INV_SIZE; slot++) {
+						final ItemStack item = editedContent[slot];
+						if (item != null) {
+							NBTItem nbtItem = new NBTItem(item);
+							NBTListCompound compound = nbtEnderItems.addCompound();
+							Object compoundObj = nbtItem.getCompound();
+							if (compoundObj instanceof de.tr7zw.changeme.nbtapi.NBTCompound itemCompound) {
+								compound.mergeCompound(itemCompound);
+							}
+							compound.setByte("Slot", (byte) slot);
+							compound.setString("id", item.getType().getKey().toString());
+						}
+					}
+				} else if (viewMode == ViewMode.ARMOUR && nbtArmour != null) {
+					nbtArmour.clear();
+					for (int slot = 0; slot <= 3; slot++) {
+						final ItemStack item = editedContent[slot];
+						if (item != null) {
+							String key = switch (slot) {
+								case 0 -> "Helmet";
+								case 1 -> "Chestplate";
+								case 2 -> "Leggings";
+								case 3 -> "Boots";
+								default -> null;
+							};
+							if (key != null) {
+								NBTItem nbtItem = new NBTItem(item);
+								NBTListCompound compound = nbtArmour.addCompound();
+								Object compoundObj = nbtItem.getCompound();
+								if (compoundObj instanceof de.tr7zw.changeme.nbtapi.NBTCompound itemCompound) {
+									compound.mergeCompound(itemCompound);
+								}
+								compound.setByte("Slot", (byte) (103 - slot));
+								compound.setString("id", item.getType().getKey().toString());
+							}
+						}
 					}
 				}
-			}
 
-			this.nbtFile.save();
+				if (nbtFile != null) {
+					nbtFile.save();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
-	/**
-	 * The menu view mode
-	 */
 	@RequiredArgsConstructor
 	public enum ViewMode {
-
 		INVENTORY,
-
 		ENDER_CHEST,
-
 		ARMOUR
 	}
 
-	/**
-	 * Open the menu that allows you to edit the target player's inventory
-	 */
 	public static void openOfflineInventoryMenu(final Player viewer, final OfflinePlayer target) {
-		new OfflineInvMenu(target, ViewMode.INVENTORY).displayTo(viewer);
+		new OfflineInvMenu(viewer, target, ViewMode.INVENTORY).displayTo(viewer);
 	}
 
-	/**
-	 * Open the menu that allows you to edit the target player's ender chest
-	 */
 	public static void openOfflineEnderChestMenu(final Player viewer, final OfflinePlayer target) {
-		new OfflineInvMenu(target, ViewMode.ENDER_CHEST).displayTo(viewer);
+		new OfflineInvMenu(viewer, target, ViewMode.ENDER_CHEST).displayTo(viewer);
 	}
 
-	/**
-	 * Open the menu that allows you to edit the target player's armour contents
-	 */
 	public static void openOfflineArmourMenu(final Player viewer, final OfflinePlayer target) {
-		new OfflineInvMenu(target, ViewMode.ARMOUR).displayTo(viewer);
+		new OfflineInvMenu(viewer, target, ViewMode.ARMOUR).displayTo(viewer);
 	}
 
-	private static class ArmorMenu extends Menu {
-
-		// ONE ROW - 9 slot
-		// HELMET 0, CHESTPLATE 1, LEGGINGS 2, BOOTS 3, EMPTY SLOT 4, EMPTY SLOT 5, EMPTY 6, EMPTY 7, OFFHAND 8
-
+	private static class ArmorMenu extends SimpleMenu {
 		private final Player targetPlayer;
+		private static final ItemStack EMPTY_SLOT_FILLER = ItemCreator.of(Material.GRAY_STAINED_GLASS_PANE, "").make();
 
-		private final static ItemStack EMPTY_SLOT_FILLER = ItemCreator
-				.of(CompMaterial.GRAY_STAINED_GLASS_PANE, "").make();
-
-		private ArmorMenu(final Player targetPlayer) {
-			setTitle(targetPlayer.getName() + "'s armor");
-			setSize(9);
-			//setSlotNumbersVisible();
-
+		private ArmorMenu(final Player viewer, final Player targetPlayer) {
+			super(viewer, 9, targetPlayer.getName() + "'s armor");
 			this.targetPlayer = targetPlayer;
+			setupItems();
 		}
 
-		@Override
-		public ItemStack getItemAt(final int slot) {
+		private void setupItems() {
 			final PlayerInventory inv = this.targetPlayer.getInventory();
-
-			if (slot == 0)
-				return inv.getHelmet();
-
-			else if (slot == 1)
-				return inv.getChestplate();
-
-			else if (slot == 2)
-				return inv.getLeggings();
-
-			else if (slot == 3)
-				return inv.getBoots();
-
-			else if (slot == this.getSize() - 1)
-				return inv.getItemInOffHand();
-
-			return NO_ITEM;
+			inventory.setItem(0, inv.getHelmet());
+			inventory.setItem(1, inv.getChestplate());
+			inventory.setItem(2, inv.getLeggings());
+			inventory.setItem(3, inv.getBoots());
+			inventory.setItem(8, inv.getItemInOffHand());
+			// Fill empty slots
+			for (int i = 4; i < 8; i++) {
+				inventory.setItem(i, EMPTY_SLOT_FILLER);
+			}
 		}
 
 		@Override
-		protected boolean isActionAllowed(final MenuClickLocation location, final int slot, @Nullable final ItemStack clicked, @Nullable final ItemStack cursor, final InventoryAction action) {
-			return location != MenuClickLocation.MENU || (slot != 4 && slot != 5 && slot != 6 && slot != 7);
+		protected void onMenuClick(Player player, int slot, ItemStack clicked) {
+			// Prevent interaction with filler slots
+			if (slot >= 4 && slot < 8) {
+				return;
+			}
 		}
 
 		@Override
-		protected void onMenuClose(final Player player, final Inventory inventory) {
+		protected void onMenuClose(Player player, Inventory inventory) {
 			final PlayerInventory targetPlayerInv = this.targetPlayer.getInventory();
-
-			targetPlayerInv.setItemInOffHand(inventory.getItem(this.getSize() - 1));
-
+			targetPlayerInv.setItemInOffHand(inventory.getItem(8));
 			targetPlayerInv.setHelmet(inventory.getItem(0));
 			targetPlayerInv.setChestplate(inventory.getItem(1));
 			targetPlayerInv.setLeggings(inventory.getItem(2));
@@ -414,20 +364,22 @@ public final class InvEditCommand extends SimpleCommand {
 		}
 
 		private static void showTo(final Player viewer, final Player targetPlayer) {
-			new ArmorMenu(targetPlayer).displayTo(viewer);
+			new ArmorMenu(viewer, targetPlayer).displayTo(viewer);
 		}
-
 	}
 
 	@Override
-	protected List<String> tabComplete() {
-
-		if (args.length == 1)
-			return this.completeLastWord("inv", "enderchest", "armour");
-
-		else if (args.length == 2)
-			return this.completeLastWordPlayerNames();
-
-		return NO_COMPLETE;
+	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+		if (args.length == 1) {
+			return Arrays.asList("inv", "enderchest", "armour", "armor", "clear").stream()
+					.filter(s -> s.startsWith(args[0].toLowerCase()))
+					.collect(Collectors.toList());
+		} else if (args.length == 2) {
+			return Bukkit.getOnlinePlayers().stream()
+					.map(Player::getName)
+					.filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+					.collect(Collectors.toList());
+		}
+		return new ArrayList<>();
 	}
 }

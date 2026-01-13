@@ -1,16 +1,16 @@
 package games.coob.smp.hologram;
 
+import games.coob.smp.SMPPlugin;
+import games.coob.smp.config.Serializable;
+import games.coob.smp.config.SerializedMap;
+import games.coob.smp.util.ColorUtil;
+import games.coob.smp.util.ValidationUtil;
 import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.metadata.FixedMetadataValue;
-import org.mineacademy.fo.Common;
-import org.mineacademy.fo.Valid;
-import org.mineacademy.fo.collection.SerializedMap;
-import org.mineacademy.fo.model.ConfigSerializable;
-import org.mineacademy.fo.plugin.SimplePlugin;
 
 import java.util.*;
 
@@ -18,7 +18,7 @@ import java.util.*;
  * Hologram implementation using Paper 1.21+ API
  * Uses ArmorStands with Paper's showEntity/hideEntity API for per-player visibility
  */
-public class BukkitHologram implements ConfigSerializable {
+public class BukkitHologram implements Serializable {
 
 	@Getter
     private final UUID uniqueId;
@@ -51,7 +51,7 @@ public class BukkitHologram implements ConfigSerializable {
 				ArmorStand stand = location.getWorld().spawn(currentLoc, ArmorStand.class, as -> {
 					as.setVisible(false);
 					as.setGravity(false);
-					as.setCustomName(Common.colorize(line));
+					as.setCustomName(ColorUtil.colorize(line));
 					as.setCustomNameVisible(true);
 					as.setMarker(true);
 					as.setSmall(true);
@@ -68,10 +68,10 @@ public class BukkitHologram implements ConfigSerializable {
 		// Note: showEntity is deprecated but still the standard way for per-player visibility in Paper
 		if (!visibleToPlayers.contains(player)) {
 			for (ArmorStand stand : armorStands) {
-				player.showEntity(SimplePlugin.getInstance(), stand);
+				player.showEntity(SMPPlugin.getInstance(), stand);
 			}
 			visibleToPlayers.add(player);
-			player.setMetadata(uniqueId.toString(), new FixedMetadataValue(SimplePlugin.getInstance(), ""));
+			player.setMetadata(uniqueId.toString(), new FixedMetadataValue(SMPPlugin.getInstance(), ""));
 		}
 	}
 
@@ -83,11 +83,11 @@ public class BukkitHologram implements ConfigSerializable {
 		// Hide all armor stands from this player using Paper 1.21+ API
 		// Note: hideEntity is deprecated but still the standard way for per-player visibility in Paper
 		for (ArmorStand stand : armorStands) {
-			player.hideEntity(SimplePlugin.getInstance(), stand);
+			player.hideEntity(SMPPlugin.getInstance(), stand);
 		}
 
 		visibleToPlayers.remove(player);
-		player.removeMetadata(uniqueId.toString(), SimplePlugin.getInstance());
+		player.removeMetadata(uniqueId.toString(), SMPPlugin.getInstance());
 	}
 
 	public void remove(Player player) {
@@ -111,7 +111,7 @@ public class BukkitHologram implements ConfigSerializable {
 	}
 
     public Location getLocation() {
-		Valid.checkBoolean(location != null, "Cannot call getLocation when location is not set");
+		ValidationUtil.checkBoolean(location != null, "Cannot call getLocation when location is not set");
 		return location.clone();
 	}
 
@@ -121,14 +121,15 @@ public class BukkitHologram implements ConfigSerializable {
 
 
 	@Override
-	public SerializedMap serialize() {
-		Valid.checkBoolean(location != null, "Cannot save hologram without location");
-		Valid.checkBoolean(lines != null, "Cannot save hologram without lines");
+	public Map<String, Object> serialize() {
+		ValidationUtil.checkBoolean(location != null, "Cannot save hologram without location");
+		ValidationUtil.checkBoolean(lines != null, "Cannot save hologram without lines");
 
-		return SerializedMap.ofArray(
-				"UUID", this.uniqueId,
-				"Lines", Arrays.asList(this.lines),
-				"Last_Location", this.location);
+		Map<String, Object> map = new LinkedHashMap<>();
+		map.put("UUID", this.uniqueId.toString());
+		map.put("Lines", Arrays.asList(this.lines));
+		map.put("Last_Location", this.location);
+		return map;
 	}
 
 	public static BukkitHologram deserialize(SerializedMap map) {

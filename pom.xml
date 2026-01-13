@@ -23,16 +23,16 @@
         <!-- Change author to your name or the main collaborator. -->
         <author>JackOUT</author>
 
-        <!-- Change main.class to the full path where the class extending SimplePlugin is located -->
+        <!-- Change main.class to the full path where the class extending JavaPlugin is located -->
         <main.class>games.coob.smp.SMPPlugin</main.class>
 
         <!-- Java 21 required for Minecraft 1.21+ -->
         <java.version>21</java.version>
 
-        <!-- Change foundation.version to the latest one from
-             https://github.com/kangarko/Foundation/releases -->
-        <foundation.version>6.0.1</foundation.version>
+        <!-- Paper API version for 1.21.10 and 1.21.11 -->
+        <paper.version>1.21.1-R0.1-SNAPSHOT</paper.version>
         <effectlib.version>9.4</effectlib.version>
+        <nbtapi.version>2.12.2</nbtapi.version>
         <lombok.version>1.18.30</lombok.version>
 
         <!-- DO NOT EDIT -->
@@ -40,28 +40,54 @@
     </properties>
 
     <repositories>
-        <!-- DO NOT EDIT, used to pull Foundation from the JitPack site -->
+        <!-- Paper API repository -->
+        <repository>
+            <id>papermc-repo</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <!-- EffectLib repository -->
         <repository>
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
+        <!-- NBTAPI repository -->
         <repository>
-            <id>Maven Central</id>
+            <id>codemc-repo</id>
+            <url>https://repo.codemc.org/repository/maven-public/</url>
+        </repository>
+        <!-- Maven Central -->
+        <repository>
+            <id>central</id>
             <url>https://repo1.maven.org/maven2/</url>
         </repository>
     </repositories>
 
     <dependencies>
-        <!-- Use our Foundation library -->
+        <!-- Paper API for 1.21.10 and 1.21.11 -->
         <dependency>
-            <groupId>com.github.kangarko</groupId>
-            <artifactId>Foundation</artifactId>
-            <version>${foundation.version}</version>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+            <version>${paper.version}</version>
+            <scope>provided</scope>
         </dependency>
+        <!-- EffectLib for particle effects -->
         <dependency>
             <groupId>com.elmakers.mine.bukkit</groupId>
             <artifactId>EffectLib</artifactId>
             <version>${effectlib.version}</version>
+        </dependency>
+        <!-- NBTAPI for NBT operations -->
+        <dependency>
+            <groupId>de.tr7zw</groupId>
+            <artifactId>item-nbt-api</artifactId>
+            <version>${nbtapi.version}</version>
+        </dependency>
+        <!-- Lombok for reducing boilerplate -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -117,21 +143,18 @@
                     <createDependencyReducedPom>false</createDependencyReducedPom>
                     <artifactSet>
                         <includes>
-
-                            <!-- IF you have Foundation on your disk, change include to org.mineacademy,
-                                 if you pull Foundation from the Internet use com.github.kangarko  -->
-                            <include>com.github.kangarko:Foundation*</include>
                             <include>com.elmakers.mine.bukkit:EffectLib</include>
+                            <include>de.tr7zw:item-nbt-api</include>
                         </includes>
                     </artifactSet>
                     <relocations>
                         <relocation>
-                            <pattern>org.mineacademy.fo</pattern>
-                            <shadedPattern>${project.groupId}.smp.lib</shadedPattern>
-                        </relocation>
-                        <relocation>
                             <pattern>de.slikey</pattern>
                             <shadedPattern>${project.groupId}.${project.artifactId}.lib.effects</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>de.tr7zw.changeme.nbtapi</pattern>
+                            <shadedPattern>${project.groupId}.${project.artifactId}.lib.nbtapi</shadedPattern>
                         </relocation>
                     </relocations>
                     <filters>

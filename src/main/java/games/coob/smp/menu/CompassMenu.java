@@ -1,162 +1,131 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.util.ItemCreator;
+import games.coob.smp.util.Messenger;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
-import org.mineacademy.fo.Messenger;
-import org.mineacademy.fo.menu.Menu;
-import org.mineacademy.fo.menu.button.Button;
-import org.mineacademy.fo.menu.button.ButtonMenu;
-import org.mineacademy.fo.menu.model.ItemCreator;
-import org.mineacademy.fo.remain.CompMaterial;
 
-public class CompassMenu extends Menu {
+public class CompassMenu extends SimpleMenu {
 
-	private final Button selectPlayerButton;
-	private final Button selectBedLocationButton;
-	private final Button selectDeathLocationButton;
+	private static final int PLAYER_BUTTON_SLOT = 9 + 2;
+	private static final int BED_BUTTON_SLOT = 9 + 4;
+	private static final int DEATH_BUTTON_SLOT = 9 + 6;
 
 	public CompassMenu(final Player player) {
-		setTitle("&lCompass Menu");
-		setSize(9 * 3);
+		super(player, 9 * 3, "&lCompass Menu");
+		setupItems();
+	}
 
-		this.selectPlayerButton = new ButtonMenu(new CompassPlayersMenu(player), ItemCreator.of(
-				CompMaterial.PLAYER_HEAD,
+	private void setupItems() {
+		// Player selection button
+		inventory.setItem(PLAYER_BUTTON_SLOT, ItemCreator.of(
+				Material.PLAYER_HEAD,
 				"Select a player to track",
 				"",
 				"Click here to",
 				"open a player",
-				"selection menu."));
+				"selection menu.").make());
 
-		this.selectBedLocationButton = new Button() {
-			@Override
-			public void onClickedInMenu(final Player player, final Menu menu, final ClickType click) {
-				if (player.getBedSpawnLocation() != null) {
-					if (player.getBedSpawnLocation().getWorld() == player.getWorld()) {
-						final Location location = player.getBedSpawnLocation();
-						final PlayerCache cache = PlayerCache.from(player);
-						location.setY(1);
+		// Bed location button
+		inventory.setItem(BED_BUTTON_SLOT, ItemCreator.of(
+				Material.BLUE_BED,
+				"&bTrack your bed location",
+				"",
+				"Click here to",
+				"start tracking your",
+				"bed spawn location.").make());
 
-						if (player.getWorld().getEnvironment() == World.Environment.NORMAL)
-							player.setCompassTarget(location);
-						else {
-							if (player.getInventory().contains(CompMaterial.COMPASS.getMaterial())) {
-								for (int i = 0; i <= player.getInventory().getSize(); i++) {
-									final ItemStack item = player.getInventory().getItem(i);
+		// Death location button
+		inventory.setItem(DEATH_BUTTON_SLOT, ItemCreator.of(
+				Material.SKELETON_SKULL,
+				"&cTrack your death location",
+				"",
+				"Click here to start",
+				"tracking your",
+				"previous death location.").make());
+	}
 
-									if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
-										final CompassMeta compass = (CompassMeta) item.getItemMeta();
+	@Override
+	protected void onMenuClick(Player player, int slot, ItemStack clicked) {
+		if (slot == PLAYER_BUTTON_SLOT) {
+			CompassPlayersMenu.openMenu(player);
+		} else if (slot == BED_BUTTON_SLOT) {
+			handleBedLocation(player);
+		} else if (slot == DEATH_BUTTON_SLOT) {
+			handleDeathLocation(player);
+		}
+	}
 
-										// location.getBlock().setType(CompMaterial.LODESTONE.getMaterial());
-										compass.setLodestone(location);
-										compass.setLodestoneTracked(false); // we do not want a real lodestone to be present at that location.
-										item.setItemMeta(compass);
-									}
-								}
-							}
-						}
-
-						cache.setTrackingLocation("Bed");
-						player.closeInventory();
-						Messenger.success(player, "&aYour are now tracking your bed spawn location.");
-					} else
-						Messenger.info(player, "&cYou must be in the same world as your bed spawn location to track it.");
-				} else Messenger.info(player, "&cNo bed location was found.");
-			}
-
-			@Override
-			public ItemStack getItem() {
-				return ItemCreator.of(
-						CompMaterial.BLUE_BED,
-						"&bTrack your bed location",
-						"",
-						"Click here to",
-						"start tracking your",
-						"bed spawn location.").make();
-			}
-		};
-
-		this.selectDeathLocationButton = new Button() {
-			@Override
-			public void onClickedInMenu(final Player player, final Menu menu, final ClickType click) {
+	private void handleBedLocation(Player player) {
+		@SuppressWarnings("deprecation")
+		Location bedLocation = player.getBedSpawnLocation();
+		if (bedLocation != null) {
+			if (bedLocation.getWorld() == player.getWorld()) {
+				final Location location = bedLocation.clone();
 				final PlayerCache cache = PlayerCache.from(player);
+				location.setY(1);
 
-				if (cache.getDeathLocation() != null) {
-					if (cache.getDeathLocation().getWorld() == player.getWorld()) {
-						if (player.getWorld().getEnvironment() == World.Environment.NORMAL)
-							player.setCompassTarget(cache.getDeathLocation());
-						else {
-							if (player.getInventory().contains(CompMaterial.COMPASS.getMaterial())) {
-								for (int i = 0; i <= player.getInventory().getSize(); i++) {
-									final ItemStack item = player.getInventory().getItem(i);
+				if (player.getWorld().getEnvironment() == World.Environment.NORMAL) {
+					player.setCompassTarget(location);
+				} else {
+					updateCompassLodestone(player, location);
+				}
 
-									if (item != null && item.getType() == CompMaterial.COMPASS.getMaterial()) {
-										final CompassMeta compass = (CompassMeta) item.getItemMeta();
-										final Location location = cache.getDeathLocation();
-
-										compass.setLodestone(location);
-										compass.setLodestoneTracked(false); // we do not want a real lodestone to be present at that location.
-										item.setItemMeta(compass);
-									}
-								}
-							}
-						}
-
-						cache.setTrackingLocation("Death");
-						player.closeInventory();
-						Messenger.success(player, "&aYour are now tracking your death location.");
-
-					} else Messenger.info(player, "&cYou must be in the same world as you death location to track it.");
-				} else Messenger.info(player, "&cNo death location was found.");
+				cache.setTrackingLocation("Bed");
+				player.closeInventory();
+				Messenger.success(player, "You are now tracking your bed spawn location.");
+			} else {
+				Messenger.info(player, "You must be in the same world as your bed spawn location to track it.");
 			}
-
-			@Override
-			public ItemStack getItem() {
-				return ItemCreator.of(
-						CompMaterial.SKELETON_SKULL,
-						"&cTrack your death location",
-						"",
-						"Click here to start",
-						"tracking your",
-						"previous death location.").make();
-			}
-		};
+		} else {
+			Messenger.info(player, "No bed location was found.");
+		}
 	}
 
-	@Override
-	public ItemStack getItemAt(final int slot) {
+	private void handleDeathLocation(Player player) {
+		final PlayerCache cache = PlayerCache.from(player);
 
-		if (slot == 9 + 2)
-			return this.selectPlayerButton.getItem();
+		if (cache.getDeathLocation() != null) {
+			if (cache.getDeathLocation().getWorld() == player.getWorld()) {
+				if (player.getWorld().getEnvironment() == World.Environment.NORMAL) {
+					player.setCompassTarget(cache.getDeathLocation());
+				} else {
+					updateCompassLodestone(player, cache.getDeathLocation());
+				}
 
-		if (slot == 9 + 4)
-			return this.selectBedLocationButton.getItem();
+				cache.setTrackingLocation("Death");
+				player.closeInventory();
+				Messenger.success(player, "You are now tracking your death location.");
+			} else {
+				Messenger.info(player, "You must be in the same world as your death location to track it.");
+			}
+		} else {
+			Messenger.info(player, "No death location was found.");
+		}
+	}
 
-		if (slot == 9 + 6)
-			return this.selectDeathLocationButton.getItem();
+	private void updateCompassLodestone(Player player, Location location) {
+		if (player.getInventory().contains(Material.COMPASS)) {
+			for (int i = 0; i <= player.getInventory().getSize(); i++) {
+				final ItemStack item = player.getInventory().getItem(i);
 
-		return null;
+				if (item != null && item.getType() == Material.COMPASS) {
+					final CompassMeta compass = (CompassMeta) item.getItemMeta();
+					compass.setLodestone(location);
+					compass.setLodestoneTracked(false);
+					item.setItemMeta(compass);
+				}
+			}
+		}
 	}
 
 	/**
-	 * @see org.mineacademy.fo.menu.Menu#getInfo()
-	 */
-	@Override
-	protected String[] getInfo() {
-		return new String[]{
-				"This menu allows you",
-				"to track locations"
-		};
-	}
-
-	/**
-	 * Open the spectate player selection menu to the given player
-	 *
-	 * @param player
+	 * Open the compass menu to the given player
 	 */
 	public static void openMenu(final Player player) {
 		new CompassMenu(player).displayTo(player);

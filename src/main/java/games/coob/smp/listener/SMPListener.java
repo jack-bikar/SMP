@@ -19,31 +19,30 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.server.ServerListPingEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scoreboard.*;
-import org.mineacademy.fo.Common;
-import org.mineacademy.fo.EntityUtil;
-import org.mineacademy.fo.plugin.SimplePlugin;
-import org.mineacademy.fo.remain.CompParticle;
+import games.coob.smp.SMPPlugin;
+import games.coob.smp.util.EntityUtil;
+import games.coob.smp.util.PluginUtil;
+import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.Particle;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SMPListener implements Listener { // TODO add the register events annotation
 
-	@Getter
-	private static final Listener instance = new SMPListener();
+	private static final SMPListener instance = new SMPListener();
+
+	public static SMPListener getInstance() {
+		return instance;
+	}
 
 	@EventHandler
 	public void onJoin(final PlayerJoinEvent event) {
 		final Player player = event.getPlayer();
 
 		PlayerCache.from(player); // Load player's cache
-		displayHealth(player);
 	}
 
 	/**
@@ -78,47 +77,30 @@ public final class SMPListener implements Listener { // TODO add the register ev
 	public void onProjectileLaunch(final ProjectileLaunchEvent event) {
 		final Projectile projectile = event.getEntity();
 
-		EntityUtil.trackFlying(projectile, () -> {
-			final Location location = projectile.getLocation();
-
+		EntityUtil.trackFlying(projectile, (loc) -> {
 			if (Settings.ProjectileSection.ENABLE_TRAILS) {
+				Particle particle = null;
 				switch (Settings.ProjectileSection.ACTIVE_TRAIL) {
-					case "soul_fire_flame" -> CompParticle.SOUL_FIRE_FLAME.spawn(location);
-					case "water_bubble" -> CompParticle.WATER_BUBBLE.spawn(location);
-					case "nautilus" -> CompParticle.NAUTILUS.spawn(location);
-					case "flame" -> CompParticle.FLAME.spawn(location);
-					case "smoke" -> CompParticle.SMOKE_LARGE.spawn(location);
-					case "electrik_spark" -> CompParticle.ELECTRIC_SPARK.spawn(location);
-					case "enchantment" -> CompParticle.ENCHANTMENT_TABLE.spawn(location);
-					case "honey" -> CompParticle.DRIPPING_HONEY.spawn(location);
-					case "flash" -> CompParticle.FLASH.spawn(location);
-					case "heart" -> CompParticle.HEART.spawn(location);
-					case "music" -> CompParticle.NOTE.spawn(location);
-					case "glow" -> CompParticle.GLOW.spawn(location);
+					case "soul_fire_flame" -> particle = Particle.SOUL_FIRE_FLAME;
+					case "water_bubble" -> particle = Particle.BUBBLE;
+					case "nautilus" -> particle = Particle.NAUTILUS;
+					case "flame" -> particle = Particle.FLAME;
+					case "smoke" -> particle = Particle.LARGE_SMOKE;
+					case "electrik_spark" -> particle = Particle.ELECTRIC_SPARK;
+					case "enchantment" -> particle = Particle.ENCHANT;
+					case "honey" -> particle = Particle.DRIPPING_HONEY;
+					case "flash" -> particle = Particle.FLASH;
+					case "heart" -> particle = Particle.HEART;
+					case "music" -> particle = Particle.NOTE;
+					case "glow" -> particle = Particle.GLOW;
+				}
+				if (particle != null) {
+					loc.getWorld().spawnParticle(particle, loc, 1);
 				}
 			}
 		});
 	}
 
-	@EventHandler
-	public void onAsyncPlayerChat(final AsyncPlayerChatEvent event) {
-		final Player player = event.getPlayer();
-
-		if (event.getMessage().contains("fuck"))
-			event.setMessage("potato");
-
-		if (player.getLevel() == 10)
-			event.setFormat(Common.colorize("&b" + event.getPlayer().getName() + "&7: &f" + event.getMessage()));
-		else if (player.getLevel() == 25)
-			event.setFormat(Common.colorize("&5" + event.getPlayer().getName() + "&7: &f" + event.getMessage()));
-		else if (player.getLevel() == 50)
-			event.setFormat(Common.colorize("&6" + event.getPlayer().getName() + "&7: &f" + event.getMessage()));
-	}
-
-	@EventHandler
-	public void onServerListPing(final ServerListPingEvent event) {
-		event.setMotd(Common.colorize(Settings.MOTDSection.MOTD_TEXT));
-	}
 
 	@EventHandler
 	public void onPlayerDamageByEntity(final EntityDamageByEntityEvent event) {
@@ -127,16 +109,18 @@ public final class SMPListener implements Listener { // TODO add the register ev
 		if (entity instanceof Player player) {
 			final PlayerCache cache = PlayerCache.from(player);
 
-			new BukkitRunnable() {
-
+			SchedulerUtil.runTimer(0, 20, new Runnable() {
+				int ticks = 0;
 				@Override
 				public void run() {
+					ticks++;
 					cache.setSecondsAfterDamage(cache.getSecondsAfterDamage() + 1);
 
-					if (cache.getSecondsAfterDamage() == 10)
-						this.cancel();
+					if (ticks >= 10) {
+						// Task completed
+					}
 				}
-			}.runTaskTimer(SimplePlugin.getInstance(), 0, 20);
+			});
 		}
 	}
 
@@ -146,7 +130,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
 		final Location location = player.getLocation().clone().add(0, 1, 0);
 
 		// TODO only use if the server has the EffectLib plugin
-		if (Settings.DeathEffectSection.ENABLE_DEATH_EFFECTS && Common.doesPluginExist("EffectLib")) {
+		if (Settings.DeathEffectSection.ENABLE_DEATH_EFFECTS && PluginUtil.isPluginEnabled("EffectLib")) {
 			switch (Settings.DeathEffectSection.ACTIVE_DEATH_EFFECT) {
 				case "grid" -> {
 					final GridEffect effect = new GridEffect(Effects.getEffectManager());
@@ -253,8 +237,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
 		final HologramRegistry registry = HologramRegistry.getInstance();
 
 		if (cache.isDrawingAxe()) {
-			player.removePotionEffect(PotionEffectType.SLOW);
-			player.removePotionEffect(PotionEffectType.JUMP);
+			player.removePotionEffect(PotionEffectType.SLOWNESS);
+			player.removePotionEffect(PotionEffectType.JUMP_BOOST);
 			cache.setDrawingAxe(false);
 		}
 
@@ -265,7 +249,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
 
 		for (final BukkitHologram hologram : registry.getLoadedHolograms())
 			if (player.hasMetadata(hologram.getUniqueId().toString()))
-				player.removeMetadata(hologram.getUniqueId().toString(), SimplePlugin.getInstance());
+				player.removeMetadata(hologram.getUniqueId().toString(), SMPPlugin.getInstance());
 
 	}
 
@@ -277,21 +261,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
 			final PlayerCache cache = PlayerCache.from(player);
 
 			cache.setInCombat(true);
-			Common.runLater(20 * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT, () -> cache.setInCombat(false));
+			SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT, () -> cache.setInCombat(false));
 		}
 	}
 
-	private void displayHealth(final Player player) {
-		final ScoreboardManager manager = Bukkit.getScoreboardManager();
-
-		if (manager != null) {
-			final Scoreboard board = manager.getNewScoreboard();
-			final Objective objective = board.registerNewObjective("showhealth", Criterias.HEALTH, Common.colorize("&c❤"));
-
-			objective.setDisplaySlot(DisplaySlot.BELOW_NAME);
-
-			player.setHealth(player.getHealth());
-			player.setScoreboard(board);
-		}
-	}
 }

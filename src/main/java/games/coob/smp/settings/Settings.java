@@ -1,141 +1,121 @@
 package games.coob.smp.settings;
 
-import org.mineacademy.fo.remain.CompMaterial;
-import org.mineacademy.fo.settings.Lang;
-import org.mineacademy.fo.settings.SimpleSettings;
-import org.mineacademy.fo.settings.YamlStaticConfig;
-
-import java.util.Arrays;
-import java.util.List;
+import games.coob.smp.config.ConfigFile;
+import org.bukkit.Material;
+import org.bukkit.configuration.file.FileConfiguration;
 
 /**
- * A sample settings class, utilizing {@link YamlStaticConfig} with prebuilt settings.yml handler
- * with a bunch of preconfigured keys, see resources/settings.yml
- * <p>
- * Foundation detects if you have "settings.yml" placed in your jar (in src/main/resources in source)
- * and will load this class automatically. The same goes for the {@link Lang} class which is
- * automatically loaded when we detect the presence of at least one localization/messages_X.yml
- * file in your jar.
+ * Settings configuration file
  */
-@SuppressWarnings("unused")
-public final class Settings extends SimpleSettings {
+public final class Settings extends ConfigFile {
 
-	/**
-	 * @see org.mineacademy.fo.settings.SimpleSettings#getConfigVersion()
-	 */
-	@Override
-	protected int getConfigVersion() {
-		return 1;
+	private static Settings instance;
+
+	public Settings() {
+		super("settings.yml");
+		instance = this;
 	}
 
-	/**
-	 * Place the sections where user can create new "key: value" pairs
-	 * here so that they are not removed while adding comments.
-	 * <p>
-	 * Example use in ChatControl: user can add new channels in "Channels.List"
-	 * section so we place "Channels.List" here.
-	 *
-	 * @return the ignored sections
-	 */
-	@Override
-	protected List<String> getUncommentedSections() {
-		return Arrays.asList(
-				"Example.Uncommented_Section");
-	}
-
-	public static class DeathStorageSection {
-		public static Boolean ENABLE_DEATH_STORAGE;
-		public static CompMaterial STORAGE_MATERIAL;
-		public static String HOLOGRAM_TEXT;
-		public static Integer HOLOGRAM_VISIBLE_RANGE;
-
-		/*
-		 * Automatically called method when we load settings.yml to load values in this subclass
-		 */
-		private static void init() {
-
-			// A convenience method to instruct the loader to prepend all paths with Example so you
-			// do not have to call "Example.Key1", "Example.Key2" all the time, only "Key1" and "Key2".
-			setPathPrefix("Death_Storage");
-
-			ENABLE_DEATH_STORAGE = getBoolean("Enable_Death_Storage");
-			STORAGE_MATERIAL = getMaterial("Storage_Material");
-			HOLOGRAM_TEXT = getString("Hologram_Text");
-			HOLOGRAM_VISIBLE_RANGE = getInteger("Hologram_Visible_Range");
+	public static void loadSettings() {
+		if (instance == null) {
+			new Settings();
+		} else {
+			instance.reload();
 		}
 	}
 
+	public static Settings getInstance() {
+		if (instance == null) {
+			loadSettings();
+		}
+		return instance;
+	}
+
+	@Override
+	protected void onLoad() {
+		super.onLoad();
+		FileConfiguration config = getConfig();
+		DeathStorageSection.load(config);
+		CompassSection.load(config);
+		ProjectileSection.load(config);
+		DeathEffectSection.load(config);
+		ThrowingAxeSection.load(config);
+		CombatSection.load(config);
+	}
+
+	// Death Storage Section
+	public static class DeathStorageSection {
+		public static boolean ENABLE_DEATH_STORAGE;
+		public static Material STORAGE_MATERIAL;
+		public static String HOLOGRAM_TEXT;
+		public static int HOLOGRAM_VISIBLE_RANGE;
+
+		public static void load(FileConfiguration config) {
+			ENABLE_DEATH_STORAGE = config.getBoolean("Death_Storage.Enable_Death_Storage", true);
+			String materialName = config.getString("Death_Storage.Storage_Material", "CHEST");
+			STORAGE_MATERIAL = Material.matchMaterial(materialName);
+			if (STORAGE_MATERIAL == null) {
+				STORAGE_MATERIAL = Material.CHEST;
+			}
+			HOLOGRAM_TEXT = config.getString("Death_Storage.Hologram_Text", "&6{player}'s loot");
+			HOLOGRAM_VISIBLE_RANGE = config.getInt("Death_Storage.Hologram_Visible_Range", 20);
+		}
+	}
+
+	// Compass Section
 	public static class CompassSection {
-		public static Boolean ENABLE_COMPASS;
+		public static boolean ENABLE_COMPASS;
 		public static String ALLOWED_ENVIRONEMENTS;
 
-		private static void init() {
-			setPathPrefix("Compass_Tracker");
-
-			ENABLE_COMPASS = getBoolean("Enable_Compass");
-			ALLOWED_ENVIRONEMENTS = getString("Allowed_Environements");
+		public static void load(FileConfiguration config) {
+			ENABLE_COMPASS = config.getBoolean("Compass_Tracker.Enable_Compass", true);
+			ALLOWED_ENVIRONEMENTS = config.getString("Compass_Tracker.Allowed_Environements", "all");
 		}
 	}
 
+	// Projectile Section
 	public static class ProjectileSection {
-		public static Boolean ENABLE_TRAILS;
+		public static boolean ENABLE_TRAILS;
 		public static String ACTIVE_TRAIL;
-		public static Double KNOCKBACK;
-		public static Boolean ENABLE_HEADSHOT;
+		public static double KNOCKBACK;
+		public static boolean ENABLE_HEADSHOT;
 
-		private static void init() {
-			setPathPrefix("Projectile_Settings");
-
-			ENABLE_TRAILS = getBoolean("Enable_Trails");
-			ACTIVE_TRAIL = getString("Active_Trail");
-			KNOCKBACK = getDouble("Knockback");
-			ENABLE_HEADSHOT = getBoolean("Enable_Headshot");
+		public static void load(FileConfiguration config) {
+			ENABLE_TRAILS = config.getBoolean("Projectile_Settings.Enable_Trails", true);
+			ACTIVE_TRAIL = config.getString("Projectile_Settings.Active_Trail", "soul_fire_flame");
+			KNOCKBACK = config.getDouble("Projectile_Settings.Knockback", 0.4);
+			ENABLE_HEADSHOT = config.getBoolean("Projectile_Settings.Enable_Headshot", true);
 		}
 	}
 
+	// Death Effect Section
 	public static class DeathEffectSection {
-		public static Boolean ENABLE_DEATH_EFFECTS;
+		public static boolean ENABLE_DEATH_EFFECTS;
 		public static String ACTIVE_DEATH_EFFECT;
 
-		private static void init() {
-			setPathPrefix("Death_Effects");
-
-			ENABLE_DEATH_EFFECTS = getBoolean("Enable_Death_Effects");
-			ACTIVE_DEATH_EFFECT = getString("Active_Death_Effect");
+		public static void load(FileConfiguration config) {
+			ENABLE_DEATH_EFFECTS = config.getBoolean("Death_Effects.Enable_Death_Effects", true);
+			ACTIVE_DEATH_EFFECT = config.getString("Death_Effects.Active_Death_Effect", "grid");
 		}
 	}
 
-	public static class MOTDSection {
-		public static Boolean ENABLE_MOTD;
-		public static String MOTD_TEXT;
-
-		private static void init() {
-			setPathPrefix("MOTD");
-
-			ENABLE_MOTD = getBoolean("Enable_MOTD");
-			MOTD_TEXT = getString("MOTD_Text");
-		}
-	}
-
+	// Throwing Axe Section
 	public static class ThrowingAxeSection {
-		public static Boolean ENABLE_THROWING_AXE;
+		public static boolean ENABLE_THROWING_AXE;
 
-		private static void init() {
-			setPathPrefix("Throwing_Axe");
-
-			ENABLE_THROWING_AXE = getBoolean("Enable_Throwing_Axe");
+		public static void load(FileConfiguration config) {
+			ENABLE_THROWING_AXE = config.getBoolean("Throwing_Axe.Enable_Throwing_Axe", true);
 		}
 	}
 
+	// Combat Section
 	public static class CombatSection {
-		public static Boolean ENABLE_COMBAT_PUNISHMENTS;
-		public static Integer SECONDS_TILL_PLAYER_LEAVES_COMBAT;
+		public static boolean ENABLE_COMBAT_PUNISHMENTS;
+		public static int SECONDS_TILL_PLAYER_LEAVES_COMBAT;
 
-		private static void init() {
-			setPathPrefix("Combat_Settings");
-
-			ENABLE_COMBAT_PUNISHMENTS = getBoolean("Enable_Combat_Punishments");
-			SECONDS_TILL_PLAYER_LEAVES_COMBAT = getInteger("Combat_Timer");
+		public static void load(FileConfiguration config) {
+			ENABLE_COMBAT_PUNISHMENTS = config.getBoolean("Combat_Settings.Enable_Combat_Punishments", true);
+			SECONDS_TILL_PLAYER_LEAVES_COMBAT = config.getInt("Combat_Settings.Combat_Timer", 10);
 		}
 	}
 }
