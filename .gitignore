@@ -1,19 +1,28 @@
 #################
-## IDEA
+## Maven Build Outputs
 #################
 
-# User-specific stuff
+target/
+**/target/
+*.jar
+!**/maven-wrapper.jar
+*.war
+*.ear
+*.nar
+
+#################
+## IDE - IntelliJ IDEA
+#################
+
 .idea/
 .idea_modules/
 *.iml
-
-# IntelliJ
 out/
-
-target/
+*.ipr
+*.iws
 
 #################
-## Eclipse
+## IDE - Eclipse
 #################
 
 *.pydevproject
@@ -31,39 +40,74 @@ local.properties
 .loadpath
 .apt_generated/
 .apt_generated_tests/
-
-# Avoid ignoring Maven wrapper jar file (.jar files are usually ignored)
-!/.mvn/wrapper/maven-wrapper.jar
-
-# External tool builders
 .externalToolBuilders/
-
-# Locally stored "Eclipse launch configurations"
 *.launch
-
-# CDT-specific
 .cproject
-
-# PDT-specific
 .buildpath
 
-#############
-## Windows detritus
-#############
+#################
+## IDE - VS Code
+#################
 
-# Windows image file caches
+.vscode/
+*.code-workspace
+
+#################
+## OS Files
+#################
+
+# Windows
 Thumbs.db
 ehthumbs.db
-
-# Folder config file
 Desktop.ini
-
-# Recycle Bin used on file shares
 $RECYCLE.BIN/
+*.lnk
 
-# Mac crap
+# macOS
 .DS_Store
-REBASE.bat
+.AppleDouble
+.LSOverride
+._*
 
-# Place your proprietary software here, this won't get synced to remote 
+# Linux
+*~
+.directory
+.Trash-*
+
+#################
+## Minecraft Plugin Specific
+#################
+
+# Library JARs (proprietary server JARs)
 library/
+**/library/
+
+# Old NMS version modules (no longer used)
+v1_17/
+v1_18/
+
+# Plugin runtime data (if testing locally)
+plugins/SMP/
+**/plugins/SMP/
+
+# Log files
+*.log
+logs/
+
+# Compiled classes
+*.class
+
+# Backup files
+*.backup
+*.old
+
+# Maven wrapper (if not using)
+.mvn/wrapper/maven-wrapper.jar
+
+#################
+## Other
+#################
+
+REBASE.bat
+*.patch
+*.diff
