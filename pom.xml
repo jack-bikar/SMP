@@ -31,7 +31,7 @@
 
         <!-- Paper API version for 1.21.10 and 1.21.11 -->
         <paper.version>1.21.1-R0.1-SNAPSHOT</paper.version>
-        <effectlib.version>9.4</effectlib.version>
+        <effectlib.version>10.2</effectlib.version>
         <nbtapi.version>2.12.2</nbtapi.version>
         <lombok.version>1.18.30</lombok.version>
 
@@ -127,10 +127,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-
-                <!-- Change version to the latest one from (3.2.4 > 16 < 3.3.0-SNAPSHOT)
-                     https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
-                <version>3.3.0</version>
+                <!-- Updated to support Java 21 (class file major version 65) -->
+                <version>3.5.1</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -163,9 +161,26 @@
                             <excludes>
                                 <exclude>*.yml</exclude>
                                 <exclude>*.php</exclude>
+                                <exclude>META-INF/MANIFEST.MF</exclude>
+                            </excludes>
+                        </filter>
+                        <!-- Exclude manifest files from NBTAPI, we'll use our own -->
+                        <filter>
+                            <artifact>de.tr7zw:item-nbt-api</artifact>
+                            <excludes>
+                                <exclude>META-INF/MANIFEST.MF</exclude>
                             </excludes>
                         </filter>
                     </filters>
+                    <transformers>
+                        <!-- Use the manifest from the main project JAR only -->
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                            <manifestEntries>
+                                <Implementation-Title>${project.name}</Implementation-Title>
+                                <Implementation-Version>${project.version}</Implementation-Version>
+                            </manifestEntries>
+                        </transformer>
+                    </transformers>
                 </configuration>
             </plugin>
         </plugins>
