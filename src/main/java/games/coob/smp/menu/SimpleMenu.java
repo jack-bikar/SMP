@@ -1,6 +1,7 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.util.ColorUtil;
+import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -16,7 +17,8 @@ import org.bukkit.inventory.ItemStack;
  */
 public abstract class SimpleMenu implements Listener {
 
-	protected Inventory inventory;
+	@Getter
+    protected Inventory inventory;
 	protected Player viewer;
 
 	public SimpleMenu(Player viewer, int size, String title) {
@@ -48,9 +50,5 @@ public abstract class SimpleMenu implements Listener {
 	protected abstract void onMenuClick(Player player, int slot, ItemStack clicked);
 
 	protected void onMenuClose(Player player, Inventory inventory) {
-	}
-
-	public Inventory getInventory() {
-		return inventory;
 	}
 }

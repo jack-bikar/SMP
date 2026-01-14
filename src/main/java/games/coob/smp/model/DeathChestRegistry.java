@@ -21,13 +21,10 @@ import java.util.Set;
 
 public class DeathChestRegistry extends ConfigFile {
 
-	private static final DeathChestRegistry instance = new DeathChestRegistry();
+	@Getter
+    private static final DeathChestRegistry instance = new DeathChestRegistry();
 
-	public static DeathChestRegistry getInstance() {
-		return instance;
-	}
-
-	private Set<DeathChestData> registeredDeathChests = new HashSet<>();
+    private Set<DeathChestData> registeredDeathChests = new HashSet<>();
 
 	private DeathChestRegistry() {
 		super("data.yml");

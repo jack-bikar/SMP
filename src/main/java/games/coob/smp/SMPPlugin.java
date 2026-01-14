@@ -3,7 +3,6 @@ package games.coob.smp;
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SpawnCommand;
 import games.coob.smp.hologram.HologramRegistry;
-import games.coob.smp.listener.AxeListener;
 import games.coob.smp.listener.CompassListener;
 import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.SMPListener;
@@ -47,7 +46,6 @@ public final class SMPPlugin extends JavaPlugin {
 		getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
 		getServer().getPluginManager().registerEvents(CompassListener.getInstance(), this);
 		getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
-		getServer().getPluginManager().registerEvents(AxeListener.getInstance(), this);
 
 		// Start tasks
 		SchedulerUtil.runTimer(20, new CompassTask());

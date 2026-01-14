@@ -39,7 +39,6 @@ public final class Settings extends ConfigFile {
 		CompassSection.load(config);
 		ProjectileSection.load(config);
 		DeathEffectSection.load(config);
-		ThrowingAxeSection.load(config);
 		CombatSection.load(config);
 	}
 
@@ -96,15 +95,6 @@ public final class Settings extends ConfigFile {
 		public static void load(FileConfiguration config) {
 			ENABLE_DEATH_EFFECTS = config.getBoolean("Death_Effects.Enable_Death_Effects", true);
 			ACTIVE_DEATH_EFFECT = config.getString("Death_Effects.Active_Death_Effect", "grid");
-		}
-	}
-
-	// Throwing Axe Section
-	public static class ThrowingAxeSection {
-		public static boolean ENABLE_THROWING_AXE;
-
-		public static void load(FileConfiguration config) {
-			ENABLE_THROWING_AXE = config.getBoolean("Throwing_Axe.Enable_Throwing_Axe", true);
 		}
 	}
 

@@ -5,6 +5,7 @@ import games.coob.smp.config.SerializedMap;
 import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.util.InventorySerialization;
 import lombok.Getter;
+import lombok.Setter;
 import org.bukkit.Location;
 import org.bukkit.inventory.Inventory;
 
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@Setter
 @Getter
 public class DeathChestData implements Serializable {
 
@@ -24,23 +26,7 @@ public class DeathChestData implements Serializable {
 
 	private BukkitHologram hologram;
 
-	public void setLocation(final Location location) {
-		this.location = location;
-	}
-
-	public void setInventory(final Inventory inventory) {
-		this.inventory = inventory;
-	}
-
-	public void setUuid(final UUID uuid) {
-		this.uuid = uuid;
-	}
-
-	public void setHologram(final BukkitHologram hologram) {
-		this.hologram = hologram;
-	}
-
-	@Override
+    @Override
 	public Map<String, Object> serialize() {
 		Map<String, Object> map = new LinkedHashMap<>();
 		map.put("Location", this.location);
