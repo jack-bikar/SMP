@@ -1,5 +1,6 @@
 package games.coob.smp.command;
 
+import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.MathUtil;
 import games.coob.smp.util.Messenger;
 import org.bukkit.World;
@@ -18,7 +19,13 @@ public class SpawnCommand implements CommandExecutor, TabCompleter {
 	@Override
 	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
 		if (!(sender instanceof Player player)) {
-			sender.sendMessage("This command can only be used by players.");
+			ColorUtil.sendMessage(sender, "&cThis command can only be used by players.");
+			return true;
+		}
+
+		// Check permission
+		if (!player.hasPermission("smp.command.spawn") && !player.isOp()) {
+			Messenger.error(player, "You don't have permission to use this command.");
 			return true;
 		}
 
@@ -31,10 +38,16 @@ public class SpawnCommand implements CommandExecutor, TabCompleter {
 			final String param = args[0];
 
 			if (param.equals("locate")) {
-				Messenger.info(player, "The spawn is located at &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getX()) + "&a, &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getY()) + "&a, &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getZ()) + "&a.");
+				Messenger.info(player,
+						"The spawn is located at &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getX())
+								+ "&a, &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getY()) + "&a, &e"
+								+ MathUtil.formatTwoDigits(world.getSpawnLocation().getZ()) + "&a.");
 			} else if (param.equals("set")) {
 				world.setSpawnLocation(player.getLocation());
-				Messenger.success(player, "Set the spawn location at &3" + MathUtil.formatTwoDigits(player.getLocation().getX()) + "&a, &3 " + MathUtil.formatTwoDigits(player.getLocation().getY()) + "&a, &3" + MathUtil.formatTwoDigits(player.getLocation().getZ()) + "&a.");
+				Messenger.success(player,
+						"Set the spawn location at &3" + MathUtil.formatTwoDigits(player.getLocation().getX())
+								+ "&a, &3 " + MathUtil.formatTwoDigits(player.getLocation().getY()) + "&a, &3"
+								+ MathUtil.formatTwoDigits(player.getLocation().getZ()) + "&a.");
 			}
 		}
 		return true;

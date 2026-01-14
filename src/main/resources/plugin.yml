@@ -23,8 +23,43 @@ softdepend: [ AuthMe, BanManager, BungeeChatAPI, CMI, DiscordSRV, Factions, Feud
 # Do not change anything in here, you will break the plugin and get no support.
 #
 commands:
+  smp:
+    description: SMP plugin help and information
+    aliases: []
+    permission: smp.command.help
+    permission-message: You don't have permission to use this command.
   inv:
     description: Edit player inventories
     aliases: [inventory]
+    permission: smp.command.inv
+    permission-message: You don't have permission to use this command.
   spawn:
-    description: Teleport to spawn 
+    description: Teleport to spawn
+    permission: smp.command.spawn
+    permission-message: You don't have permission to use this command.
+permissions:
+  smp.*:
+    description: All SMP permissions
+    default: op
+    children:
+      smp.command.*: true
+      smp.use.*: true
+  smp.command.*:
+    description: All SMP command permissions
+    default: op
+    children:
+      smp.command.help: true
+      smp.command.inv: true
+      smp.command.spawn: true
+  smp.command.help:
+    description: Use /smp help command
+    default: op
+  smp.command.inv:
+    description: Use /inv command
+    default: op
+  smp.command.spawn:
+    description: Use /spawn command
+    default: op
+  smp.use.*:
+    description: All SMP use permissions
+    default: true 

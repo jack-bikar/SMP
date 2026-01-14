@@ -1,6 +1,7 @@
 package games.coob.smp;
 
 import games.coob.smp.command.InvEditCommand;
+import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
 import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.listener.CompassListener;
@@ -38,6 +39,7 @@ public final class SMPPlugin extends JavaPlugin {
 		}
 
 		// Register commands
+		getCommand("smp").setExecutor(new SMPCommand());
 		getCommand("inv").setExecutor(new InvEditCommand());
 		getCommand("inventory").setExecutor(new InvEditCommand());
 		getCommand("spawn").setExecutor(new SpawnCommand());

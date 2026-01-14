@@ -62,13 +62,17 @@ public final class PlayerCache extends ConfigFile {
 
 		this.playerName = name;
 		this.uniqueId = uniqueId;
+		
+		// Load player-specific data after uniqueId is set
+		loadPlayerData();
 	}
 
 	/**
-	 * Automatically called when loading data from disk.
+	 * Load player-specific data from the config file
 	 */
-	@Override
-	protected void onLoad() {
+	private void loadPlayerData() {
+		if (uniqueId == null) return;
+		
 		String path = "Players." + uniqueId.toString() + ".";
 		this.deathLocation = getConfig().getLocation(path + "Death_Location");
 		this.portalLocation = getConfig().getLocation(path + "Portal_Location");
@@ -81,6 +85,16 @@ public final class PlayerCache extends ConfigFile {
 				this.targetByUUID = null;
 			}
 		}
+	}
+
+	/**
+	 * Automatically called when loading data from disk.
+	 * Note: This is called before uniqueId is set, so we load player data separately.
+	 */
+	@Override
+	protected void onLoad() {
+		// Don't load player-specific data here since uniqueId isn't set yet
+		// Player data is loaded in loadPlayerData() after uniqueId is set
 	}
 
 	@Override

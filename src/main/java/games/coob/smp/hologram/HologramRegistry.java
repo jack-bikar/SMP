@@ -1,5 +1,6 @@
 package games.coob.smp.hologram;
 
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.config.ConfigFile;
 import games.coob.smp.config.SerializedMap;
 import games.coob.smp.util.ValidationUtil;
@@ -44,10 +45,10 @@ public class HologramRegistry extends ConfigFile {
 		// Load holograms from disk
 		this.loadedHolograms = loadHolograms();
 
-		System.out.println("@Found " + this.loadedHolograms.size() + " Holograms on the disk");
+		SMPPlugin.getInstance().getLogger().info("Found " + this.loadedHolograms.size() + " Holograms on the disk");
 
 		for (final BukkitHologram hologram : this.loadedHolograms)
-			System.out.println("\tspawned " + hologram + " at " + hologram.getLocation());
+			SMPPlugin.getInstance().getLogger().info("Spawned " + hologram + " at " + hologram.getLocation());
 	}
 
 	public List<BukkitHologram> loadHolograms() {
