@@ -41,15 +41,17 @@ Death_Storage:
   Hologram_Visible_Range: 20
 
 # -------------------------------------------------------------------------------------------------
-# Edit your compass tracker
+# Edit your locator bar toggle
 # -------------------------------------------------------------------------------------------------
-Compass_Tracker:
-  # Enable or disable this feature
-  Enable_Compass: true
-  # normal - enable compass tracker in the normal environement
-  # nether - enable compass tracker in the nether
-  # the end - enable compass tracker in the end
-  # all - enable compass in all environements
+Locator_Toggle:
+  # Enable or disable the default Minecraft locator bar
+  # If enabled, the default locator bar will be used and custom tracking commands will be disabled
+  # If disabled (default), custom tracking system will be used and locator bar will be hidden by default
+  Enable_Locator_Bar: false
+  # normal - enable locator tracker in the normal environement
+  # nether - enable locator tracker in the nether
+  # the end - enable locator tracker in the end
+  # all - enable locator in all environements
   Allowed_Environements: "all"
 
 # -------------------------------------------------------------------------------------------------

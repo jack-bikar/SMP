@@ -98,8 +98,8 @@ public final class DeathChestListener implements Listener {
 			assert inventory != null;
 			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL);
 
-			// Position hologram above the chest (chest is ~0.875 blocks tall, so place at +1.2 for good visibility)
-			Location hologramLocation = block.getLocation().clone().add(0.5, 1.2, 0.5);
+			// Position hologram above the chest (chest is ~0.875 blocks tall, so place at +1.0 for good visibility)
+			Location hologramLocation = block.getLocation().clone().add(0.5, 1.0, 0.5);
 			
 			for (final Player closePlayers : org.bukkit.Bukkit.getOnlinePlayers())
 				if (closePlayers.getLocation().distance(hologramLocation) < Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)

@@ -49,12 +49,16 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&7  &7/inv armour <player> &7- View/edit player armor");
 		ColorUtil.sendMessage(sender, "&7  &7/inv clear <player> &7- Clear player inventory");
 		ColorUtil.sendMessage(sender, "");
+		ColorUtil.sendMessage(sender, "&e/tracking menu &7- Open locator tracking menu");
+		ColorUtil.sendMessage(sender, "&e/tracking cancel &7- Cancel current tracking");
+		ColorUtil.sendMessage(sender, "&e/tracking give [player] &7- Give locator tracker (built-in)");
+		ColorUtil.sendMessage(sender, "");
 		
 		// Features
 		ColorUtil.sendMessage(sender, "&6&lFeatures:");
 		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&7- &eDeath Chest System &7- Items stored in chests on death");
-		ColorUtil.sendMessage(sender, "&7- &eCompass Tracking &7- Right-click compass to track players/locations");
+		ColorUtil.sendMessage(sender, "&7- &eLocator Bar Tracking &7- Track players using the locator bar");
 		ColorUtil.sendMessage(sender, "&7- &eProjectile Effects &7- Particle trails and knockback for projectiles");
 		ColorUtil.sendMessage(sender, "&7- &eCombat System &7- Combat logging prevention");
 		ColorUtil.sendMessage(sender, "");
@@ -64,6 +68,7 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.spawn &7- Use /spawn command");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.inv &7- Use /inv command");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.help &7- Use /smp help command");
+		ColorUtil.sendMessage(sender, "&7- &esmp.command.tracking &7- Use /tracking command");
 		ColorUtil.sendMessage(sender, "");
 		
 		ColorUtil.sendMessage(sender, "&6&l=== === ===");

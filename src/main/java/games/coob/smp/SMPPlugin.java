@@ -3,14 +3,15 @@ package games.coob.smp;
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
+import games.coob.smp.command.TrackingCommand;
 import games.coob.smp.hologram.HologramRegistry;
-import games.coob.smp.listener.CompassListener;
+import games.coob.smp.listener.LocatorListener;
 import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.SMPListener;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
-import games.coob.smp.task.CompassTask;
+import games.coob.smp.task.LocatorTask;
 import games.coob.smp.task.HologramTask;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
@@ -43,14 +44,16 @@ public final class SMPPlugin extends JavaPlugin {
 		getCommand("inv").setExecutor(new InvEditCommand());
 		getCommand("inventory").setExecutor(new InvEditCommand());
 		getCommand("spawn").setExecutor(new SpawnCommand());
+		getCommand("tracking").setExecutor(new TrackingCommand());
+		getCommand("tracking").setTabCompleter(new TrackingCommand());
 
 		// Register events
 		getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
-		getServer().getPluginManager().registerEvents(CompassListener.getInstance(), this);
+		getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
 		getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
 
 		// Start tasks
-		SchedulerUtil.runTimer(20, new CompassTask());
+		SchedulerUtil.runTimer(20, new LocatorTask());
 		SchedulerUtil.runTimer(20, new HologramTask());
 	}
 

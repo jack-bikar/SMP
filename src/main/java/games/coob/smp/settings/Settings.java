@@ -36,7 +36,7 @@ public final class Settings extends ConfigFile {
 		super.onLoad();
 		FileConfiguration config = getConfig();
 		DeathStorageSection.load(config);
-		CompassSection.load(config);
+		LocatorSection.load(config);
 		ProjectileSection.load(config);
 		DeathEffectSection.load(config);
 		CombatSection.load(config);
@@ -61,14 +61,18 @@ public final class Settings extends ConfigFile {
 		}
 	}
 
-	// Compass Section
-	public static class CompassSection {
-		public static boolean ENABLE_COMPASS;
+	// Locator Section
+	public static class LocatorSection {
+		public static boolean ENABLE_LOCATOR_BAR;
 		public static String ALLOWED_ENVIRONEMENTS;
+		// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking is disabled
+		public static boolean ENABLE_TRACKING;
 
 		public static void load(FileConfiguration config) {
-			ENABLE_COMPASS = config.getBoolean("Compass_Tracker.Enable_Compass", true);
-			ALLOWED_ENVIRONEMENTS = config.getString("Compass_Tracker.Allowed_Environements", "all");
+			ENABLE_LOCATOR_BAR = config.getBoolean("Locator_Toggle.Enable_Locator_Bar", false);
+			ALLOWED_ENVIRONEMENTS = config.getString("Locator_Toggle.Allowed_Environements", "all");
+			// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking is disabled
+			ENABLE_TRACKING = !ENABLE_LOCATOR_BAR;
 		}
 	}
 

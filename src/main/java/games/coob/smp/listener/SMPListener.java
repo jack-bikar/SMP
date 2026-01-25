@@ -1,17 +1,22 @@
 package games.coob.smp.listener;
 
 import de.slikey.effectlib.effect.*;
+import games.coob.smp.PlayerCache;
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.hologram.HologramRegistry;
-import games.coob.smp.PlayerCache;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
+import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.util.EntityUtil;
+import games.coob.smp.util.PluginUtil;
+import games.coob.smp.util.SchedulerUtil;
 import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -23,246 +28,271 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import games.coob.smp.SMPPlugin;
-import games.coob.smp.util.EntityUtil;
-import games.coob.smp.util.PluginUtil;
-import games.coob.smp.util.SchedulerUtil;
-import org.bukkit.Particle;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SMPListener implements Listener { // TODO add the register events annotation
 
-	private static final SMPListener instance = new SMPListener();
+    private static final SMPListener instance = new SMPListener();
 
-	public static SMPListener getInstance() {
-		return instance;
-	}
+    public static SMPListener getInstance() {
+        return instance;
+    }
 
-	@EventHandler
-	public void onJoin(final PlayerJoinEvent event) {
-		final Player player = event.getPlayer();
+    @EventHandler
+    public void onJoin(final PlayerJoinEvent event) {
+        final Player player = event.getPlayer();
 
-		PlayerCache.from(player); // Load player's cache
-	}
+        PlayerCache.from(player); // Load player's cache
 
-	/**
-	 * Make players take knockback when getting hit by a projectile
-	 *
-	 * @param event
-	 */
-	@EventHandler
-	public void onProjectileHit(final ProjectileHitEvent event) {
-		final Projectile projectile = event.getEntity();
+        // Hide Player Locator Bar by default if custom tracking is enabled
+        // If locator bar is enabled, let Minecraft handle it
+        if (!Settings.LocatorSection.ENABLE_LOCATOR_BAR && Settings.LocatorSection.ENABLE_TRACKING) {
+            // Disable locator bar by default
+            new games.coob.smp.tracking.LocatorBarManager(player).disableTemporarily();
+        }
+    }
 
-		if (event.getHitEntity() instanceof final Player player) {
-			if (projectile instanceof Snowball || projectile instanceof Egg || projectile instanceof FishHook) {
-				if (player.getGameMode() != GameMode.CREATIVE) {
-					player.damage(0.05, projectile);
-					player.setVelocity(projectile.getVelocity().multiply(Settings.ProjectileSection.KNOCKBACK));
+    /**
+     * Make players take knockback when getting hit by a projectile
+     *
+     * @param event
+     */
+    @EventHandler
+    public void onProjectileHit(final ProjectileHitEvent event) {
+        final Projectile projectile = event.getEntity();
 
-					if (Settings.ProjectileSection.ENABLE_HEADSHOT)
-						if (player.getLocation().getY() - projectile.getLocation().getY() <= -1.45)
-							player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 25, 1, true));
-				}
-			}
-		}
-	}
+        if (event.getHitEntity() instanceof final Player player) {
+            if (projectile instanceof Snowball || projectile instanceof Egg || projectile instanceof FishHook) {
+                if (player.getGameMode() != GameMode.CREATIVE) {
+                    player.damage(0.05, projectile);
+                    player.setVelocity(projectile.getVelocity().multiply(Settings.ProjectileSection.KNOCKBACK));
 
-	/**
-	 * Display a trail for projectiles when launching them
-	 *
-	 * @param event
-	 */
-	@EventHandler
-	public void onProjectileLaunch(final ProjectileLaunchEvent event) {
-		final Projectile projectile = event.getEntity();
+                    if (Settings.ProjectileSection.ENABLE_HEADSHOT)
+                        if (player.getLocation().getY() - projectile.getLocation().getY() <= -1.45)
+                            player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 25, 1, true));
+                }
+            }
+        }
+    }
 
-		EntityUtil.trackFlying(projectile, (loc) -> {
-			if (Settings.ProjectileSection.ENABLE_TRAILS) {
-				Particle particle = null;
-				switch (Settings.ProjectileSection.ACTIVE_TRAIL) {
-					case "soul_fire_flame" -> particle = Particle.SOUL_FIRE_FLAME;
-					case "water_bubble" -> particle = Particle.BUBBLE;
-					case "nautilus" -> particle = Particle.NAUTILUS;
-					case "flame" -> particle = Particle.FLAME;
-					case "smoke" -> particle = Particle.LARGE_SMOKE;
-					case "electrik_spark" -> particle = Particle.ELECTRIC_SPARK;
-					case "enchantment" -> particle = Particle.ENCHANT;
-					case "honey" -> particle = Particle.DRIPPING_HONEY;
-					case "flash" -> particle = Particle.FLASH;
-					case "heart" -> particle = Particle.HEART;
-					case "music" -> particle = Particle.NOTE;
-					case "glow" -> particle = Particle.GLOW;
-				}
-				if (particle != null) {
-					loc.getWorld().spawnParticle(particle, loc, 1);
-				}
-			}
-		});
-	}
+    /**
+     * Display a trail for projectiles when launching them
+     *
+     * @param event
+     */
+    @EventHandler
+    public void onProjectileLaunch(final ProjectileLaunchEvent event) {
+        final Projectile projectile = event.getEntity();
+
+        EntityUtil.trackFlying(projectile, (loc) -> {
+            if (Settings.ProjectileSection.ENABLE_TRAILS) {
+                Particle particle = null;
+                switch (Settings.ProjectileSection.ACTIVE_TRAIL) {
+                    case "soul_fire_flame" -> particle = Particle.SOUL_FIRE_FLAME;
+                    case "water_bubble" -> particle = Particle.BUBBLE;
+                    case "nautilus" -> particle = Particle.NAUTILUS;
+                    case "flame" -> particle = Particle.FLAME;
+                    case "smoke" -> particle = Particle.LARGE_SMOKE;
+                    case "electrik_spark" -> particle = Particle.ELECTRIC_SPARK;
+                    case "enchantment" -> particle = Particle.ENCHANT;
+                    case "honey" -> particle = Particle.DRIPPING_HONEY;
+                    case "flash" -> particle = Particle.FLASH;
+                    case "heart" -> particle = Particle.HEART;
+                    case "music" -> particle = Particle.NOTE;
+                    case "glow" -> particle = Particle.GLOW;
+                }
+                if (particle != null) {
+                    loc.getWorld().spawnParticle(particle, loc, 1);
+                }
+            }
+        });
+    }
 
 
-	@EventHandler
-	public void onPlayerDamageByEntity(final EntityDamageByEntityEvent event) {
-		final Entity entity = event.getEntity();
+    @EventHandler
+    public void onPlayerDamageByEntity(final EntityDamageByEntityEvent event) {
+        final Entity entity = event.getEntity();
 
-		if (entity instanceof Player player) {
-			final PlayerCache cache = PlayerCache.from(player);
+        if (entity instanceof final Player player) {
+            final PlayerCache cache = PlayerCache.from(player);
 
-			SchedulerUtil.runTimer(0, 20, new Runnable() {
-				int ticks = 0;
-				@Override
-				public void run() {
-					ticks++;
-					cache.setSecondsAfterDamage(cache.getSecondsAfterDamage() + 1);
+            SchedulerUtil.runTimer(0, 20, new Runnable() {
+                int ticks = 0;
 
-					if (ticks >= 10) {
-						// Task completed
-					}
-				}
-			});
-		}
-	}
+                @Override
+                public void run() {
+                    ticks++;
+                    cache.setSecondsAfterDamage(cache.getSecondsAfterDamage() + 1);
 
-	@EventHandler
-	public void onPlayerDeath(final PlayerDeathEvent event) {
-		final Player player = event.getEntity();
-		final Location location = player.getLocation().clone().add(0, 1, 0);
+                    if (ticks >= 10) {
+                        // Task completed
+                    }
+                }
+            });
+        }
+    }
 
-		// TODO only use if the server has the EffectLib plugin
-		if (Settings.DeathEffectSection.ENABLE_DEATH_EFFECTS && PluginUtil.isPluginEnabled("EffectLib")) {
-			switch (Settings.DeathEffectSection.ACTIVE_DEATH_EFFECT) {
-				case "grid" -> {
-					final GridEffect effect = new GridEffect(Effects.getEffectManager());
+    @EventHandler
+    public void onPlayerDeath(final PlayerDeathEvent event) {
+        final Player player = event.getEntity();
+        final Location location = player.getLocation().clone().add(0, 1, 0);
 
-					// The effect won't stop
-					effect.iterations = -1;
-					// Edit the effect
-					// effect.particles = 40;
-					// effect.particle = Particle.DRAGON_BREATH;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					//Effects.getEffectManager().display(Particle);
+        // TODO only use if the server has the EffectLib plugin
+        if (Settings.DeathEffectSection.ENABLE_DEATH_EFFECTS && PluginUtil.isPluginEnabled("EffectLib")) {
+            switch (Settings.DeathEffectSection.ACTIVE_DEATH_EFFECT) {
+                case "grid" -> {
+                    final GridEffect effect = new GridEffect(Effects.getEffectManager());
 
-					effect.run();
-				}
-				case "sky_rocket" -> {
-					final SkyRocketEffect effect = new SkyRocketEffect(Effects.getEffectManager());
+                    // The effect won't stop
+                    effect.iterations = -1;
+                    // Edit the effect
+                    // effect.particles = 40;
+                    // effect.particle = Particle.DRAGON_BREATH;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    //Effects.getEffectManager().display(Particle);
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "big_bang" -> {
-					final BigBangEffect effect = new BigBangEffect(Effects.getEffectManager());
+                    effect.run();
+                }
+                case "sky_rocket" -> {
+                    final SkyRocketEffect effect = new SkyRocketEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "tornado" -> {
-					final TornadoEffect effect = new TornadoEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "big_bang" -> {
+                    final BigBangEffect effect = new BigBangEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "disco_ball" -> {
-					final DiscoBallEffect effect = new DiscoBallEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "tornado" -> {
+                    final TornadoEffect effect = new TornadoEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "bleed" -> {
-					final BleedEffect effect = new BleedEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "disco_ball" -> {
+                    final DiscoBallEffect effect = new DiscoBallEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "vortex" -> {
-					final VortexEffect effect = new VortexEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "bleed" -> {
+                    final BleedEffect effect = new BleedEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "star" -> {
-					final StarEffect effect = new StarEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "vortex" -> {
+                    final VortexEffect effect = new VortexEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "cloud" -> {
-					final CloudEffect effect = new CloudEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "star" -> {
+                    final StarEffect effect = new StarEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "dragon" -> {
-					final DragonEffect effect = new DragonEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "cloud" -> {
+                    final CloudEffect effect = new CloudEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-				case "fountain" -> {
-					final FountainEffect effect = new FountainEffect(Effects.getEffectManager());
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "dragon" -> {
+                    final DragonEffect effect = new DragonEffect(Effects.getEffectManager());
 
-					effect.iterations = -1;
-					effect.pitch = .5f;
-					effect.setLocation(location);
-					effect.run();
-				}
-			}
-		}
-	}
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+                case "fountain" -> {
+                    final FountainEffect effect = new FountainEffect(Effects.getEffectManager());
 
-	@EventHandler
-	public void onPlayerQuit(final PlayerQuitEvent event) {
-		final Player player = event.getPlayer();
-		final PlayerCache cache = PlayerCache.from(player);
-		final HologramRegistry registry = HologramRegistry.getInstance();
+                    effect.iterations = -1;
+                    effect.pitch = .5f;
+                    effect.setLocation(location);
+                    effect.run();
+                }
+            }
+        }
+    }
 
-		if (cache.isDrawingAxe()) {
-			player.removePotionEffect(PotionEffectType.SLOWNESS);
-			player.removePotionEffect(PotionEffectType.JUMP_BOOST);
-			cache.setDrawingAxe(false);
-		}
+    @EventHandler
+    public void onPlayerQuit(final PlayerQuitEvent event) {
+        final Player player = event.getPlayer();
+        final PlayerCache cache = PlayerCache.from(player);
+        final HologramRegistry registry = HologramRegistry.getInstance();
 
-		if (cache.isInCombat()) {
-			cache.setInCombat(false);
-			player.setHealth(0);
-		}
+        if (cache.isDrawingAxe()) {
+            player.removePotionEffect(PotionEffectType.SLOWNESS);
+            player.removePotionEffect(PotionEffectType.JUMP_BOOST);
+            cache.setDrawingAxe(false);
+        }
 
-		for (final BukkitHologram hologram : registry.getLoadedHolograms())
-			if (player.hasMetadata(hologram.getUniqueId().toString()))
-				player.removeMetadata(hologram.getUniqueId().toString(), SMPPlugin.getInstance());
+        if (cache.isInCombat()) {
+            cache.setInCombat(false);
+            player.setHealth(0);
+        }
 
-	}
+        // Cancel any pending tracking requests from this player
+        TrackingRequestManager.getInstance().cancelRequest(player.getUniqueId());
 
-	@EventHandler
-	public void onPlayerDamage(final EntityDamageByEntityEvent event) {
-		final Entity entity = event.getEntity();
+        // Clear Player Locator Bar for players tracking this player
+        // Also disable waypoint transmission for the quitting player
+        games.coob.smp.tracking.LocatorBarManager quittingPlayerLocator = new games.coob.smp.tracking.LocatorBarManager(player);
+        quittingPlayerLocator.disableTransmit();
+        
+        for (final Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            final PlayerCache onlineCache = PlayerCache.from(onlinePlayer);
+            if (onlineCache.getTargetByUUID() != null && onlineCache.getTargetByUUID().equals(player.getUniqueId())) {
+                // Clear their tracking and hide Player Locator Bar
+                onlineCache.setTrackingLocation(null);
+                onlineCache.setTargetByUUID(null);
+                // Disable locator bar
+                games.coob.smp.tracking.LocatorBarManager locatorBar = new games.coob.smp.tracking.LocatorBarManager(onlinePlayer);
+                locatorBar.disableTemporarily();
+                // Reset compass target
+                onlinePlayer.setCompassTarget(onlinePlayer.getLocation());
+            }
+        }
 
-		if (entity instanceof Player player) {
-			final PlayerCache cache = PlayerCache.from(player);
+        for (final BukkitHologram hologram : registry.getLoadedHolograms())
+            if (player.hasMetadata(hologram.getUniqueId().toString()))
+                player.removeMetadata(hologram.getUniqueId().toString(), SMPPlugin.getInstance());
 
-			cache.setInCombat(true);
-			SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT, () -> cache.setInCombat(false));
-		}
-	}
+    }
+
+    @EventHandler
+    public void onPlayerDamage(final EntityDamageByEntityEvent event) {
+        final Entity entity = event.getEntity();
+
+        if (entity instanceof final Player player) {
+            final PlayerCache cache = PlayerCache.from(player);
+
+            cache.setInCombat(true);
+            SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT, () -> cache.setInCombat(false));
+        }
+    }
 
 }

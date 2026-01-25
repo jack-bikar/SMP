@@ -1,34 +1,34 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.tracking.TrackingRequestManager;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
-import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.CompassMeta;
 
 import java.util.List;
 
 /**
  * Menu for selecting players to track
  */
-public class CompassPlayersMenu extends SimpleMenu {
+public class LocatorPlayersMenu extends SimpleMenu {
 
 	private final List<Player> players;
 	private int currentPage = 0;
 	private static final int ITEMS_PER_PAGE = 27;
 
-	public CompassPlayersMenu(final Player viewer) {
+	public LocatorPlayersMenu(final Player viewer) {
 		super(viewer, 9 * 4, "&lSelect a player to track");
 		this.players = compilePlayers(viewer);
 		setupItems();
 	}
 
 	private static List<Player> compilePlayers(final Player viewer) {
-		return viewer.getWorld().getPlayers();
+		return viewer.getWorld().getPlayers().stream()
+				.filter(player -> !player.equals(viewer))
+				.toList();
 	}
 
 	private void setupItems() {
@@ -43,22 +43,39 @@ public class CompassPlayersMenu extends SimpleMenu {
 			inventory.setItem(slot, createPlayerItem(player));
 		}
 
+		// Back button (bottom-left)
+		inventory.setItem(27, ItemCreator.of(
+				Material.ARROW,
+				"&c&lBack",
+				"",
+				"&7Return to player tracker menu.").make());
+
 		// Navigation buttons
 		if (currentPage > 0) {
-			inventory.setItem(27, ItemCreator.of(Material.ARROW, "&aPrevious Page").make());
+			inventory.setItem(28, ItemCreator.of(
+					Material.ARROW,
+					"&a&lPrevious Page",
+					"",
+					"&7Go to the previous page.").make());
 		}
 		if (endIndex < players.size()) {
-			inventory.setItem(35, ItemCreator.of(Material.ARROW, "&aNext Page").make());
+			inventory.setItem(34, ItemCreator.of(
+					Material.ARROW,
+					"&a&lNext Page",
+					"",
+					"&7Go to the next page.").make());
 		}
 	}
 
 	private ItemStack createPlayerItem(Player player) {
 		return ItemCreator.of(
 				Material.PLAYER_HEAD,
-				player.getName(),
+				"&b&l" + player.getName(),
 				"",
-				"Click to track",
-				player.getName())
+				"&7Click to track",
+				"&7this player's location.",
+				"",
+				"&eClick to track")
 				.skullOwner(player.getName()).make();
 	}
 
@@ -66,12 +83,18 @@ public class CompassPlayersMenu extends SimpleMenu {
 	protected void onMenuClick(Player viewer, int slot, ItemStack clicked) {
 		if (clicked == null) return;
 
+		// Handle back button
+		if (clicked.getType() == Material.ARROW && slot == 27) {
+			LocatorMenu.openMenu(viewer);
+			return;
+		}
+
 		// Handle navigation
 		if (clicked.getType() == Material.ARROW) {
-			if (slot == 27 && currentPage > 0) {
+			if (slot == 28 && currentPage > 0) {
 				currentPage--;
 				setupItems();
-			} else if (slot == 35) {
+			} else if (slot == 34) {
 				int startIndex = (currentPage + 1) * ITEMS_PER_PAGE;
 				if (startIndex < players.size()) {
 					currentPage++;
@@ -92,45 +115,21 @@ public class CompassPlayersMenu extends SimpleMenu {
 	}
 
 	private void handlePlayerSelection(Player viewer, Player clickedPlayer) {
-		final PlayerCache cache = PlayerCache.from(viewer);
-		final Location location = clickedPlayer.getLocation();
-		location.setY(1);
-
-		if (clickedPlayer.getWorld() == viewer.getWorld()) {
-			if (viewer.getWorld().getEnvironment() == World.Environment.NORMAL) {
-				viewer.setCompassTarget(clickedPlayer.getLocation());
-			} else {
-				updateCompassLodestone(viewer, location);
-			}
-
-			cache.setTrackingLocation("Player");
-			cache.setTargetByUUID(clickedPlayer.getUniqueId());
-			viewer.closeInventory();
-			Messenger.success(viewer, "You are now tracking &3" + clickedPlayer.getName() + "'s &alocation.");
-		} else {
-			Messenger.info(viewer, "You must be in the same world as the player you want to track.");
+		if (viewer.equals(clickedPlayer)) {
+			Messenger.info(viewer, "You cannot track yourself.");
+			return;
 		}
-	}
 
-	private void updateCompassLodestone(Player player, Location location) {
-		if (player.getInventory().contains(Material.COMPASS)) {
-			for (int i = 0; i <= player.getInventory().getSize(); i++) {
-				final ItemStack item = player.getInventory().getItem(i);
-
-				if (item != null && item.getType() == Material.COMPASS) {
-					final CompassMeta compass = (CompassMeta) item.getItemMeta();
-					compass.setLodestone(location);
-					compass.setLodestoneTracked(false);
-					item.setItemMeta(compass);
-				}
-			}
-		}
+		// Allow tracking across dimensions - will point to portal if in different dimension
+		// Send tracking request
+		TrackingRequestManager.getInstance().sendTrackingRequest(viewer, clickedPlayer);
+		viewer.closeInventory();
 	}
 
 	/**
 	 * Open the player selection menu to the given player
 	 */
 	public static void openMenu(final Player player) {
-		new CompassPlayersMenu(player).displayTo(player);
+		new LocatorPlayersMenu(player).displayTo(player);
 	}
 }
