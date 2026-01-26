@@ -2,6 +2,7 @@ package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.PortalFinder;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Material;
@@ -57,20 +58,13 @@ public class LocatorMenu extends SimpleMenu {
             LocatorBarManager locatorBar = new LocatorBarManager(player);
             locatorBar.enableTemporarily();
             
-            // Set compass target to point to death location or portal
+            // Set compass target to point to death location or nearest portal to death dimension
             org.bukkit.Location deathLoc = cache.getDeathLocation();
             if (deathLoc.getWorld() == player.getWorld()) {
-                // Same dimension - point to death location
                 player.setCompassTarget(deathLoc);
             } else {
-                // Different dimension - point to portal if available
-                org.bukkit.Location portalLoc = cache.getPortalLocation();
-                if (portalLoc != null && portalLoc.getWorld() == player.getWorld()) {
-                    player.setCompassTarget(portalLoc);
-                } else {
-                    // No portal found, still enable but LocatorTask will handle it
-                    player.setCompassTarget(deathLoc);
-                }
+                org.bukkit.Location portalLoc = resolvePortalForDeathCrossDimension(cache, player, deathLoc.getWorld().getEnvironment());
+                player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
             }
             
             cache.setTrackingLocation("Death");
@@ -79,6 +73,20 @@ public class LocatorMenu extends SimpleMenu {
         } else {
             Messenger.info(player, "No death location was found.");
         }
+    }
+
+    private static org.bukkit.Location resolvePortalForDeathCrossDimension(PlayerCache cache, org.bukkit.entity.Player player, org.bukkit.World.Environment targetEnv) {
+        org.bukkit.Location portal = cache.getPortalLocation();
+        if (portal != null && portal.getWorld() == player.getWorld()) {
+            if (targetEnv == org.bukkit.World.Environment.NORMAL && (player.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER || player.getWorld().getEnvironment() == org.bukkit.World.Environment.THE_END)) {
+                return portal;
+            }
+        }
+        portal = cache.getOverworldNetherPortalLocation();
+        if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == org.bukkit.World.Environment.NETHER) return portal;
+        portal = cache.getOverworldEndPortalLocation();
+        if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == org.bukkit.World.Environment.THE_END) return portal;
+        return PortalFinder.findNearestPortalToDimension(player.getWorld(), player.getLocation(), targetEnv);
     }
 
     /**

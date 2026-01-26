@@ -3,6 +3,7 @@ package games.coob.smp.task;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.PortalFinder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -77,17 +78,21 @@ public class LocatorTask extends BukkitRunnable {
 			// Set compass target to point to the target player's location
 			player.setCompassTarget(target.getLocation());
 		} else {
-			// Different dimension - point to portal location if available
+			// Different dimension - always keep tracking, point to nearest portal that leads to target
 			Location portalLoc = getPortalLocation(player, target.getWorld().getEnvironment());
-			if (portalLoc != null && isEnvironmentAllowed(portalLoc.getWorld().getEnvironment())) {
-				// Enable locator bar and point to portal location
-				locatorBar.enableTemporarily();
+			locatorBar.enableTemporarily();
+			if (portalLoc != null) {
 				player.setCompassTarget(portalLoc);
 			} else {
-				// No portal location found, hide Player Locator Bar
-				locatorBar.disableTemporarily();
-				// Reset compass target to player's location to hide indicator
-				player.setCompassTarget(player.getLocation());
+				// No stored portal - try to find nearest in world
+				portalLoc = findNearestPortalToDimension(player, target.getWorld().getEnvironment());
+				if (portalLoc != null) {
+					player.setCompassTarget(portalLoc);
+				} else {
+					// Fallback: point to world spawn (overworld) or last known portal
+					Location fallback = getFallbackPortalTarget(player, target.getWorld().getEnvironment());
+					player.setCompassTarget(fallback != null ? fallback : player.getLocation());
+				}
 			}
 		}
 	}
@@ -112,47 +117,82 @@ public class LocatorTask extends BukkitRunnable {
 			locatorBar.enableTemporarily();
 			player.setCompassTarget(deathLoc);
 		} else {
-			// Different dimension - point to portal location if available
+			// Different dimension - always keep tracking, point to nearest portal that leads to death location
 			Location portalLoc = getPortalLocation(player, deathLoc.getWorld().getEnvironment());
-			if (portalLoc != null && isEnvironmentAllowed(portalLoc.getWorld().getEnvironment())) {
-				// Enable locator bar and point to portal location
-				locatorBar.enableTemporarily();
+			locatorBar.enableTemporarily();
+			if (portalLoc != null) {
 				player.setCompassTarget(portalLoc);
 			} else {
-				// No portal location found, hide Player Locator Bar
-				locatorBar.disableTemporarily();
-				// Reset compass target to player's location to hide indicator
-				player.setCompassTarget(player.getLocation());
+				portalLoc = findNearestPortalToDimension(player, deathLoc.getWorld().getEnvironment());
+				if (portalLoc != null) {
+					player.setCompassTarget(portalLoc);
+				} else {
+					Location fallback = getFallbackPortalTarget(player, deathLoc.getWorld().getEnvironment());
+					player.setCompassTarget(fallback != null ? fallback : player.getLocation());
+				}
 			}
 		}
 	}
 
+	/**
+	 * Get stored portal location that leads to target dimension.
+	 * Tracker in overworld + target in nether -> overworld nether portal.
+	 * Tracker in overworld + target in end -> overworld end portal.
+	 * Tracker in nether/end + target in overworld -> nether/end portal (leads back).
+	 */
 	private Location getPortalLocation(Player player, World.Environment targetEnvironment) {
 		PlayerCache cache = PlayerCache.from(player);
-		Location portalLoc = cache.getPortalLocation();
 		World.Environment playerEnv = player.getWorld().getEnvironment();
-		
-		// Portal location is stored when player enters nether/end
-		// If player is in nether/end and tracking someone in overworld, point to the portal they used
-		// This helps them find their way back to the overworld where the target is
-		if (portalLoc != null && portalLoc.getWorld() != null) {
-			World.Environment portalEnv = portalLoc.getWorld().getEnvironment();
-			
-			// If player is in nether/end and portal is in same dimension, use it
-			// This points to the portal that leads back to overworld (where target likely is)
-			if (playerEnv == portalEnv && 
-			    (playerEnv == World.Environment.NETHER || playerEnv == World.Environment.THE_END)) {
-				// Player is in nether/end, portal is in nether/end
-				// This portal leads back to overworld where target might be
-				return portalLoc;
+
+		if (playerEnv == World.Environment.NORMAL) {
+			// Tracker in overworld: need overworld-side portal to target dimension
+			if (targetEnvironment == World.Environment.NETHER) {
+				Location overworldNether = cache.getOverworldNetherPortalLocation();
+				if (overworldNether != null && overworldNether.getWorld() != null) {
+					return overworldNether;
+				}
 			}
-			
-			// If player is in overworld and portal is in nether/end, and target is in that dimension
-			// We can't easily find the overworld portal, so we'll return null
-			// (This is a limitation - we'd need to store both portal locations)
+			if (targetEnvironment == World.Environment.THE_END) {
+				Location overworldEnd = cache.getOverworldEndPortalLocation();
+				if (overworldEnd != null && overworldEnd.getWorld() != null) {
+					return overworldEnd;
+				}
+			}
+		} else if (playerEnv == World.Environment.NETHER || playerEnv == World.Environment.THE_END) {
+			// Tracker in nether/end: portal in same dimension leads back to overworld
+			if (targetEnvironment == World.Environment.NORMAL) {
+				Location netherOrEndPortal = cache.getPortalLocation();
+				if (netherOrEndPortal != null && netherOrEndPortal.getWorld() != null
+						&& netherOrEndPortal.getWorld().getEnvironment() == playerEnv) {
+					return netherOrEndPortal;
+				}
+			}
 		}
-		
 		return null;
+	}
+
+	/**
+	 * Find nearest portal in tracker's world that leads to target dimension.
+	 */
+	private Location findNearestPortalToDimension(Player player, World.Environment targetEnvironment) {
+		return PortalFinder.findNearestPortalToDimension(player.getWorld(), player.getLocation(), targetEnvironment);
+	}
+
+	/**
+	 * Fallback when no stored or found portal: overworld spawn if returning from nether/end, else player location.
+	 */
+	private Location getFallbackPortalTarget(Player player, World.Environment targetEnvironment) {
+		World w = player.getWorld();
+		if (targetEnvironment == World.Environment.NORMAL && w.getEnvironment() != World.Environment.NORMAL) {
+			for (World world : Bukkit.getWorlds()) {
+				if (world.getEnvironment() == World.Environment.NORMAL) {
+					Location spawn = world.getSpawnLocation();
+					if (spawn != null && spawn.getWorld() != null) return spawn;
+					break;
+				}
+			}
+		}
+		return player.getLocation();
 	}
 
 	private boolean isEnvironmentAllowed(World.Environment environment) {

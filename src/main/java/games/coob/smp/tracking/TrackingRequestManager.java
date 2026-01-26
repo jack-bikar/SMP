@@ -2,6 +2,7 @@ package games.coob.smp.tracking;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.SMPPlugin;
+import games.coob.smp.tracking.PortalFinder;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import net.kyori.adventure.text.Component;
@@ -9,6 +10,8 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.HashMap;
@@ -98,21 +101,13 @@ public class TrackingRequestManager {
 		// Enable locator bar for tracker
 		locatorBar.enableTemporarily();
 		
-		// Set compass target to point to the player or portal
+		// Set compass target to point to the player or nearest portal to target's dimension
 		if (target.isOnline()) {
 			if (target.getWorld() == tracker.getWorld()) {
-				// Same dimension - point to target player
 				tracker.setCompassTarget(target.getLocation());
 			} else {
-				// Different dimension - point to portal if available
-				org.bukkit.Location portalLoc = trackerCache.getPortalLocation();
-				if (portalLoc != null && portalLoc.getWorld() == tracker.getWorld()) {
-					tracker.setCompassTarget(portalLoc);
-				} else {
-					// No portal found, still enable locator bar but it won't show anything useful
-					// The LocatorTask will handle updating this
-					tracker.setCompassTarget(target.getLocation());
-				}
+				org.bukkit.Location portalLoc = resolvePortalForCrossDimension(trackerCache, tracker, target.getWorld().getEnvironment());
+				tracker.setCompassTarget(portalLoc != null ? portalLoc : tracker.getLocation());
 			}
 		}
 
@@ -141,6 +136,21 @@ public class TrackingRequestManager {
 
 	public void cancelRequest(UUID trackerUUID) {
 		pendingRequests.remove(trackerUUID);
+	}
+
+	private static Location resolvePortalForCrossDimension(PlayerCache cache, Player tracker, World.Environment targetEnv) {
+		// Prefer stored portals, then find nearest
+		Location portal = cache.getPortalLocation();
+		if (portal != null && portal.getWorld() == tracker.getWorld()) {
+			if (targetEnv == World.Environment.NORMAL && (tracker.getWorld().getEnvironment() == World.Environment.NETHER || tracker.getWorld().getEnvironment() == World.Environment.THE_END)) {
+				return portal;
+			}
+		}
+		portal = cache.getOverworldNetherPortalLocation();
+		if (portal != null && portal.getWorld() == tracker.getWorld() && targetEnv == World.Environment.NETHER) return portal;
+		portal = cache.getOverworldEndPortalLocation();
+		if (portal != null && portal.getWorld() == tracker.getWorld() && targetEnv == World.Environment.THE_END) return portal;
+		return PortalFinder.findNearestPortalToDimension(tracker.getWorld(), tracker.getLocation(), targetEnv);
 	}
 
 	public void cancelTracking(Player target) {

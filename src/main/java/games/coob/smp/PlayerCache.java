@@ -28,6 +28,14 @@ public final class PlayerCache extends ConfigFile {
 	@Getter
 	private Location portalLocation;
 
+	/** Overworld-side nether portal (when entering from overworld to nether) */
+	@Getter
+	private Location overworldNetherPortalLocation;
+
+	/** Overworld-side end portal in stronghold (when entering overworld to end) */
+	@Getter
+	private Location overworldEndPortalLocation;
+
 	@Getter
 	private String trackingLocation;
 
@@ -62,7 +70,7 @@ public final class PlayerCache extends ConfigFile {
 
 		this.playerName = name;
 		this.uniqueId = uniqueId;
-		
+
 		// Load player-specific data after uniqueId is set
 		loadPlayerData();
 	}
@@ -71,11 +79,14 @@ public final class PlayerCache extends ConfigFile {
 	 * Load player-specific data from the config file
 	 */
 	private void loadPlayerData() {
-		if (uniqueId == null) return;
-		
+		if (uniqueId == null)
+			return;
+
 		String path = "Players." + uniqueId.toString() + ".";
 		this.deathLocation = getConfig().getLocation(path + "Death_Location");
 		this.portalLocation = getConfig().getLocation(path + "Portal_Location");
+		this.overworldNetherPortalLocation = getConfig().getLocation(path + "Overworld_Nether_Portal");
+		this.overworldEndPortalLocation = getConfig().getLocation(path + "Overworld_End_Portal");
 		this.trackingLocation = getConfig().getString(path + "Tracking_Location");
 		String uuidStr = getConfig().getString(path + "Track_Player");
 		if (uuidStr != null) {
@@ -89,7 +100,8 @@ public final class PlayerCache extends ConfigFile {
 
 	/**
 	 * Automatically called when loading data from disk.
-	 * Note: This is called before uniqueId is set, so we load player data separately.
+	 * Note: This is called before uniqueId is set, so we load player data
+	 * separately.
 	 */
 	@Override
 	protected void onLoad() {
@@ -102,6 +114,8 @@ public final class PlayerCache extends ConfigFile {
 		String path = "Players." + uniqueId.toString() + ".";
 		getConfig().set(path + "Death_Location", deathLocation);
 		getConfig().set(path + "Portal_Location", portalLocation);
+		getConfig().set(path + "Overworld_Nether_Portal", overworldNetherPortalLocation);
+		getConfig().set(path + "Overworld_End_Portal", overworldEndPortalLocation);
 		getConfig().set(path + "Tracking_Location", trackingLocation);
 		getConfig().set(path + "Track_Player", targetByUUID != null ? targetByUUID.toString() : null);
 	}
@@ -138,7 +152,16 @@ public final class PlayerCache extends ConfigFile {
 
 	public void setPortalLocation(final Location portalLocation) {
 		this.portalLocation = portalLocation;
+		save();
+	}
 
+	public void setOverworldNetherPortalLocation(final Location overworldNetherPortalLocation) {
+		this.overworldNetherPortalLocation = overworldNetherPortalLocation;
+		save();
+	}
+
+	public void setOverworldEndPortalLocation(final Location overworldEndPortalLocation) {
+		this.overworldEndPortalLocation = overworldEndPortalLocation;
 		save();
 	}
 
@@ -154,9 +177,15 @@ public final class PlayerCache extends ConfigFile {
 		save();
 	}
 
-	/* ------------------------------------------------------------------------------- */
+	/*
+	 * -----------------------------------------------------------------------------
+	 * --
+	 */
 	/* Static access */
-	/* ------------------------------------------------------------------------------- */
+	/*
+	 * -----------------------------------------------------------------------------
+	 * --
+	 */
 
 	/**
 	 * Return or create new player cache for the given player
