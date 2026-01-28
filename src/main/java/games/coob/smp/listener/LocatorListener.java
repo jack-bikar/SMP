@@ -1,7 +1,9 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
+import games.coob.smp.tracking.LocatorBarGamerule;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.PortalRegistry;
 import lombok.AccessLevel;
@@ -35,68 +37,128 @@ public final class LocatorListener implements Listener {
 
 	@EventHandler
 	public void onPlayerDimensionChange(final PlayerTeleportEvent event) {
-		// Only handle dimension changes if custom tracking is enabled
+		// Only handle dimension changes if custom tracking is enabled.
+		// IMPORTANT: PlayerTeleportEvent fires BEFORE the world switch happens. If we
+		// set targets here,
+		// Paper/vanilla can reset them during the dimension change. So we re-apply 1
+		// tick later.
 		if (Settings.LocatorSection.ENABLE_LOCATOR_BAR || !Settings.LocatorSection.ENABLE_TRACKING) {
 			return;
 		}
 
-		final Player player = event.getPlayer();
-		final PlayerCache cache = PlayerCache.from(player);
-		LocatorBarManager locatorBar = new LocatorBarManager(player);
+		if (event.getTo() == null || event.getTo().getWorld() == null || event.getFrom().getWorld() == null) {
+			return;
+		}
+		if (event.getFrom().getWorld().equals(event.getTo().getWorld())) {
+			return; // not a world/dimension change
+		}
 
-		// Update Player Locator Bar if tracking a player or death location
-		if (cache.getTrackingLocation() != null) {
-			if (cache.getTrackingLocation().equals("Player")) {
-				final Player target = cache.getTargetByUUID() != null
-						? org.bukkit.Bukkit.getPlayer(cache.getTargetByUUID())
-						: null;
-				if (target != null && target.isOnline()) {
-					if (target.getWorld() == player.getWorld()) {
-						// Same world - enable locator bar and point to target
-						locatorBar.enableTemporarily();
-						player.setCompassTarget(target.getLocation());
-					} else {
-						// Different dimension - always keep tracking, point to portal
-						Location portalLoc = getPortalForCrossDimension(cache, player,
-								target.getWorld().getEnvironment());
-						locatorBar.enableTemporarily();
-						player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
-					}
-				}
-			} else if (cache.getTrackingLocation().equals("Death")) {
-				final Location deathLoc = cache.getDeathLocation();
-				if (deathLoc != null) {
-					if (deathLoc.getWorld() == player.getWorld()) {
-						locatorBar.enableTemporarily();
-						player.setCompassTarget(deathLoc);
-					} else {
-						Location portalLoc = getPortalForCrossDimension(cache, player,
-								deathLoc.getWorld().getEnvironment());
-						locatorBar.enableTemporarily();
-						player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
-					}
-				}
+		final Player player = event.getPlayer();
+		org.bukkit.Bukkit.getScheduler().runTaskLater(SMPPlugin.getInstance(), () -> applyTrackingState(player), 1L);
+	}
+
+	private static void applyTrackingState(Player player) {
+		if (player == null || !player.isOnline())
+			return;
+		if (Settings.LocatorSection.ENABLE_LOCATOR_BAR || !Settings.LocatorSection.ENABLE_TRACKING)
+			return;
+
+		// Nether/End may have locator bar gamerule disabled; ensure it's enabled here
+		LocatorBarGamerule.ensureEnabled(player.getWorld());
+
+		final PlayerCache cache = PlayerCache.from(player);
+		final LocatorBarManager locatorBar = new LocatorBarManager(player);
+
+		if (cache.getTrackingLocation() == null) {
+			// Not tracking -> hide
+			locatorBar.disableTemporarily();
+			player.setCompassTarget(player.getLocation());
+			return;
+		}
+
+		if (cache.getTrackingLocation().equals("Player")) {
+			final Player target = cache.getTargetByUUID() != null ? org.bukkit.Bukkit.getPlayer(cache.getTargetByUUID())
+					: null;
+			if (target == null || !target.isOnline()) {
+				locatorBar.disableTemporarily();
+				player.setCompassTarget(player.getLocation());
+				cache.setTrackingLocation(null);
+				cache.setTargetByUUID(null);
+				return;
+			}
+
+			locatorBar.enableTemporarily();
+
+			if (target.getWorld() == player.getWorld()) {
+				player.setCompassTarget(target.getLocation());
+			} else {
+				Location portalLoc = getPortalForCrossDimension(cache, PlayerCache.from(target), player,
+						target.getWorld().getEnvironment());
+				player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
+			}
+			return;
+		}
+
+		if (cache.getTrackingLocation().equals("Death")) {
+			final Location deathLoc = cache.getDeathLocation();
+			if (deathLoc == null) {
+				locatorBar.disableTemporarily();
+				player.setCompassTarget(player.getLocation());
+				cache.setTrackingLocation(null);
+				return;
+			}
+
+			locatorBar.enableTemporarily();
+			if (deathLoc.getWorld() == player.getWorld()) {
+				player.setCompassTarget(deathLoc);
+			} else {
+				Location portalLoc = getPortalForCrossDimension(cache, null, player,
+						deathLoc.getWorld().getEnvironment());
+				player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
 			}
 		}
 	}
 
-	private static Location getPortalForCrossDimension(PlayerCache cache, org.bukkit.entity.Player player,
+	private static Location getPortalForCrossDimension(PlayerCache trackerCache, PlayerCache targetCache,
+			org.bukkit.entity.Player player,
 			World.Environment targetEnv) {
-		Location portal = cache.getPortalLocation();
-		if (portal != null && portal.getWorld() == player.getWorld()) {
-			if (targetEnv == World.Environment.NORMAL && (player.getWorld().getEnvironment() == World.Environment.NETHER
-					|| player.getWorld().getEnvironment() == World.Environment.THE_END)) {
-				return portal;
+		final World trackerWorld = player.getWorld();
+		final Location origin = player.getLocation();
+		Location best = null;
+
+		// Helper: pick nearest portal (must be in tracker world)
+		java.util.function.BiFunction<Location, Location, Location> pickNearest = (a, b) -> {
+			Location curBest = a;
+			double curBestDist = (a != null && a.getWorld() == trackerWorld) ? origin.distanceSquared(a)
+					: Double.MAX_VALUE;
+			if (b != null && b.getWorld() == trackerWorld) {
+				double d = origin.distanceSquared(b);
+				if (d < curBestDist) {
+					curBest = b;
+				}
+			}
+			return curBest;
+		};
+
+		if (trackerWorld.getEnvironment() == World.Environment.NORMAL) {
+			if (targetEnv == World.Environment.NETHER) {
+				best = pickNearest.apply(trackerCache.getOverworldNetherPortalLocation(),
+						targetCache != null ? targetCache.getOverworldNetherPortalLocation() : null);
+			} else if (targetEnv == World.Environment.THE_END) {
+				best = pickNearest.apply(trackerCache.getOverworldEndPortalLocation(),
+						targetCache != null ? targetCache.getOverworldEndPortalLocation() : null);
+			}
+		} else if (trackerWorld.getEnvironment() == World.Environment.NETHER
+				|| trackerWorld.getEnvironment() == World.Environment.THE_END) {
+			if (targetEnv == World.Environment.NORMAL) {
+				best = pickNearest.apply(trackerCache.getPortalLocation(),
+						targetCache != null ? targetCache.getPortalLocation() : null);
 			}
 		}
-		portal = cache.getOverworldNetherPortalLocation();
-		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.NETHER)
-			return portal;
-		portal = cache.getOverworldEndPortalLocation();
-		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.THE_END)
-			return portal;
-		return games.coob.smp.tracking.PortalFinder.findNearestPortalToDimension(player.getWorld(),
-				player.getLocation(), targetEnv);
+
+		if (best != null)
+			return best;
+		return games.coob.smp.tracking.PortalFinder.findNearestPortalToDimension(trackerWorld, origin, targetEnv);
 	}
 
 	@EventHandler

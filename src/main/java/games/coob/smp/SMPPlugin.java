@@ -13,8 +13,11 @@ import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.task.HologramTask;
+import games.coob.smp.tracking.LocatorBarGamerule;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SMPPlugin extends JavaPlugin {
@@ -32,6 +35,15 @@ public final class SMPPlugin extends JavaPlugin {
 		SchedulerUtil.runLater(1, () -> {
 			DeathChestRegistry.getInstance();
 			HologramRegistry.getInstance().spawnFromDisk();
+		});
+
+		// Ensure locator bar gamerule is enabled in ALL worlds (nether/end too).
+		// Visibility is controlled per-player via waypoint attributes, not the
+		// gamerule.
+		SchedulerUtil.runLater(1, () -> {
+			for (World world : Bukkit.getWorlds()) {
+				LocatorBarGamerule.ensureEnabled(world);
+			}
 		});
 
 		// Load EffectLib if available

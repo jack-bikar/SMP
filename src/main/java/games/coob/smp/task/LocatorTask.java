@@ -3,6 +3,7 @@ package games.coob.smp.task;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.LocatorBarGamerule;
 import games.coob.smp.tracking.PortalFinder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -23,6 +24,9 @@ public class LocatorTask extends BukkitRunnable {
 		}
 
 		for (final Player player : Bukkit.getOnlinePlayers()) {
+			// Ensure locator bar gamerule is enabled in this world (nether/end too)
+			LocatorBarGamerule.ensureEnabled(player.getWorld());
+
 			// Check if tracking is allowed in this environment
 			if (!isEnvironmentAllowed(player.getWorld().getEnvironment())) {
 				// Hide Player Locator Bar in disallowed environments
@@ -64,13 +68,14 @@ public class LocatorTask extends BukkitRunnable {
 			cache.setTargetByUUID(null);
 			return;
 		}
-		
+
 		LocatorBarManager locatorBar = new LocatorBarManager(player);
 		LocatorBarManager targetLocatorBar = new LocatorBarManager(target);
-		
+		PlayerCache targetCache = PlayerCache.from(target);
+
 		// Enable waypoint transmission for target so they appear as a waypoint
 		targetLocatorBar.enableTransmit();
-		
+
 		// Check if target is in same world
 		if (target.getWorld() == player.getWorld()) {
 			// Same world - enable locator bar and point to target player
@@ -78,8 +83,10 @@ public class LocatorTask extends BukkitRunnable {
 			// Set compass target to point to the target player's location
 			player.setCompassTarget(target.getLocation());
 		} else {
-			// Different dimension - always keep tracking, point to nearest portal that leads to target
-			Location portalLoc = getPortalLocation(player, target.getWorld().getEnvironment());
+			// Different dimension - keep tracking, point to nearest portal last-used by
+			// tracker OR target
+			Location portalLoc = resolveCrossDimensionPortal(player, cache, targetCache,
+					target.getWorld().getEnvironment());
 			locatorBar.enableTemporarily();
 			if (portalLoc != null) {
 				player.setCompassTarget(portalLoc);
@@ -97,6 +104,63 @@ public class LocatorTask extends BukkitRunnable {
 		}
 	}
 
+	private Location resolveCrossDimensionPortal(Player tracker, PlayerCache trackerCache, PlayerCache targetCache,
+			World.Environment targetEnvironment) {
+		final World trackerWorld = tracker.getWorld();
+		final World.Environment trackerEnv = trackerWorld.getEnvironment();
+		final Location trackerLoc = tracker.getLocation();
+
+		final Location[] best = new Location[] { null };
+		final double[] bestDistSq = new double[] { Double.MAX_VALUE };
+
+		considerCandidate(best, bestDistSq, trackerWorld, trackerLoc, trackerCache.getPortalLocation());
+		if (targetCache != null) {
+			considerCandidate(best, bestDistSq, trackerWorld, trackerLoc, targetCache.getPortalLocation());
+		}
+
+		// Prefer the relevant "used portal" depending on which dimension we're in /
+		// going to
+		if (trackerEnv == World.Environment.NORMAL) {
+			if (targetEnvironment == World.Environment.NETHER) {
+				considerCandidate(best, bestDistSq, trackerWorld, trackerLoc,
+						trackerCache.getOverworldNetherPortalLocation());
+				if (targetCache != null)
+					considerCandidate(best, bestDistSq, trackerWorld, trackerLoc,
+							targetCache.getOverworldNetherPortalLocation());
+			} else if (targetEnvironment == World.Environment.THE_END) {
+				considerCandidate(best, bestDistSq, trackerWorld, trackerLoc,
+						trackerCache.getOverworldEndPortalLocation());
+				if (targetCache != null)
+					considerCandidate(best, bestDistSq, trackerWorld, trackerLoc,
+							targetCache.getOverworldEndPortalLocation());
+			}
+		} else if (trackerEnv == World.Environment.NETHER || trackerEnv == World.Environment.THE_END) {
+			if (targetEnvironment == World.Environment.NORMAL) {
+				considerCandidate(best, bestDistSq, trackerWorld, trackerLoc, trackerCache.getPortalLocation());
+				if (targetCache != null)
+					considerCandidate(best, bestDistSq, trackerWorld, trackerLoc, targetCache.getPortalLocation());
+			}
+		}
+
+		// Fallback: if we couldn't find a "used portal", fall back to our existing
+		// stored resolver
+		if (best[0] == null) {
+			best[0] = getPortalLocation(tracker, targetEnvironment);
+		}
+		return best[0];
+	}
+
+	private static void considerCandidate(Location[] best, double[] bestDistSq, World trackerWorld, Location origin,
+			Location candidate) {
+		if (candidate == null || candidate.getWorld() != trackerWorld)
+			return;
+		double d = origin.distanceSquared(candidate);
+		if (d < bestDistSq[0]) {
+			bestDistSq[0] = d;
+			best[0] = candidate;
+		}
+	}
+
 	private void handleDeathTracking(Player player, PlayerCache cache) {
 		final Location deathLoc = cache.getDeathLocation();
 		if (deathLoc == null) {
@@ -110,14 +174,15 @@ public class LocatorTask extends BukkitRunnable {
 		}
 
 		LocatorBarManager locatorBar = new LocatorBarManager(player);
-		
+
 		// Check if death location is in same world
 		if (deathLoc.getWorld() == player.getWorld()) {
 			// Same world - enable locator bar and point to death location
 			locatorBar.enableTemporarily();
 			player.setCompassTarget(deathLoc);
 		} else {
-			// Different dimension - always keep tracking, point to nearest portal that leads to death location
+			// Different dimension - always keep tracking, point to nearest portal that
+			// leads to death location
 			Location portalLoc = getPortalLocation(player, deathLoc.getWorld().getEnvironment());
 			locatorBar.enableTemporarily();
 			if (portalLoc != null) {
@@ -138,7 +203,8 @@ public class LocatorTask extends BukkitRunnable {
 	 * Get stored portal location that leads to target dimension.
 	 * Tracker in overworld + target in nether -> overworld nether portal.
 	 * Tracker in overworld + target in end -> overworld end portal.
-	 * Tracker in nether/end + target in overworld -> nether/end portal (leads back).
+	 * Tracker in nether/end + target in overworld -> nether/end portal (leads
+	 * back).
 	 */
 	private Location getPortalLocation(Player player, World.Environment targetEnvironment) {
 		PlayerCache cache = PlayerCache.from(player);
@@ -179,7 +245,8 @@ public class LocatorTask extends BukkitRunnable {
 	}
 
 	/**
-	 * Fallback when no stored or found portal: overworld spawn if returning from nether/end, else player location.
+	 * Fallback when no stored or found portal: overworld spawn if returning from
+	 * nether/end, else player location.
 	 */
 	private Location getFallbackPortalTarget(Player player, World.Environment targetEnvironment) {
 		World w = player.getWorld();
@@ -187,7 +254,8 @@ public class LocatorTask extends BukkitRunnable {
 			for (World world : Bukkit.getWorlds()) {
 				if (world.getEnvironment() == World.Environment.NORMAL) {
 					Location spawn = world.getSpawnLocation();
-					if (spawn != null && spawn.getWorld() != null) return spawn;
+					if (spawn != null && spawn.getWorld() != null)
+						return spawn;
 					break;
 				}
 			}

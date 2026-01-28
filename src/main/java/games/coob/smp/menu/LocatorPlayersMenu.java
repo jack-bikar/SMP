@@ -4,6 +4,7 @@ import games.coob.smp.PlayerCache;
 import games.coob.smp.tracking.TrackingRequestManager;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -26,8 +27,10 @@ public class LocatorPlayersMenu extends SimpleMenu {
 	}
 
 	private static List<Player> compilePlayers(final Player viewer) {
-		return viewer.getWorld().getPlayers().stream()
+		// Include players from ALL dimensions (worlds)
+		return Bukkit.getOnlinePlayers().stream()
 				.filter(player -> !player.equals(viewer))
+				.map(player -> (Player) player)
 				.toList();
 	}
 
@@ -81,7 +84,8 @@ public class LocatorPlayersMenu extends SimpleMenu {
 
 	@Override
 	protected void onMenuClick(Player viewer, int slot, ItemStack clicked) {
-		if (clicked == null) return;
+		if (clicked == null)
+			return;
 
 		// Handle back button
 		if (clicked.getType() == Material.ARROW && slot == 27) {
@@ -120,7 +124,8 @@ public class LocatorPlayersMenu extends SimpleMenu {
 			return;
 		}
 
-		// Allow tracking across dimensions - will point to portal if in different dimension
+		// Allow tracking across dimensions - will point to portal if in different
+		// dimension
 		// Send tracking request
 		TrackingRequestManager.getInstance().sendTrackingRequest(viewer, clickedPlayer);
 		viewer.closeInventory();
