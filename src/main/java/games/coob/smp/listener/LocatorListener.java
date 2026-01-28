@@ -3,6 +3,7 @@ package games.coob.smp.listener;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.PortalRegistry;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.bukkit.Location;
@@ -16,6 +17,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPortalEnterEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.world.PortalCreateEvent;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class LocatorListener implements Listener {
@@ -45,8 +47,9 @@ public final class LocatorListener implements Listener {
 		// Update Player Locator Bar if tracking a player or death location
 		if (cache.getTrackingLocation() != null) {
 			if (cache.getTrackingLocation().equals("Player")) {
-				final Player target = cache.getTargetByUUID() != null ? 
-					org.bukkit.Bukkit.getPlayer(cache.getTargetByUUID()) : null;
+				final Player target = cache.getTargetByUUID() != null
+						? org.bukkit.Bukkit.getPlayer(cache.getTargetByUUID())
+						: null;
 				if (target != null && target.isOnline()) {
 					if (target.getWorld() == player.getWorld()) {
 						// Same world - enable locator bar and point to target
@@ -54,7 +57,8 @@ public final class LocatorListener implements Listener {
 						player.setCompassTarget(target.getLocation());
 					} else {
 						// Different dimension - always keep tracking, point to portal
-						Location portalLoc = getPortalForCrossDimension(cache, player, target.getWorld().getEnvironment());
+						Location portalLoc = getPortalForCrossDimension(cache, player,
+								target.getWorld().getEnvironment());
 						locatorBar.enableTemporarily();
 						player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
 					}
@@ -66,7 +70,8 @@ public final class LocatorListener implements Listener {
 						locatorBar.enableTemporarily();
 						player.setCompassTarget(deathLoc);
 					} else {
-						Location portalLoc = getPortalForCrossDimension(cache, player, deathLoc.getWorld().getEnvironment());
+						Location portalLoc = getPortalForCrossDimension(cache, player,
+								deathLoc.getWorld().getEnvironment());
 						locatorBar.enableTemporarily();
 						player.setCompassTarget(portalLoc != null ? portalLoc : player.getLocation());
 					}
@@ -75,18 +80,23 @@ public final class LocatorListener implements Listener {
 		}
 	}
 
-	private static Location getPortalForCrossDimension(PlayerCache cache, org.bukkit.entity.Player player, World.Environment targetEnv) {
+	private static Location getPortalForCrossDimension(PlayerCache cache, org.bukkit.entity.Player player,
+			World.Environment targetEnv) {
 		Location portal = cache.getPortalLocation();
 		if (portal != null && portal.getWorld() == player.getWorld()) {
-			if (targetEnv == World.Environment.NORMAL && (player.getWorld().getEnvironment() == World.Environment.NETHER || player.getWorld().getEnvironment() == World.Environment.THE_END)) {
+			if (targetEnv == World.Environment.NORMAL && (player.getWorld().getEnvironment() == World.Environment.NETHER
+					|| player.getWorld().getEnvironment() == World.Environment.THE_END)) {
 				return portal;
 			}
 		}
 		portal = cache.getOverworldNetherPortalLocation();
-		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.NETHER) return portal;
+		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.NETHER)
+			return portal;
 		portal = cache.getOverworldEndPortalLocation();
-		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.THE_END) return portal;
-		return games.coob.smp.tracking.PortalFinder.findNearestPortalToDimension(player.getWorld(), player.getLocation(), targetEnv);
+		if (portal != null && portal.getWorld() == player.getWorld() && targetEnv == World.Environment.THE_END)
+			return portal;
+		return games.coob.smp.tracking.PortalFinder.findNearestPortalToDimension(player.getWorld(),
+				player.getLocation(), targetEnv);
 	}
 
 	@EventHandler
@@ -118,6 +128,39 @@ public final class LocatorListener implements Listener {
 				// Nether/End: entering portal (leads back to overworld)
 				cache.setPortalLocation(location.clone().add(0.5, 0.5, 0.5));
 			}
+		}
+	}
+
+	@EventHandler
+	public void onPortalCreate(final PortalCreateEvent event) {
+		// Only track portal locations if custom tracking is enabled
+		if (Settings.LocatorSection.ENABLE_LOCATOR_BAR || !Settings.LocatorSection.ENABLE_TRACKING) {
+			return;
+		}
+
+		// Register nether portal creations (this gives us a cheap nearest-portal lookup
+		// later)
+		Location center = null;
+		int count = 0;
+		double sx = 0, sy = 0, sz = 0;
+
+		for (org.bukkit.block.BlockState state : event.getBlocks()) {
+			if (state == null)
+				continue;
+			if (state.getType() != Material.NETHER_PORTAL)
+				continue;
+			Location l = state.getLocation();
+			if (l == null || l.getWorld() == null)
+				continue;
+			sx += l.getX() + 0.5;
+			sy += l.getY() + 0.5;
+			sz += l.getZ() + 0.5;
+			count++;
+		}
+
+		if (count > 0) {
+			center = new Location(event.getWorld(), sx / count, sy / count, sz / count);
+			PortalRegistry.registerPortal(center, Material.NETHER_PORTAL);
 		}
 	}
 }

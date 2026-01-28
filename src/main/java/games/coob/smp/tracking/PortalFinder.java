@@ -36,20 +36,26 @@ public final class PortalFinder {
 			return null;
 		}
 		Location portal = findNearestPortal(world, from, Material.END_PORTAL);
-		if (portal != null) return portal;
+		if (portal != null)
+			return portal;
 		return findNearestPortal(world, from, Material.END_PORTAL_FRAME);
 	}
 
 	/**
-	 * Find the nearest portal in the given world that leads to the target dimension.
+	 * Find the nearest portal in the given world that leads to the target
+	 * dimension.
 	 * E.g. world=overworld, target=nether -> nearest overworld nether portal.
 	 */
 	public static Location findNearestPortalToDimension(World world, Location from, World.Environment targetDimension) {
-		if (world == null || from == null) return null;
+		if (world == null || from == null)
+			return null;
 		if (world.getEnvironment() == World.Environment.NORMAL) {
-			if (targetDimension == World.Environment.NETHER) return findNearestNetherPortal(world, from);
-			if (targetDimension == World.Environment.THE_END) return findNearestEndPortal(world, from);
-		} else if (world.getEnvironment() == World.Environment.NETHER || world.getEnvironment() == World.Environment.THE_END) {
+			if (targetDimension == World.Environment.NETHER)
+				return findNearestNetherPortal(world, from);
+			if (targetDimension == World.Environment.THE_END)
+				return findNearestEndPortal(world, from);
+		} else if (world.getEnvironment() == World.Environment.NETHER
+				|| world.getEnvironment() == World.Environment.THE_END) {
 			if (targetDimension == World.Environment.NORMAL) {
 				return findNearestPortalInDimension(world, from, world.getEnvironment());
 			}
@@ -66,28 +72,44 @@ public final class PortalFinder {
 		}
 		if (dimension == World.Environment.THE_END) {
 			Location ep = findNearestPortal(world, from, Material.END_PORTAL);
-			if (ep != null) return ep;
+			if (ep != null)
+				return ep;
 			return findNearestPortal(world, from, Material.END_PORTAL_FRAME);
 		}
 		return null;
 	}
 
 	private static Location findNearestPortal(World world, Location from, Material portalType) {
-		if (world == null || from == null) return null;
+		if (world == null || from == null)
+			return null;
+
+		// Fast path: use cached/registered portals (cheap O(portals))
+		Location fromCenter = from.clone();
+		Location cached = PortalRegistry.findNearestRegisteredPortal(world, fromCenter, portalType);
+		if (cached != null) {
+			return cached;
+		}
+
 		int cx = from.getBlockX();
 		int cy = from.getBlockY();
 		int cz = from.getBlockZ();
 		double bestDistSq = Double.MAX_VALUE;
 		Location best = null;
 
+		final int minY = world.getMinHeight();
+		final int maxY = world.getMaxHeight() - 1;
+		// Limit vertical scan for performance; still clamped to world bounds.
+		final int yStart = Math.max(minY, cy - 48);
+		final int yEnd = Math.min(maxY, cy + 48);
+
 		for (int dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx += STEP) {
-			for (int dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy += STEP) {
+			for (int y = yStart; y <= yEnd; y += STEP) {
 				for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz += STEP) {
 					int x = cx + dx;
-					int y = cy + dy;
 					int z = cz + dz;
 					Block b = world.getBlockAt(x, y, z);
-					if (b.getType() != portalType) continue;
+					if (b.getType() != portalType)
+						continue;
 					Location blockCenter = new Location(world, x + 0.5, y + 0.5, z + 0.5);
 					double distSq = from.distanceSquared(blockCenter);
 					if (distSq < bestDistSq) {
@@ -96,6 +118,11 @@ public final class PortalFinder {
 					}
 				}
 			}
+		}
+
+		// Cache the found portal so we don't rescan next tick.
+		if (best != null) {
+			PortalRegistry.registerPortal(best, portalType);
 		}
 		return best;
 	}
