@@ -8,7 +8,6 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.util.Map;
@@ -36,13 +35,11 @@ public final class TrackingRequestManager {
      * Send a tracking request from tracker to target.
      */
     public void sendTrackingRequest(Player tracker, Player target) {
-        // Cancel any existing request from this tracker
         pendingRequests.remove(tracker.getUniqueId());
 
         TrackingRequest request = new TrackingRequest(tracker.getUniqueId(), target.getUniqueId());
         pendingRequests.put(tracker.getUniqueId(), request);
 
-        // Send clickable message to target
         Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
                 .clickEvent(ClickEvent.runCommand("/tracking accept " + tracker.getName()))
                 .hoverEvent(HoverEvent.showText(Component.text("Click to accept tracking request")));
@@ -61,10 +58,8 @@ public final class TrackingRequestManager {
                 .build();
 
         target.sendMessage(message);
-        ColorUtil.sendMessage(tracker,
-                "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
+        ColorUtil.sendMessage(tracker, "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
 
-        // Schedule expiration
         SchedulerUtil.runLater(EXPIRATION_SECONDS * 20L, () -> {
             TrackingRequest req = pendingRequests.remove(tracker.getUniqueId());
             if (req != null) {
@@ -94,30 +89,24 @@ public final class TrackingRequestManager {
 
         pendingRequests.remove(tracker.getUniqueId());
 
-        // Start tracking
+        // Set up tracking state
         PlayerCache trackerCache = PlayerCache.from(tracker);
         trackerCache.setTrackingLocation("Player");
         trackerCache.setTargetByUUID(target.getUniqueId());
+        trackerCache.setCachedPortalTarget(null); // Will be calculated by LocatorTask if needed
 
-        // Register in tracking registry
+        // Register tracker
         TrackingRegistry.startTracking(tracker.getUniqueId());
 
-        // Enable locator bar
+        // Enable locator bar - LocatorTask will handle targeting
         LocatorBarManager.enableTransmit(target);
         LocatorBarManager.enableReceive(tracker);
 
-        // Set initial target
+        // Set initial target (same dimension = direct, different = task will handle portal)
         if (target.getWorld().equals(tracker.getWorld())) {
             LocatorBarManager.setTarget(tracker, target);
-        } else {
-            // Different dimension - calculate portal target
-            Location portalLoc = PortalCache.findNearestToDimension(
-                    tracker.getWorld(), tracker.getLocation(), target.getWorld().getEnvironment());
-            trackerCache.setCachedPortalTarget(portalLoc);
-            if (portalLoc != null) {
-                LocatorBarManager.setTarget(tracker, portalLoc);
-            }
         }
+        // If different dimension, LocatorTask will calculate portal on next tick
 
         ColorUtil.sendMessage(target, "&aYou accepted the tracking request from &3" + tracker.getName() + "&a.");
         ColorUtil.sendMessage(tracker, "&a" + target.getName() + " &aaccepted your tracking request!");
@@ -154,8 +143,7 @@ public final class TrackingRequestManager {
     public void cancelTracking(Player target) {
         for (UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
             Player tracker = Bukkit.getPlayer(trackerUUID);
-            if (tracker == null || !tracker.isOnline())
-                continue;
+            if (tracker == null || !tracker.isOnline()) continue;
 
             PlayerCache cache = PlayerCache.from(tracker);
             if ("Player".equals(cache.getTrackingLocation())
@@ -175,9 +163,6 @@ public final class TrackingRequestManager {
         ColorUtil.sendMessage(target, "&aYou have cancelled all tracking requests.");
     }
 
-    /**
-     * Internal tracking request data.
-     */
     private record TrackingRequest(UUID trackerUUID, UUID targetUUID) {
     }
 }

@@ -2,13 +2,11 @@ package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.tracking.LocatorBarManager;
-import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -63,59 +61,22 @@ public final class LocatorMenu extends SimpleMenu {
             return;
         }
 
-        // Set up tracking
+        // Set up tracking state
         cache.setTrackingLocation("Death");
+        cache.setCachedPortalTarget(null); // Will be calculated by LocatorTask if needed
         TrackingRegistry.startTracking(player.getUniqueId());
 
         // Enable locator bar
         LocatorBarManager.enableReceive(player);
 
-        // Set target based on dimension
+        // Set initial target if same dimension
         if (deathLocation.getWorld().equals(player.getWorld())) {
             LocatorBarManager.setTarget(player, deathLocation);
-            cache.setCachedPortalTarget(null);
-        } else {
-            // Different dimension - find portal
-            Location portalLoc = findPortalToDimension(player, cache, deathLocation.getWorld().getEnvironment());
-            cache.setCachedPortalTarget(portalLoc);
-            if (portalLoc != null) {
-                LocatorBarManager.setTarget(player, portalLoc);
-            } else {
-                LocatorBarManager.setTarget(player, player.getLocation());
-            }
         }
+        // If different dimension, LocatorTask will calculate portal on next tick
 
         player.closeInventory();
         Messenger.success(player, "You are now tracking your death location.");
-    }
-
-    private Location findPortalToDimension(Player player, PlayerCache cache, World.Environment targetEnv) {
-        World currentWorld = player.getWorld();
-        Location playerLoc = player.getLocation();
-        World.Environment currentEnv = currentWorld.getEnvironment();
-
-        // Check player's stored portals first
-        if (currentEnv == World.Environment.NORMAL) {
-            if (targetEnv == World.Environment.NETHER) {
-                Location portal = cache.getOverworldNetherPortalLocation();
-                if (portal != null && portal.getWorld() != null && portal.getWorld().equals(currentWorld)) {
-                    return portal;
-                }
-            } else if (targetEnv == World.Environment.THE_END) {
-                Location portal = cache.getOverworldEndPortalLocation();
-                if (portal != null && portal.getWorld() != null && portal.getWorld().equals(currentWorld)) {
-                    return portal;
-                }
-            }
-        } else if (targetEnv == World.Environment.NORMAL) {
-            Location portal = cache.getPortalLocation();
-            if (portal != null && portal.getWorld() != null && portal.getWorld().equals(currentWorld)) {
-                return portal;
-            }
-        }
-
-        // Fallback to PortalCache
-        return PortalCache.findNearestToDimension(currentWorld, playerLoc, targetEnv);
     }
 
     public static void openMenu(Player player) {

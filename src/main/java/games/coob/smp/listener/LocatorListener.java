@@ -1,29 +1,28 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.PlayerCache;
-import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
-import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityPortalEnterEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.world.PortalCreateEvent;
 
 /**
- * Handles portal tracking and dimension change events for the locator bar.
+ * Handles portal tracking events for the locator bar.
+ * Portal locations are stored when players use portals (PlayerPortalEvent fires
+ * once before teleport).
+ * Cached portal targets are invalidated on dimension change so LocatorTask
+ * recalculates.
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class LocatorListener implements Listener {
@@ -36,7 +35,7 @@ public final class LocatorListener implements Listener {
 
     /**
      * Called AFTER a player has changed worlds.
-     * This is the right time to recalculate portal targets.
+     * Invalidate cached portal targets so LocatorTask recalculates them.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
@@ -44,174 +43,81 @@ public final class LocatorListener implements Listener {
             return;
 
         Player player = event.getPlayer();
-
-        // Schedule 1 tick later to ensure world change is complete
-        Bukkit.getScheduler().runTaskLater(SMPPlugin.getInstance(), () -> {
-            handleWorldChange(player);
-        }, 1L);
-    }
-
-    private void handleWorldChange(Player player) {
-        if (!player.isOnline())
-            return;
-
         PlayerCache cache = PlayerCache.from(player);
 
-        // If this player is tracking something, recalculate portal target
+        // Invalidate this player's cached portal (they're now in a different world)
         if (TrackingRegistry.isTracking(player.getUniqueId())) {
-            recalculatePortalTarget(player, cache);
-        }
-
-        // Also check if this player is being tracked by someone else
-        for (Player tracker : TrackingRegistry.getOnlineTrackers()) {
-            PlayerCache trackerCache = PlayerCache.from(tracker);
-            if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
-                recalculatePortalTarget(tracker, trackerCache);
-            }
-        }
-    }
-
-    /**
-     * Recalculate the portal target for a tracker based on current tracking state.
-     */
-    private void recalculatePortalTarget(Player tracker, PlayerCache cache) {
-        String trackingType = cache.getTrackingLocation();
-        if (trackingType == null)
-            return;
-
-        World.Environment targetDimension = null;
-
-        if ("Player".equals(trackingType)) {
-            Player target = cache.getTargetByUUID() != null ? Bukkit.getPlayer(cache.getTargetByUUID()) : null;
-            if (target != null && target.isOnline() && !target.getWorld().equals(tracker.getWorld())) {
-                targetDimension = target.getWorld().getEnvironment();
-            }
-        } else if ("Death".equals(trackingType)) {
-            Location deathLoc = cache.getDeathLocation();
-            if (deathLoc != null && deathLoc.getWorld() != null && !deathLoc.getWorld().equals(tracker.getWorld())) {
-                targetDimension = deathLoc.getWorld().getEnvironment();
-            }
-        }
-
-        if (targetDimension != null) {
-            // Find and cache the portal to the target dimension
-            Location portalLoc = findBestPortal(tracker, cache, targetDimension);
-            cache.setCachedPortalTarget(portalLoc);
-
-            // Update the locator bar immediately
-            if (portalLoc != null) {
-                LocatorBarManager.enableReceive(tracker);
-                LocatorBarManager.setTarget(tracker, portalLoc);
-            }
-        } else {
-            // Same dimension or no target - clear cached portal
             cache.setCachedPortalTarget(null);
         }
+
+        // Invalidate cached portals for anyone tracking this player
+        for (java.util.UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
+            Player tracker = org.bukkit.Bukkit.getPlayer(trackerUUID);
+            if (tracker == null || !tracker.isOnline())
+                continue;
+
+            PlayerCache trackerCache = PlayerCache.from(tracker);
+            if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
+                trackerCache.setCachedPortalTarget(null);
+            }
+        }
     }
 
     /**
-     * Find the best portal to reach the target dimension.
-     * Checks player's stored portals first, then falls back to PortalCache.
+     * Store portal location BEFORE a player teleports through a portal.
+     * PlayerPortalEvent fires ONCE per teleport (unlike EntityPortalEnterEvent
+     * which fires repeatedly).
+     * The 'from' location is where the player is - the portal block itself.
      */
-    private Location findBestPortal(Player tracker, PlayerCache trackerCache, World.Environment targetDimension) {
-        World trackerWorld = tracker.getWorld();
-        Location trackerLoc = tracker.getLocation();
-        World.Environment currentEnv = trackerWorld.getEnvironment();
-
-        // First, check player's stored portal locations
-        Location storedPortal = getStoredPortal(trackerCache, currentEnv, targetDimension);
-        if (storedPortal != null && storedPortal.getWorld() != null
-                && storedPortal.getWorld().equals(trackerWorld)) {
-            return storedPortal;
-        }
-
-        // If tracking a player, also check their stored portals
-        if ("Player".equals(trackerCache.getTrackingLocation()) && trackerCache.getTargetByUUID() != null) {
-            Player target = Bukkit.getPlayer(trackerCache.getTargetByUUID());
-            if (target != null && target.isOnline()) {
-                PlayerCache targetCache = PlayerCache.from(target);
-                Location targetStoredPortal = getStoredPortal(targetCache, currentEnv, targetDimension);
-                if (targetStoredPortal != null && targetStoredPortal.getWorld() != null
-                        && targetStoredPortal.getWorld().equals(trackerWorld)) {
-                    // Return the nearest of the two stored portals
-                    if (storedPortal == null) {
-                        return targetStoredPortal;
-                    }
-                    double distTracker = trackerLoc.distanceSquared(storedPortal);
-                    double distTarget = trackerLoc.distanceSquared(targetStoredPortal);
-                    return distTracker <= distTarget ? storedPortal : targetStoredPortal;
-                }
-            }
-        }
-
-        // Fallback to PortalCache (global portal registry)
-        return PortalCache.findNearestToDimension(trackerWorld, trackerLoc, targetDimension);
-    }
-
-    /**
-     * Get the stored portal location based on current and target dimensions.
-     */
-    private Location getStoredPortal(PlayerCache cache, World.Environment currentEnv, World.Environment targetEnv) {
-        if (currentEnv == World.Environment.NORMAL) {
-            if (targetEnv == World.Environment.NETHER) {
-                return cache.getOverworldNetherPortalLocation();
-            } else if (targetEnv == World.Environment.THE_END) {
-                return cache.getOverworldEndPortalLocation();
-            }
-        } else if (currentEnv == World.Environment.NETHER || currentEnv == World.Environment.THE_END) {
-            if (targetEnv == World.Environment.NORMAL) {
-                return cache.getPortalLocation();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Store portal location when a player enters a portal.
-     */
-    @EventHandler
-    public void onEntityPortalEnter(EntityPortalEnterEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerPortal(PlayerPortalEvent event) {
         if (!Settings.LocatorSection.ENABLE_TRACKING)
             return;
 
-        Entity entity = event.getEntity();
-        if (!(entity instanceof Player player))
+        Player player = event.getPlayer();
+        Location fromLocation = event.getFrom();
+        PlayerCache cache = PlayerCache.from(player);
+        World.Environment currentEnv = player.getWorld().getEnvironment();
+
+        // Determine portal type based on destination
+        Location toLocation = event.getTo();
+        if (toLocation == null || toLocation.getWorld() == null)
             return;
 
-        Location location = event.getLocation();
-        Block block = location.getBlock();
-        Material type = block.getType();
-        PlayerCache cache = PlayerCache.from(player);
-        World.Environment env = player.getWorld().getEnvironment();
+        World.Environment targetEnv = toLocation.getWorld().getEnvironment();
+        Location centered = centerLocation(fromLocation);
 
-        // Store portal location based on current dimension
-        if (env == World.Environment.NORMAL) {
-            if (type == Material.NETHER_PORTAL) {
-                cache.setOverworldNetherPortalLocation(centerLocation(location));
-                PortalCache.register(location, Material.NETHER_PORTAL);
-            } else if (type == Material.END_PORTAL || type == Material.END_PORTAL_FRAME) {
-                cache.setOverworldEndPortalLocation(centerLocation(location));
-                PortalCache.register(location, Material.END_PORTAL);
+        // Store in player's cache based on current dimension and destination
+        if (currentEnv == World.Environment.NORMAL) {
+            if (targetEnv == World.Environment.NETHER) {
+                cache.setOverworldNetherPortalLocation(centered);
+                PortalCache.register(centered, Material.NETHER_PORTAL);
+            } else if (targetEnv == World.Environment.THE_END) {
+                cache.setOverworldEndPortalLocation(centered);
+                PortalCache.register(centered, Material.END_PORTAL);
             }
-        } else if (env == World.Environment.NETHER || env == World.Environment.THE_END) {
-            cache.setPortalLocation(centerLocation(location));
-            if (type == Material.NETHER_PORTAL) {
-                PortalCache.register(location, Material.NETHER_PORTAL);
-            } else if (type == Material.END_PORTAL || type == Material.END_PORTAL_FRAME) {
-                PortalCache.register(location, Material.END_PORTAL);
+        } else if (currentEnv == World.Environment.NETHER) {
+            if (targetEnv == World.Environment.NORMAL) {
+                cache.setPortalLocation(centered);
+                PortalCache.register(centered, Material.NETHER_PORTAL);
+            }
+        } else if (currentEnv == World.Environment.THE_END) {
+            if (targetEnv == World.Environment.NORMAL) {
+                cache.setPortalLocation(centered);
+                // End portals to overworld don't need registration (end gateway or end
+                // platform)
             }
         }
     }
 
     /**
-     * Register newly created portals.
+     * Register newly created portals in the global cache.
      */
     @EventHandler
     public void onPortalCreate(PortalCreateEvent event) {
         if (!Settings.LocatorSection.ENABLE_TRACKING)
             return;
 
-        // Calculate center of the portal
         double x = 0, y = 0, z = 0;
         int count = 0;
 
