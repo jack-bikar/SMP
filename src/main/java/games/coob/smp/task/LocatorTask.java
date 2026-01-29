@@ -1,10 +1,12 @@
 package games.coob.smp.task;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.WaypointPacketSender;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -13,12 +15,20 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.UUID;
+import java.util.logging.Level;
+
 /**
  * Periodic task that updates the locator bar for active trackers only.
  * Runs every second (20 ticks) and only processes players in the
  * TrackingRegistry.
  */
 public final class LocatorTask extends BukkitRunnable {
+
+	private static final boolean DEBUG = true;
+
+	// UUID namespace for synthetic portal waypoints
+	private static final UUID PORTAL_WAYPOINT_NAMESPACE = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
 	@Override
 	public void run() {
@@ -56,67 +66,121 @@ public final class LocatorTask extends BukkitRunnable {
 	private void updatePlayerTracking(Player tracker, PlayerCache cache) {
 		Player target = cache.getTargetByUUID() != null ? Bukkit.getPlayer(cache.getTargetByUUID()) : null;
 
+		debug("updatePlayerTracking: tracker=" + tracker.getName() +
+				", targetUUID=" + cache.getTargetByUUID() +
+				", target=" + (target != null ? target.getName() : "null"));
+
 		if (target == null || !target.isOnline()) {
+			debug("  Target is null or offline, stopping tracking");
 			stopTracking(tracker, cache);
 			return;
 		}
 
-		if (target.getWorld().equals(tracker.getWorld())) {
+		boolean sameDimension = target.getWorld().equals(tracker.getWorld());
+		debug("  Tracker world: " + tracker.getWorld().getName() +
+				" (" + tracker.getWorld().getEnvironment() + ")");
+		debug("  Target world: " + target.getWorld().getName() +
+				" (" + target.getWorld().getEnvironment() + ")");
+		debug("  Same dimension: " + sameDimension);
+
+		if (sameDimension) {
 			// Same dimension: track the player directly via locator bar
 			cache.setCachedPortalTarget(null);
+			WaypointPacketSender.clearWaypoint(tracker); // Remove any synthetic waypoint
 			LocatorBarManager.enableTransmit(target);
 			LocatorBarManager.enableReceive(tracker);
 			LocatorBarManager.setTarget(tracker, target);
+			debug("  Same dimension - using locator bar to track player directly");
 		} else {
-			// Different dimension: The locator bar can only show player waypoints, not
-			// locations.
-			// When target is in another dimension, they're not visible as a waypoint.
-			// We use action bar to guide the player to the nearest portal.
-			LocatorBarManager.disableReceive(tracker);
-
+			// Different dimension: try to send synthetic waypoint packet for portal
+			// location
 			Location portalTarget = getOrCalculatePortalTarget(tracker, cache, target.getWorld().getEnvironment());
-			if (portalTarget != null) {
-				// Still set compass target for players using compass items
-				LocatorBarManager.setTarget(tracker, portalTarget);
-				sendCrossDimensionFeedback(tracker, target.getName(), portalTarget, target.getWorld().getEnvironment());
-			} else {
-				Location fallback = getFallbackLocation(tracker, target.getWorld().getEnvironment());
-				LocatorBarManager.setTarget(tracker, fallback);
-				sendCrossDimensionFeedback(tracker, target.getName(), fallback, target.getWorld().getEnvironment());
+			debug("  Different dimension - portal target: " + formatLocation(portalTarget));
+
+			Location targetLocation = portalTarget != null ? portalTarget
+					: getFallbackLocation(tracker, target.getWorld().getEnvironment());
+
+			if (portalTarget == null) {
+				debug("  No portal found, using fallback: " + formatLocation(targetLocation));
 			}
+
+			// Try to send synthetic waypoint packet
+			UUID waypointId = generateWaypointId(tracker.getUniqueId());
+			boolean waypointSent = WaypointPacketSender.sendWaypoint(tracker, targetLocation, waypointId);
+
+			if (waypointSent) {
+				// Waypoint packet sent successfully - enable locator bar
+				LocatorBarManager.enableReceive(tracker);
+				debug("  Synthetic waypoint packet sent successfully");
+			} else {
+				// Waypoint packets not available - disable locator bar (only show action bar)
+				LocatorBarManager.disableReceive(tracker);
+				debug("  Waypoint packets not available, using action bar only");
+			}
+
+			// Always set compass target for compass items and send action bar feedback
+			LocatorBarManager.setTarget(tracker, targetLocation);
+			sendCrossDimensionFeedback(tracker, target.getName(), targetLocation, target.getWorld().getEnvironment());
 		}
 	}
 
 	private void updateDeathTracking(Player tracker, PlayerCache cache) {
 		Location deathLocation = cache.getDeathLocation();
 
+		debug("updateDeathTracking: tracker=" + tracker.getName() +
+				", deathLocation=" + formatLocation(deathLocation));
+
 		if (deathLocation == null || deathLocation.getWorld() == null) {
+			debug("  Death location is null or has null world, stopping tracking");
 			stopTracking(tracker, cache);
 			return;
 		}
 
-		if (deathLocation.getWorld().equals(tracker.getWorld())) {
-			// Same dimension: The locator bar cannot point to locations directly.
-			// Show action bar with direction/distance to death location.
-			LocatorBarManager.disableReceive(tracker);
+		boolean sameDimension = deathLocation.getWorld().equals(tracker.getWorld());
+		debug("  Same dimension: " + sameDimension);
+
+		if (sameDimension) {
+			// Same dimension: try to send synthetic waypoint for death location
+			UUID waypointId = generateWaypointId(tracker.getUniqueId());
+			boolean waypointSent = WaypointPacketSender.sendWaypoint(tracker, deathLocation, waypointId);
+
+			if (waypointSent) {
+				LocatorBarManager.enableReceive(tracker);
+				debug("  Synthetic waypoint for death location sent successfully");
+			} else {
+				LocatorBarManager.disableReceive(tracker);
+				debug("  Waypoint packets not available, using action bar only");
+			}
+
 			LocatorBarManager.setTarget(tracker, deathLocation);
 			sendDeathLocationFeedback(tracker, deathLocation);
 		} else {
 			// Different dimension: guide to portal
-			LocatorBarManager.disableReceive(tracker);
-
 			Location portalTarget = getOrCalculatePortalTarget(tracker, cache,
 					deathLocation.getWorld().getEnvironment());
-			if (portalTarget != null) {
-				LocatorBarManager.setTarget(tracker, portalTarget);
-				sendCrossDimensionFeedback(tracker, "Death Location", portalTarget,
-						deathLocation.getWorld().getEnvironment());
-			} else {
-				Location fallback = getFallbackLocation(tracker, deathLocation.getWorld().getEnvironment());
-				LocatorBarManager.setTarget(tracker, fallback);
-				sendCrossDimensionFeedback(tracker, "Death Location", fallback,
-						deathLocation.getWorld().getEnvironment());
+			debug("  Different dimension - portal target: " + formatLocation(portalTarget));
+
+			Location targetLocation = portalTarget != null ? portalTarget
+					: getFallbackLocation(tracker, deathLocation.getWorld().getEnvironment());
+
+			if (portalTarget == null) {
+				debug("  No portal found, using fallback: " + formatLocation(targetLocation));
 			}
+
+			UUID waypointId = generateWaypointId(tracker.getUniqueId());
+			boolean waypointSent = WaypointPacketSender.sendWaypoint(tracker, targetLocation, waypointId);
+
+			if (waypointSent) {
+				LocatorBarManager.enableReceive(tracker);
+				debug("  Synthetic waypoint for portal sent successfully");
+			} else {
+				LocatorBarManager.disableReceive(tracker);
+				debug("  Waypoint packets not available, using action bar only");
+			}
+
+			LocatorBarManager.setTarget(tracker, targetLocation);
+			sendCrossDimensionFeedback(tracker, "Death Location", targetLocation,
+					deathLocation.getWorld().getEnvironment());
 		}
 	}
 
@@ -281,9 +345,11 @@ public final class LocatorTask extends BukkitRunnable {
 	}
 
 	private void stopTracking(Player tracker, PlayerCache cache) {
+		debug("stopTracking: " + tracker.getName());
 		cache.setTrackingLocation(null);
 		cache.setTargetByUUID(null);
 		cache.setCachedPortalTarget(null);
+		WaypointPacketSender.clearWaypoint(tracker);
 		hideLocatorBar(tracker);
 		TrackingRegistry.stopTracking(tracker.getUniqueId());
 	}
@@ -302,5 +368,29 @@ public final class LocatorTask extends BukkitRunnable {
 			case "the end" -> player.getWorld().getEnvironment() == World.Environment.THE_END;
 			default -> false;
 		};
+	}
+
+	/**
+	 * Generate a unique waypoint ID for a tracker.
+	 * Uses XOR with a namespace to ensure uniqueness.
+	 */
+	private UUID generateWaypointId(UUID trackerUUID) {
+		return new UUID(
+				PORTAL_WAYPOINT_NAMESPACE.getMostSignificantBits() ^ trackerUUID.getMostSignificantBits(),
+				PORTAL_WAYPOINT_NAMESPACE.getLeastSignificantBits() ^ trackerUUID.getLeastSignificantBits());
+	}
+
+	private String formatLocation(Location loc) {
+		if (loc == null)
+			return "null";
+		return String.format("%d, %d, %d in %s",
+				loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(),
+				loc.getWorld() != null ? loc.getWorld().getName() : "null");
+	}
+
+	private void debug(String message) {
+		if (DEBUG) {
+			SMPPlugin.getInstance().getLogger().log(Level.INFO, "[LocatorTask Debug] " + message);
+		}
 	}
 }

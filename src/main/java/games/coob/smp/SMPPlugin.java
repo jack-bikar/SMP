@@ -15,6 +15,7 @@ import games.coob.smp.task.HologramTask;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -29,6 +30,9 @@ public final class SMPPlugin extends JavaPlugin {
 
         // Load settings
         Settings.loadSettings();
+
+        // Initialize waypoint packet sender (uses reflection, logs debug info)
+        WaypointPacketSender.initialize();
 
         // Initialize registries
         SchedulerUtil.runLater(1, () -> {
@@ -67,6 +71,7 @@ public final class SMPPlugin extends JavaPlugin {
         // Clean up tracking
         TrackingRegistry.clear();
         PortalCache.clear();
+        WaypointPacketSender.clearAll();
 
         // Disable effects
         if (PluginUtil.isPluginEnabled("EffectLib")) {

@@ -1,6 +1,7 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
@@ -17,6 +18,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.world.PortalCreateEvent;
 
+import java.util.logging.Level;
+
 /**
  * Handles portal tracking events for the locator bar.
  * Portal locations are stored when players use portals (PlayerPortalEvent fires
@@ -27,6 +30,7 @@ import org.bukkit.event.world.PortalCreateEvent;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class LocatorListener implements Listener {
 
+    private static final boolean DEBUG = true;
     private static final LocatorListener instance = new LocatorListener();
 
     public static LocatorListener getInstance() {
@@ -45,9 +49,14 @@ public final class LocatorListener implements Listener {
         Player player = event.getPlayer();
         PlayerCache cache = PlayerCache.from(player);
 
+        debug("onPlayerChangedWorld: " + player.getName() +
+                " from " + event.getFrom().getName() +
+                " to " + player.getWorld().getName());
+
         // Invalidate this player's cached portal (they're now in a different world)
         if (TrackingRegistry.isTracking(player.getUniqueId())) {
             cache.setCachedPortalTarget(null);
+            debug("  Invalidated cached portal for tracker: " + player.getName());
         }
 
         // Invalidate cached portals for anyone tracking this player
@@ -59,6 +68,8 @@ public final class LocatorListener implements Listener {
             PlayerCache trackerCache = PlayerCache.from(tracker);
             if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
                 trackerCache.setCachedPortalTarget(null);
+                debug("  Invalidated cached portal for tracker " + tracker.getName() +
+                        " (was tracking " + player.getName() + ")");
             }
         }
     }
@@ -81,29 +92,39 @@ public final class LocatorListener implements Listener {
 
         // Determine portal type based on destination
         Location toLocation = event.getTo();
-        if (toLocation == null || toLocation.getWorld() == null)
+        if (toLocation == null || toLocation.getWorld() == null) {
+            debug("onPlayerPortal: " + player.getName() + " - toLocation is null, skipping");
             return;
+        }
 
         World.Environment targetEnv = toLocation.getWorld().getEnvironment();
         Location centered = centerLocation(fromLocation);
+
+        debug("onPlayerPortal: " + player.getName() +
+                " from " + currentEnv + " to " + targetEnv +
+                " at " + formatLocation(centered));
 
         // Store in player's cache based on current dimension and destination
         if (currentEnv == World.Environment.NORMAL) {
             if (targetEnv == World.Environment.NETHER) {
                 cache.setOverworldNetherPortalLocation(centered);
                 PortalCache.register(centered, Material.NETHER_PORTAL);
+                debug("  Stored overworld->nether portal");
             } else if (targetEnv == World.Environment.THE_END) {
                 cache.setOverworldEndPortalLocation(centered);
                 PortalCache.register(centered, Material.END_PORTAL);
+                debug("  Stored overworld->end portal");
             }
         } else if (currentEnv == World.Environment.NETHER) {
             if (targetEnv == World.Environment.NORMAL) {
                 cache.setPortalLocation(centered);
                 PortalCache.register(centered, Material.NETHER_PORTAL);
+                debug("  Stored nether->overworld portal");
             }
         } else if (currentEnv == World.Environment.THE_END) {
             if (targetEnv == World.Environment.NORMAL) {
                 cache.setPortalLocation(centered);
+                debug("  Stored end->overworld portal");
                 // End portals to overworld don't need registration (end gateway or end
                 // platform)
             }
@@ -143,5 +164,19 @@ public final class LocatorListener implements Listener {
                 Math.floor(loc.getX()) + 0.5,
                 Math.floor(loc.getY()) + 0.5,
                 Math.floor(loc.getZ()) + 0.5);
+    }
+
+    private String formatLocation(Location loc) {
+        if (loc == null)
+            return "null";
+        return String.format("%d, %d, %d in %s",
+                loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(),
+                loc.getWorld() != null ? loc.getWorld().getName() : "null");
+    }
+
+    private void debug(String message) {
+        if (DEBUG) {
+            SMPPlugin.getInstance().getLogger().log(Level.INFO, "[LocatorListener Debug] " + message);
+        }
     }
 }

@@ -1,11 +1,13 @@
 package games.coob.smp.tracking;
 
+import games.coob.smp.SMPPlugin;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Field;
+import java.util.logging.Level;
 
 /**
  * Manages the Player Locator Bar visibility and targeting.
@@ -13,6 +15,7 @@ import java.lang.reflect.Field;
  */
 public final class LocatorBarManager {
 
+    private static final boolean DEBUG = true;
     private static final double WORLD_MAX = 6.0e7;
     private static final double NONE = 0.0;
 
@@ -22,6 +25,13 @@ public final class LocatorBarManager {
     static {
         WAYPOINT_RECEIVE_RANGE = resolveAttribute("WAYPOINT_RECEIVE_RANGE");
         WAYPOINT_TRANSMIT_RANGE = resolveAttribute("WAYPOINT_TRANSMIT_RANGE");
+
+        if (DEBUG) {
+            SMPPlugin.getInstance().getLogger().log(Level.INFO,
+                    "[LocatorBarManager] WAYPOINT_RECEIVE_RANGE: " + WAYPOINT_RECEIVE_RANGE);
+            SMPPlugin.getInstance().getLogger().log(Level.INFO,
+                    "[LocatorBarManager] WAYPOINT_TRANSMIT_RANGE: " + WAYPOINT_TRANSMIT_RANGE);
+        }
     }
 
     private static Attribute resolveAttribute(String name) {
@@ -114,11 +124,24 @@ public final class LocatorBarManager {
     // -------------------------------------------------------------------------
 
     private static void setAttribute(Player player, Attribute attribute, double value) {
-        if (player == null || attribute == null)
+        if (player == null || attribute == null) {
+            debug("setAttribute: player or attribute is null!");
             return;
+        }
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance != null) {
+            double oldValue = instance.getBaseValue();
             instance.setBaseValue(value);
+            debug("setAttribute: " + player.getName() + " " + attribute.name() +
+                    " changed from " + oldValue + " to " + value);
+        } else {
+            debug("setAttribute: " + player.getName() + " has no attribute instance for " + attribute.name());
+        }
+    }
+
+    private static void debug(String message) {
+        if (DEBUG) {
+            SMPPlugin.getInstance().getLogger().log(Level.INFO, "[LocatorBarManager Debug] " + message);
         }
     }
 }
