@@ -7,7 +7,9 @@ import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
-import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.EntityUtil;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
@@ -41,14 +43,16 @@ public final class SMPListener implements Listener { // TODO add the register ev
     @EventHandler
     public void onJoin(final PlayerJoinEvent event) {
         final Player player = event.getPlayer();
+        PlayerCache cache = PlayerCache.from(player);
 
-        PlayerCache.from(player); // Load player's cache
+        // Hide locator bar by default (will be enabled when tracking starts)
+        if (Settings.LocatorSection.ENABLE_TRACKING) {
+            LocatorBarManager.disableReceive(player);
 
-        // Hide Player Locator Bar by default if custom tracking is enabled
-        // If locator bar is enabled, let Minecraft handle it
-        if (!Settings.LocatorSection.ENABLE_LOCATOR_BAR && Settings.LocatorSection.ENABLE_TRACKING) {
-            // Disable locator bar by default
-            new games.coob.smp.tracking.LocatorBarManager(player).disableTemporarily();
+            // If player was tracking something, re-register them
+            if (cache.getTrackingLocation() != null) {
+                TrackingRegistry.startTracking(player.getUniqueId());
+            }
         }
     }
 
@@ -108,7 +112,6 @@ public final class SMPListener implements Listener { // TODO add the register ev
         });
     }
 
-
     @EventHandler
     public void onPlayerDamageByEntity(final EntityDamageByEntityEvent event) {
         final Entity entity = event.getEntity();
@@ -150,7 +153,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
                     // effect.particle = Particle.DRAGON_BREATH;
                     effect.pitch = .5f;
                     effect.setLocation(location);
-                    //Effects.getEffectManager().display(Particle);
+                    // Effects.getEffectManager().display(Particle);
 
                     effect.run();
                 }
@@ -255,25 +258,29 @@ public final class SMPListener implements Listener { // TODO add the register ev
             player.setHealth(0);
         }
 
-        // Cancel any pending tracking requests from this player
-        TrackingRequestManager.getInstance().cancelRequest(player.getUniqueId());
+        // Remove from tracking registry
+        TrackingRegistry.stopTracking(player.getUniqueId());
 
-        // Clear Player Locator Bar for players tracking this player
-        // Also disable waypoint transmission for the quitting player
-        games.coob.smp.tracking.LocatorBarManager quittingPlayerLocator = new games.coob.smp.tracking.LocatorBarManager(player);
-        quittingPlayerLocator.disableTransmit();
-        
-        for (final Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            final PlayerCache onlineCache = PlayerCache.from(onlinePlayer);
-            if (onlineCache.getTargetByUUID() != null && onlineCache.getTargetByUUID().equals(player.getUniqueId())) {
-                // Clear their tracking and hide Player Locator Bar
-                onlineCache.setTrackingLocation(null);
-                onlineCache.setTargetByUUID(null);
-                // Disable locator bar
-                games.coob.smp.tracking.LocatorBarManager locatorBar = new games.coob.smp.tracking.LocatorBarManager(onlinePlayer);
-                locatorBar.disableTemporarily();
-                // Reset compass target
-                onlinePlayer.setCompassTarget(onlinePlayer.getLocation());
+        // Disable waypoint transmission so others can't track this player anymore
+        LocatorBarManager.disableTransmit(player);
+
+        // Notify and clean up players who were tracking this player
+        for (java.util.UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
+            Player tracker = Bukkit.getPlayer(trackerUUID);
+            if (tracker == null || !tracker.isOnline())
+                continue;
+
+            PlayerCache trackerCache = PlayerCache.from(tracker);
+            if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
+                trackerCache.setTrackingLocation(null);
+                trackerCache.setTargetByUUID(null);
+                trackerCache.setCachedPortalTarget(null);
+                TrackingRegistry.stopTracking(trackerUUID);
+
+                LocatorBarManager.disableReceive(tracker);
+                LocatorBarManager.clearTarget(tracker);
+
+                ColorUtil.sendMessage(tracker, "&c" + player.getName() + " &chas gone offline. Tracking stopped.");
             }
         }
 
@@ -291,7 +298,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
             final PlayerCache cache = PlayerCache.from(player);
 
             cache.setInCombat(true);
-            SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT, () -> cache.setInCombat(false));
+            SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT,
+                    () -> cache.setInCombat(false));
         }
     }
 

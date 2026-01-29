@@ -5,13 +5,11 @@ import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.TrackingRequestManager;
 import games.coob.smp.util.ColorUtil;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -80,7 +78,8 @@ public class TrackingCommand implements CommandExecutor, TabCompleter {
 				}
 				// Note: Locator bar tracking is built-in, no item needed
 				// This command is kept for backwards compatibility but just informs the player
-				ColorUtil.sendMessage(target, "&aLocator bar tracking is now built-in! Use /tracking menu to track players.");
+				ColorUtil.sendMessage(target,
+						"&aLocator bar tracking is now built-in! Use /tracking menu to track players.");
 				if (!target.equals(player)) {
 					ColorUtil.sendMessage(sender, "&aLocator bar tracking is built-in for all players.");
 				}
@@ -99,7 +98,8 @@ public class TrackingCommand implements CommandExecutor, TabCompleter {
 		if (args.length == 1) {
 			return Arrays.asList("accept", "deny", "cancel", "menu", "give");
 		}
-		if (args.length == 2 && (args[0].equalsIgnoreCase("accept") || args[0].equalsIgnoreCase("deny") || args[0].equalsIgnoreCase("give"))) {
+		if (args.length == 2 && (args[0].equalsIgnoreCase("accept") || args[0].equalsIgnoreCase("deny")
+				|| args[0].equalsIgnoreCase("give"))) {
 			List<String> players = new ArrayList<>();
 			for (Player p : Bukkit.getOnlinePlayers()) {
 				players.add(p.getName());

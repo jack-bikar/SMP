@@ -58,6 +58,14 @@ public final class PlayerCache extends ConfigFile {
 	@Setter
 	private boolean inCombat;
 
+	/**
+	 * Transient: cached portal location for cross-dimension tracking.
+	 * Not persisted to disk - recalculated on dimension change.
+	 */
+	@Getter
+	@Setter
+	private Location cachedPortalTarget;
+
 	//
 	// Store any custom saveable data here
 	//

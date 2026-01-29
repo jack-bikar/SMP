@@ -1,8 +1,6 @@
 package games.coob.smp.tracking;
 
 import games.coob.smp.PlayerCache;
-import games.coob.smp.SMPPlugin;
-import games.coob.smp.tracking.PortalFinder;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import net.kyori.adventure.text.Component;
@@ -11,178 +9,175 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class TrackingRequestManager {
-	private static final TrackingRequestManager instance = new TrackingRequestManager();
-	private final Map<UUID, TrackingRequest> pendingRequests = new HashMap<>();
-	private static final int EXPIRATION_SECONDS = 30;
+/**
+ * Manages tracking requests between players.
+ */
+public final class TrackingRequestManager {
 
-	public static TrackingRequestManager getInstance() {
-		return instance;
-	}
+    private static final TrackingRequestManager instance = new TrackingRequestManager();
+    private static final int EXPIRATION_SECONDS = 30;
 
-	public void sendTrackingRequest(Player tracker, Player target) {
-		// Cancel any existing request from this tracker
-		cancelRequest(tracker.getUniqueId());
+    private final Map<UUID, TrackingRequest> pendingRequests = new ConcurrentHashMap<>();
 
-		TrackingRequest request = new TrackingRequest(tracker.getUniqueId(), target.getUniqueId());
-		pendingRequests.put(tracker.getUniqueId(), request);
+    private TrackingRequestManager() {
+    }
 
-		// Send clickable message to target
-		Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
-				.clickEvent(ClickEvent.runCommand("/tracking accept " + tracker.getName()))
-				.hoverEvent(HoverEvent.showText(Component.text("Click to accept tracking request")));
+    public static TrackingRequestManager getInstance() {
+        return instance;
+    }
 
-		Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
-				.clickEvent(ClickEvent.runCommand("/tracking deny " + tracker.getName()))
-				.hoverEvent(HoverEvent.showText(Component.text("Click to deny tracking request")));
+    /**
+     * Send a tracking request from tracker to target.
+     */
+    public void sendTrackingRequest(Player tracker, Player target) {
+        // Cancel any existing request from this tracker
+        pendingRequests.remove(tracker.getUniqueId());
 
-		Component message = Component.text()
-				.append(Component.text(tracker.getName(), NamedTextColor.YELLOW))
-				.append(Component.text(" wants to track your location. ", NamedTextColor.WHITE))
-				.append(acceptButton)
-				.append(Component.text(" ", NamedTextColor.WHITE))
-				.append(denyButton)
-				.append(Component.text(" (Expires in 30 seconds)", NamedTextColor.GRAY))
-				.build();
+        TrackingRequest request = new TrackingRequest(tracker.getUniqueId(), target.getUniqueId());
+        pendingRequests.put(tracker.getUniqueId(), request);
 
-		target.sendMessage(message);
-		ColorUtil.sendMessage(tracker, "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
+        // Send clickable message to target
+        Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/tracking accept " + tracker.getName()))
+                .hoverEvent(HoverEvent.showText(Component.text("Click to accept tracking request")));
 
-		// Schedule expiration
-		SchedulerUtil.runLater(EXPIRATION_SECONDS * 20, () -> {
-			if (pendingRequests.containsKey(tracker.getUniqueId())) {
-				TrackingRequest req = pendingRequests.remove(tracker.getUniqueId());
-				if (req != null && req.getTrackerUUID().equals(tracker.getUniqueId())) {
-					Player trackerPlayer = Bukkit.getPlayer(tracker.getUniqueId());
-					if (trackerPlayer != null) {
-						ColorUtil.sendMessage(trackerPlayer, "&cTracking request to &3" + target.getName() + " &cexpired.");
-					}
-				}
-			}
-		});
-	}
+        Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/tracking deny " + tracker.getName()))
+                .hoverEvent(HoverEvent.showText(Component.text("Click to deny tracking request")));
 
-	public boolean acceptRequest(Player target, String trackerName) {
-		Player tracker = Bukkit.getPlayer(trackerName);
-		if (tracker == null) {
-			ColorUtil.sendMessage(target, "&cPlayer not found.");
-			return false;
-		}
+        Component message = Component.text()
+                .append(Component.text(tracker.getName(), NamedTextColor.YELLOW))
+                .append(Component.text(" wants to track your location. ", NamedTextColor.WHITE))
+                .append(acceptButton)
+                .append(Component.text(" "))
+                .append(denyButton)
+                .append(Component.text(" (Expires in 30 seconds)", NamedTextColor.GRAY))
+                .build();
 
-		TrackingRequest request = pendingRequests.get(tracker.getUniqueId());
-		if (request == null || !request.getTargetUUID().equals(target.getUniqueId())) {
-			ColorUtil.sendMessage(target, "&cNo pending tracking request from that player.");
-			return false;
-		}
+        target.sendMessage(message);
+        ColorUtil.sendMessage(tracker,
+                "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
 
-		pendingRequests.remove(tracker.getUniqueId());
-		ColorUtil.sendMessage(target, "&aYou accepted the tracking request from &3" + tracker.getName() + "&a.");
-		ColorUtil.sendMessage(tracker, "&a" + target.getName() + " &aaccepted your tracking request!");
+        // Schedule expiration
+        SchedulerUtil.runLater(EXPIRATION_SECONDS * 20L, () -> {
+            TrackingRequest req = pendingRequests.remove(tracker.getUniqueId());
+            if (req != null) {
+                Player trackerPlayer = Bukkit.getPlayer(tracker.getUniqueId());
+                if (trackerPlayer != null && trackerPlayer.isOnline()) {
+                    ColorUtil.sendMessage(trackerPlayer, "&cTracking request to &3" + target.getName() + " &cexpired.");
+                }
+            }
+        });
+    }
 
-		// Start tracking
-		PlayerCache trackerCache = PlayerCache.from(tracker);
-		trackerCache.setTrackingLocation("Player");
-		trackerCache.setTargetByUUID(target.getUniqueId());
+    /**
+     * Accept a tracking request.
+     */
+    public boolean acceptRequest(Player target, String trackerName) {
+        Player tracker = Bukkit.getPlayer(trackerName);
+        if (tracker == null || !tracker.isOnline()) {
+            ColorUtil.sendMessage(target, "&cPlayer not found or offline.");
+            return false;
+        }
 
-		// Immediately update Player Locator Bar
-		LocatorBarManager locatorBar = new LocatorBarManager(tracker);
-		LocatorBarManager targetLocatorBar = new LocatorBarManager(target);
-		
-		// Enable waypoint transmission for target so they appear as a waypoint
-		targetLocatorBar.enableTransmit();
-		
-		// Enable locator bar for tracker
-		locatorBar.enableTemporarily();
-		
-		// Set compass target to point to the player or nearest portal to target's dimension
-		if (target.isOnline()) {
-			if (target.getWorld() == tracker.getWorld()) {
-				tracker.setCompassTarget(target.getLocation());
-			} else {
-				org.bukkit.Location portalLoc = resolvePortalForCrossDimension(trackerCache, tracker, target.getWorld().getEnvironment());
-				tracker.setCompassTarget(portalLoc != null ? portalLoc : tracker.getLocation());
-			}
-		}
+        TrackingRequest request = pendingRequests.get(tracker.getUniqueId());
+        if (request == null || !request.targetUUID.equals(target.getUniqueId())) {
+            ColorUtil.sendMessage(target, "&cNo pending tracking request from that player.");
+            return false;
+        }
 
-		return true;
-	}
+        pendingRequests.remove(tracker.getUniqueId());
 
-	public boolean denyRequest(Player target, String trackerName) {
-		Player tracker = Bukkit.getPlayer(trackerName);
-		if (tracker == null) {
-			ColorUtil.sendMessage(target, "&cPlayer not found.");
-			return false;
-		}
+        // Start tracking
+        PlayerCache trackerCache = PlayerCache.from(tracker);
+        trackerCache.setTrackingLocation("Player");
+        trackerCache.setTargetByUUID(target.getUniqueId());
 
-		TrackingRequest request = pendingRequests.get(tracker.getUniqueId());
-		if (request == null || !request.getTargetUUID().equals(target.getUniqueId())) {
-			ColorUtil.sendMessage(target, "&cNo pending tracking request from that player.");
-			return false;
-		}
+        // Register in tracking registry
+        TrackingRegistry.startTracking(tracker.getUniqueId());
 
-		pendingRequests.remove(tracker.getUniqueId());
-		ColorUtil.sendMessage(target, "&cYou denied the tracking request from &3" + tracker.getName() + "&c.");
-		ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &cdenied your tracking request.");
+        // Enable locator bar
+        LocatorBarManager.enableTransmit(target);
+        LocatorBarManager.enableReceive(tracker);
 
-		return true;
-	}
+        // Set initial target
+        if (target.getWorld().equals(tracker.getWorld())) {
+            LocatorBarManager.setTarget(tracker, target);
+        } else {
+            // Different dimension - calculate portal target
+            Location portalLoc = PortalCache.findNearestToDimension(
+                    tracker.getWorld(), tracker.getLocation(), target.getWorld().getEnvironment());
+            trackerCache.setCachedPortalTarget(portalLoc);
+            if (portalLoc != null) {
+                LocatorBarManager.setTarget(tracker, portalLoc);
+            }
+        }
 
-	public void cancelRequest(UUID trackerUUID) {
-		pendingRequests.remove(trackerUUID);
-	}
+        ColorUtil.sendMessage(target, "&aYou accepted the tracking request from &3" + tracker.getName() + "&a.");
+        ColorUtil.sendMessage(tracker, "&a" + target.getName() + " &aaccepted your tracking request!");
 
-	private static Location resolvePortalForCrossDimension(PlayerCache cache, Player tracker, World.Environment targetEnv) {
-		// Prefer stored portals, then find nearest
-		Location portal = cache.getPortalLocation();
-		if (portal != null && portal.getWorld() == tracker.getWorld()) {
-			if (targetEnv == World.Environment.NORMAL && (tracker.getWorld().getEnvironment() == World.Environment.NETHER || tracker.getWorld().getEnvironment() == World.Environment.THE_END)) {
-				return portal;
-			}
-		}
-		portal = cache.getOverworldNetherPortalLocation();
-		if (portal != null && portal.getWorld() == tracker.getWorld() && targetEnv == World.Environment.NETHER) return portal;
-		portal = cache.getOverworldEndPortalLocation();
-		if (portal != null && portal.getWorld() == tracker.getWorld() && targetEnv == World.Environment.THE_END) return portal;
-		return PortalFinder.findNearestPortalToDimension(tracker.getWorld(), tracker.getLocation(), targetEnv);
-	}
+        return true;
+    }
 
-	public void cancelTracking(Player target) {
-		// Find all players tracking this target
-		for (Player player : Bukkit.getOnlinePlayers()) {
-			PlayerCache cache = PlayerCache.from(player);
-			if (cache.getTrackingLocation() != null && cache.getTrackingLocation().equals("Player")) {
-				if (cache.getTargetByUUID() != null && cache.getTargetByUUID().equals(target.getUniqueId())) {
-					cache.setTrackingLocation(null);
-					cache.setTargetByUUID(null);
-					ColorUtil.sendMessage(player, "&c" + target.getName() + " &chas cancelled tracking.");
-				}
-			}
-		}
-		ColorUtil.sendMessage(target, "&aYou have cancelled all tracking requests.");
-	}
+    /**
+     * Deny a tracking request.
+     */
+    public boolean denyRequest(Player target, String trackerName) {
+        Player tracker = Bukkit.getPlayer(trackerName);
+        if (tracker == null) {
+            ColorUtil.sendMessage(target, "&cPlayer not found.");
+            return false;
+        }
 
-	private static class TrackingRequest {
-		private final UUID trackerUUID;
-		private final UUID targetUUID;
+        TrackingRequest request = pendingRequests.get(tracker.getUniqueId());
+        if (request == null || !request.targetUUID.equals(target.getUniqueId())) {
+            ColorUtil.sendMessage(target, "&cNo pending tracking request from that player.");
+            return false;
+        }
 
-		public TrackingRequest(UUID trackerUUID, UUID targetUUID) {
-			this.trackerUUID = trackerUUID;
-			this.targetUUID = targetUUID;
-		}
+        pendingRequests.remove(tracker.getUniqueId());
+        ColorUtil.sendMessage(target, "&cYou denied the tracking request from &3" + tracker.getName() + "&c.");
+        ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &cdenied your tracking request.");
 
-		public UUID getTrackerUUID() {
-			return trackerUUID;
-		}
+        return true;
+    }
 
-		public UUID getTargetUUID() {
-			return targetUUID;
-		}
-	}
+    /**
+     * Cancel all tracking of a specific target player.
+     */
+    public void cancelTracking(Player target) {
+        for (UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
+            Player tracker = Bukkit.getPlayer(trackerUUID);
+            if (tracker == null || !tracker.isOnline())
+                continue;
+
+            PlayerCache cache = PlayerCache.from(tracker);
+            if ("Player".equals(cache.getTrackingLocation())
+                    && target.getUniqueId().equals(cache.getTargetByUUID())) {
+
+                cache.setTrackingLocation(null);
+                cache.setTargetByUUID(null);
+                cache.setCachedPortalTarget(null);
+                TrackingRegistry.stopTracking(trackerUUID);
+
+                LocatorBarManager.disableReceive(tracker);
+                LocatorBarManager.clearTarget(tracker);
+
+                ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &chas cancelled tracking.");
+            }
+        }
+        ColorUtil.sendMessage(target, "&aYou have cancelled all tracking requests.");
+    }
+
+    /**
+     * Internal tracking request data.
+     */
+    private record TrackingRequest(UUID trackerUUID, UUID targetUUID) {
+    }
 }

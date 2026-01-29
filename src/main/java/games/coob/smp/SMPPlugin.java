@@ -5,85 +5,81 @@ import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
 import games.coob.smp.command.TrackingCommand;
 import games.coob.smp.hologram.HologramRegistry;
-import games.coob.smp.listener.LocatorListener;
 import games.coob.smp.listener.DeathChestListener;
+import games.coob.smp.listener.LocatorListener;
 import games.coob.smp.listener.SMPListener;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
-import games.coob.smp.task.LocatorTask;
 import games.coob.smp.task.HologramTask;
-import games.coob.smp.tracking.LocatorBarGamerule;
+import games.coob.smp.task.LocatorTask;
+import games.coob.smp.tracking.PortalCache;
+import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
-import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SMPPlugin extends JavaPlugin {
 
-	private static SMPPlugin instance;
+    private static SMPPlugin instance;
 
-	@Override
-	public void onEnable() {
-		instance = this;
+    @Override
+    public void onEnable() {
+        instance = this;
 
-		// Load settings
-		Settings.loadSettings();
+        // Load settings
+        Settings.loadSettings();
 
-		// Initialize registries
-		SchedulerUtil.runLater(1, () -> {
-			DeathChestRegistry.getInstance();
-			HologramRegistry.getInstance().spawnFromDisk();
-		});
+        // Initialize registries
+        SchedulerUtil.runLater(1, () -> {
+            DeathChestRegistry.getInstance();
+            HologramRegistry.getInstance().spawnFromDisk();
+        });
 
-		// Ensure locator bar gamerule is enabled in ALL worlds (nether/end too).
-		// Visibility is controlled per-player via waypoint attributes, not the
-		// gamerule.
-		SchedulerUtil.runLater(1, () -> {
-			for (World world : Bukkit.getWorlds()) {
-				LocatorBarGamerule.ensureEnabled(world);
-			}
-		});
+        // Load EffectLib if available
+        if (PluginUtil.isPluginEnabled("EffectLib")) {
+            Effects.load();
+        }
 
-		// Load EffectLib if available
-		if (PluginUtil.isPluginEnabled("EffectLib")) {
-			Effects.load();
-		}
+        // Register commands
+        getCommand("smp").setExecutor(new SMPCommand());
+        getCommand("inv").setExecutor(new InvEditCommand());
+        getCommand("inventory").setExecutor(new InvEditCommand());
+        getCommand("spawn").setExecutor(new SpawnCommand());
+        getCommand("tracking").setExecutor(new TrackingCommand());
+        getCommand("tracking").setTabCompleter(new TrackingCommand());
 
-		// Register commands
-		getCommand("smp").setExecutor(new SMPCommand());
-		getCommand("inv").setExecutor(new InvEditCommand());
-		getCommand("inventory").setExecutor(new InvEditCommand());
-		getCommand("spawn").setExecutor(new SpawnCommand());
-		getCommand("tracking").setExecutor(new TrackingCommand());
-		getCommand("tracking").setTabCompleter(new TrackingCommand());
+        // Register events
+        getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
+        getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
+        getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
 
-		// Register events
-		getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
-		getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
-		getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
+        // Start tasks
+        SchedulerUtil.runTimer(20, new LocatorTask());
+        SchedulerUtil.runTimer(20, new HologramTask());
+    }
 
-		// Start tasks
-		SchedulerUtil.runTimer(20, new LocatorTask());
-		SchedulerUtil.runTimer(20, new HologramTask());
-	}
+    @Override
+    public void onDisable() {
+        // Save data
+        DeathChestRegistry.getInstance().save();
 
-	@Override
-	public void onDisable() {
-		DeathChestRegistry.getInstance().save();
+        // Clean up tracking
+        TrackingRegistry.clear();
+        PortalCache.clear();
 
-		if (PluginUtil.isPluginEnabled("EffectLib")) {
-			Effects.disable();
-		}
-	}
+        // Disable effects
+        if (PluginUtil.isPluginEnabled("EffectLib")) {
+            Effects.disable();
+        }
+    }
 
-	@Override
-	public void onLoad() {
-		instance = this;
-	}
+    @Override
+    public void onLoad() {
+        instance = this;
+    }
 
-	public static SMPPlugin getInstance() {
-		return instance;
-	}
+    public static SMPPlugin getInstance() {
+        return instance;
+    }
 }

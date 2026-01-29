@@ -25,8 +25,6 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
-import games.coob.smp.hologram.BukkitHologram;
-
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -48,7 +46,8 @@ public final class DeathChestListener implements Listener {
 			final Block block = event.getClickedBlock();
 			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
 
-			if (block != null && block.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL && registry.isRegistered(block)) {
+			if (block != null && block.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL
+					&& registry.isRegistered(block)) {
 				event.setCancelled(true);
 				player.openInventory(registry.getInventory(block));
 				// Chest open sound is handled automatically by Bukkit
@@ -98,12 +97,15 @@ public final class DeathChestListener implements Listener {
 			assert inventory != null;
 			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL);
 
-			// Position hologram above the chest (chest is ~0.875 blocks tall, so place at +1.0 for good visibility)
+			// Position hologram above the chest (chest is ~0.875 blocks tall, so place at
+			// +1.0 for good visibility)
 			Location hologramLocation = block.getLocation().clone().add(0.5, 1.0, 0.5);
-			
+
 			for (final Player closePlayers : org.bukkit.Bukkit.getOnlinePlayers())
-				if (closePlayers.getLocation().distance(hologramLocation) < Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)
-					hologram.show(hologramLocation, closePlayers, chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player));
+				if (closePlayers.getLocation()
+						.distance(hologramLocation) < Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)
+					hologram.show(hologramLocation, closePlayers,
+							chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player));
 
 			inventory.setContents(drops);
 			cache.setDeathChestInventory(inventory);
@@ -153,7 +155,8 @@ public final class DeathChestListener implements Listener {
 			final Block block = event.getBlock();
 
 			if (registry.isRegistered(block)) {
-				final ItemStack[] items = Stream.of(registry.getInventory(block).getContents()) // Create a stream of ItemStack
+				final ItemStack[] items = Stream.of(registry.getInventory(block).getContents()) // Create a stream of
+																								// ItemStack
 						.filter(Objects::nonNull) // Filter all non null values (removing empty slot)
 						.toArray(ItemStack[]::new); // Convert the result to ItemStack array
 
