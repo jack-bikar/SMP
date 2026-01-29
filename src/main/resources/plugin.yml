@@ -1,6 +1,6 @@
 #
-# This is the file your server opens to find the main class of your 
-# plugin and its information. We automatically replace variables here 
+# This is the file your server opens to find the main class of your
+# plugin and its information. We automatically replace variables here
 # from your pom.xml file.
 #
 # See https://www.spigotmc.org/wiki/plugin-yml/ for more information.
@@ -17,7 +17,34 @@ libraries:
   #legacy-libraries: JAVA  8 REQUIRED
   #- org.openjdk.nashorn:nashorn-core:15.4
 # Plugins that we support so that we are loaded after them for your convenience.
-softdepend: [ AuthMe, BanManager, BungeeChatAPI, CMI, DiscordSRV, Factions, Feudal, ItemsAdder, Essentials, LegacyFactions, Lands, LuckPerms, Multiverse-Core, MVdWPlaceholderAPI, MythicMobs, mcMMO, NashornPlus, Nicky, PlaceholderAPI, ProtocolLib, SimpleClans, Towny, TownyChat, Vault, WorldEdit ]
+softdepend:
+  [
+    AuthMe,
+    BanManager,
+    BungeeChatAPI,
+    CMI,
+    DiscordSRV,
+    Factions,
+    Feudal,
+    ItemsAdder,
+    Essentials,
+    LegacyFactions,
+    Lands,
+    LuckPerms,
+    Multiverse-Core,
+    MVdWPlaceholderAPI,
+    MythicMobs,
+    mcMMO,
+    NashornPlus,
+    Nicky,
+    PlaceholderAPI,
+    ProtocolLib,
+    SimpleClans,
+    Towny,
+    TownyChat,
+    Vault,
+    WorldEdit,
+  ]
 #
 # The commands are built at runtime so you can change them easily within the settings.
 # Do not change anything in here, you will break the plugin and get no support.
@@ -26,8 +53,6 @@ commands:
   smp:
     description: SMP plugin help and information
     aliases: []
-    permission: smp.command.help
-    permission-message: You don't have permission to use this command.
   inv:
     description: Edit player inventories
     aliases: [inventory]
@@ -40,8 +65,6 @@ commands:
   tracking:
     description: Locator bar tracking commands
     aliases: [track]
-    permission: smp.command.tracking
-    permission-message: You don't have permission to use this command.
 permissions:
   smp.*:
     description: All SMP permissions
@@ -53,24 +76,16 @@ permissions:
     description: All SMP command permissions
     default: op
     children:
-      smp.command.help: true
       smp.command.inv: true
       smp.command.spawn: true
-      smp.command.tracking: true
       smp.command.tracking.menu: true
       smp.command.tracking.give: true
-  smp.command.help:
-    description: Use /smp help command
-    default: op
   smp.command.inv:
     description: Use /inv command
     default: op
   smp.command.spawn:
     description: Use /spawn command
     default: op
-  smp.command.tracking:
-    description: Use /tracking command
-    default: true
   smp.command.tracking.menu:
     description: Open tracking menu
     default: true
@@ -79,4 +94,4 @@ permissions:
     default: op
   smp.use.*:
     description: All SMP use permissions
-    default: true 
+    default: true
