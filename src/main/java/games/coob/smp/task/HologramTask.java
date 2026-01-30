@@ -1,44 +1,45 @@
 package games.coob.smp.task;
 
 import games.coob.smp.hologram.BukkitHologram;
-import games.coob.smp.hologram.HologramRegistry;
+import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.settings.Settings;
-import lombok.RequiredArgsConstructor;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.Bukkit;
 
 /**
- * Represents a self-repeating task managing hologram.
+ * Manages non-persistent death chest holograms: they appear only when a player
+ * is within {@link Settings.DeathStorageSection#HOLOGRAM_VISIBLE_RANGE}.
  */
-@RequiredArgsConstructor
 public final class HologramTask extends BukkitRunnable {
 
 	@Override
 	public void run() {
-		final HologramRegistry registry = HologramRegistry.getInstance();
+		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
+		final int range = Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE;
+		final double rangeSq = (double) range * range;
 
 		for (final Player player : Bukkit.getOnlinePlayers()) {
-			for (final BukkitHologram hologram : registry.getLoadedHolograms()) {
-				if (!player.hasMetadata(hologram.getUniqueId().toString()) && registry.isRegistered(hologram))
-					showPlayersInRange(hologram, player);
+			for (final Location chestLoc : registry.getLocations()) {
+				if (!player.getWorld().equals(chestLoc.getWorld())) continue;
 
-				if (!player.getWorld().equals(hologram.getLocation().getWorld()) || player.getLocation().distance(hologram.getLocation()) > Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)
+				Block block = chestLoc.getBlock();
+				BukkitHologram hologram = registry.getHologram(block);
+				if (hologram == null) continue;
+
+				double distSq = player.getLocation().distanceSquared(hologram.getLocation());
+				boolean inRange = distSq <= rangeSq;
+
+				if (inRange) {
+					if (!player.hasMetadata(hologram.getUniqueId().toString())) {
+						hologram.show(hologram.getLocation(), player, hologram.getLines());
+					}
+				} else {
 					hologram.hide(player);
+				}
 			}
-		}
-	}
-
-	/*
-	 * Shows the hologram to players within the set range
-	 */
-	private void showPlayersInRange(final BukkitHologram hologram, final Player player) {
-		final Location hologramLocation = hologram.getLocation();
-		final Location playerLocation = player.getLocation();
-
-		if (player.getWorld().equals(hologramLocation.getWorld()) && playerLocation.distance(hologramLocation) <= Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE) {
-			hologram.show(hologramLocation, player, hologram.getLines());
 		}
 	}
 }

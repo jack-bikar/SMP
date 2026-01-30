@@ -1,17 +1,11 @@
 package games.coob.smp.hologram;
 
-import games.coob.smp.SMPPlugin;
 import games.coob.smp.config.ConfigFile;
-import games.coob.smp.config.SerializedMap;
 import games.coob.smp.util.ValidationUtil;
-import lombok.Getter;
-import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -39,49 +33,26 @@ public class HologramRegistry extends ConfigFile {
 
 
 	/**
-	 * Automatically loads stored disk Holograms and spawns them
+	 * Holograms are non-persistent; nothing is loaded from disk.
+	 * Death chest holograms are created on demand in DeathChestRegistry when players are in range.
 	 */
 	public void spawnFromDisk() {
-		// Load holograms from disk
-		this.loadedHolograms = loadHolograms();
-
-		SMPPlugin.getInstance().getLogger().info("Found " + this.loadedHolograms.size() + " Holograms on the disk");
-
-		for (final BukkitHologram hologram : this.loadedHolograms)
-			SMPPlugin.getInstance().getLogger().info("Spawned " + hologram + " at " + hologram.getLocation());
-	}
-
-	public List<BukkitHologram> loadHolograms() {
-		final List<BukkitHologram> loadedHologram = new ArrayList<>();
-
-		ConfigurationSection section = getConfig().getConfigurationSection("Saved_Holograms");
-		if (section != null) {
-			for (String key : section.getKeys(false)) {
-				Map<String, Object> mapData = section.getConfigurationSection(key).getValues(true);
-				SerializedMap map = SerializedMap.of(mapData);
-				final BukkitHologram hologram = BukkitHologram.deserialize(map);
-				loadedHologram.add(hologram);
-			}
-		}
-
-		return loadedHologram;
+		// No-op: holograms are non-persistent and appear only within radius
 	}
 
 	/**
-	 * Registers a new hologram to our map
-	 *
-	 * @param hologram The hologram to register
+	 * Registers a hologram in memory only (not persisted).
 	 */
 	public void register(final BukkitHologram hologram) {
 		ValidationUtil.checkBoolean(!this.isRegistered(hologram), hologram + " is already registered!");
-
 		this.loadedHolograms.add(hologram);
-		this.save();
 	}
 
+	/**
+	 * Unregisters a hologram from memory (not persisted).
+	 */
 	public void unregister(final BukkitHologram hologram) {
 		this.loadedHolograms.remove(hologram);
-		this.save();
 	}
 
 	public boolean isRegistered(final BukkitHologram hologram) {
@@ -102,10 +73,6 @@ public class HologramRegistry extends ConfigFile {
 
 	@Override
 	protected void onSave() {
-		List<Map<String, Object>> serialized = new ArrayList<>();
-		for (BukkitHologram hologram : loadedHolograms) {
-			serialized.add(hologram.serialize());
-		}
-		getConfig().set("Saved_Holograms", serialized);
+		// Holograms are non-persistent; do not save to disk
 	}
 }

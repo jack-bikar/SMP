@@ -2,10 +2,10 @@ package games.coob.smp.model;
 
 import games.coob.smp.config.Serializable;
 import games.coob.smp.config.SerializedMap;
-import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.util.InventorySerialization;
 import lombok.Getter;
 import lombok.Setter;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.inventory.Inventory;
 
@@ -24,17 +24,13 @@ public class DeathChestData implements Serializable {
 
 	private Inventory inventory;
 
-	private BukkitHologram hologram;
-
-    @Override
+	/** Holograms are non-persistent; not serialized. */
+	@Override
 	public Map<String, Object> serialize() {
 		Map<String, Object> map = new LinkedHashMap<>();
 		map.put("Location", this.location);
 		map.put("UUID", this.uuid != null ? this.uuid.toString() : null);
 		map.put("Inventory", InventorySerialization.toBase64(this.inventory));
-		if (this.hologram != null) {
-			map.put("Hologram", this.hologram.serialize());
-		}
 		return map;
 	}
 
@@ -43,15 +39,19 @@ public class DeathChestData implements Serializable {
 		final Inventory inventory = InventorySerialization.fromBase64(inventoryString);
 		final Location location = map.getLocation("Location");
 		final UUID uuid = map.getUUID("UUID");
-		final SerializedMap hologramMap = map.getMap("Hologram");
-		final BukkitHologram hologram = hologramMap != null ? BukkitHologram.deserialize(hologramMap) : null;
 		final DeathChestData deathChestData = new DeathChestData();
 
 		deathChestData.setLocation(location);
 		deathChestData.setUuid(uuid);
 		deathChestData.setInventory(inventory);
-		deathChestData.setHologram(hologram);
 
 		return deathChestData;
+	}
+
+	/** Owner name for hologram text; holograms are created on demand and not persisted. */
+	public String getOwnerName() {
+		if (uuid == null) return "Unknown";
+		String name = Bukkit.getOfflinePlayer(uuid).getName();
+		return name != null ? name : "Unknown";
 	}
 }

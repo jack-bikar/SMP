@@ -4,7 +4,7 @@ import de.slikey.effectlib.effect.*;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.SMPPlugin;
 import games.coob.smp.hologram.BukkitHologram;
-import games.coob.smp.hologram.HologramRegistry;
+import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
@@ -245,7 +245,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
     public void onPlayerQuit(final PlayerQuitEvent event) {
         final Player player = event.getPlayer();
         final PlayerCache cache = PlayerCache.from(player);
-        final HologramRegistry registry = HologramRegistry.getInstance();
+        final DeathChestRegistry deathChestRegistry = DeathChestRegistry.getInstance();
 
         if (cache.isDrawingAxe()) {
             player.removePotionEffect(PotionEffectType.SLOWNESS);
@@ -284,7 +284,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
             }
         }
 
-        for (final BukkitHologram hologram : registry.getLoadedHolograms())
+        for (final BukkitHologram hologram : deathChestRegistry.getCachedHolograms())
             if (player.hasMetadata(hologram.getUniqueId().toString()))
                 player.removeMetadata(hologram.getUniqueId().toString(), SMPPlugin.getInstance());
 

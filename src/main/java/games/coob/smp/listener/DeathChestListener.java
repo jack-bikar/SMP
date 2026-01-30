@@ -97,21 +97,24 @@ public final class DeathChestListener implements Listener {
 			assert inventory != null;
 			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL);
 
-			// Position hologram above the chest (chest is ~0.875 blocks tall, so place at
-			// +1.0 for good visibility)
+			// Non-persistent hologram: appears only within HOLOGRAM_VISIBLE_RANGE
 			Location hologramLocation = block.getLocation().clone().add(0.5, 1.0, 0.5);
+			String hologramLine = chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player);
+			hologram.ensureCreated(hologramLocation, hologramLine);
 
-			for (final Player closePlayers : org.bukkit.Bukkit.getOnlinePlayers())
-				if (closePlayers.getLocation()
-						.distance(hologramLocation) < Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE)
-					hologram.show(hologramLocation, closePlayers,
-							chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player));
+			for (final Player closePlayer : Bukkit.getOnlinePlayers()) {
+				if (closePlayer.getWorld().equals(block.getWorld())
+						&& closePlayer.getLocation().distance(hologramLocation) <= Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE) {
+					hologram.show(hologramLocation, closePlayer, hologramLine);
+				}
+			}
 
 			inventory.setContents(drops);
 			cache.setDeathChestInventory(inventory);
 
-			if (!registry.isRegistered(block))
+			if (!registry.isRegistered(block)) {
 				registry.register(block, player, hologram);
+			}
 		}
 	}
 
@@ -165,12 +168,6 @@ public final class DeathChestListener implements Listener {
 					if (item.getType() != Settings.DeathStorageSection.STORAGE_MATERIAL) {
 						block.getWorld().dropItem(block.getLocation(), item);
 					}
-				}
-
-				final BukkitHologram hologram = registry.getHologram(block);
-				if (hologram != null) {
-					// Hide from all players and remove armor stands
-					hologram.removeAll();
 				}
 
 				registry.unregister(block);

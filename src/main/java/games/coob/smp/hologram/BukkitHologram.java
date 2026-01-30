@@ -38,14 +38,37 @@ public class BukkitHologram implements Serializable {
 		this.lines = lines;
 	}
 
+	/**
+	 * Initialize hologram location and armor stands without showing to any player.
+	 * Used for non-persistent holograms that are shown only when players enter range.
+	 */
+	public void ensureCreated(Location location, String... linesOfText) {
+		if (this.location != null) return;
+		this.location = location.clone();
+		this.lines = linesOfText;
+		Location currentLoc = location.clone();
+		for (String line : linesOfText) {
+			ArmorStand stand = location.getWorld().spawn(currentLoc, ArmorStand.class, as -> {
+				as.setVisible(false);
+				as.setGravity(false);
+				as.setCustomName(ColorUtil.colorize(line));
+				as.setCustomNameVisible(true);
+				as.setMarker(true);
+				as.setSmall(true);
+				as.setInvulnerable(true);
+				as.setCollidable(false);
+			});
+			armorStands.add(stand);
+			currentLoc.subtract(0, 0.26, 0);
+		}
+	}
+
 	@SuppressWarnings("deprecation")
 	public void show(Location location, Player player, String... linesOfText) {
 		// Set location and lines if not already set (first time)
 		if (this.location == null) {
 			this.location = location.clone();
 			this.lines = linesOfText;
-
-			// Create armor stands for each line (only once)
 			Location currentLoc = location.clone();
 			for (String line : linesOfText) {
 				ArmorStand stand = location.getWorld().spawn(currentLoc, ArmorStand.class, as -> {
@@ -58,15 +81,13 @@ public class BukkitHologram implements Serializable {
 					as.setInvulnerable(true);
 					as.setCollidable(false);
 				});
-
 				armorStands.add(stand);
 				currentLoc.subtract(0, 0.26, 0);
 			}
 		}
 
 		// Show to this specific player using Paper 1.21+ API
-		// Note: showEntity is deprecated but still the standard way for per-player visibility in Paper
-		if (!visibleToPlayers.contains(player)) {
+		if (player != null && !visibleToPlayers.contains(player)) {
 			for (ArmorStand stand : armorStands) {
 				player.showEntity(SMPPlugin.getInstance(), stand);
 			}
