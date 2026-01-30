@@ -37,10 +37,10 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&7  &7/spawn locate &7- Show spawn coordinates");
 		ColorUtil.sendMessage(sender, "&7  &7/spawn set &7- Set spawn to your location");
 		ColorUtil.sendMessage(sender, "");
-		ColorUtil.sendMessage(sender, "&e/tracking &7- Locator bar tracking (all players)");
-		ColorUtil.sendMessage(sender, "&7  &7/tracking menu &7- Open locator tracking menu");
-		ColorUtil.sendMessage(sender, "&7  &7/tracking cancel &7- Cancel current tracking");
-		ColorUtil.sendMessage(sender, "&7  &7/tracking give [player] &7- Give locator tracker (built-in, OP)");
+		ColorUtil.sendMessage(sender, "&e/track &7- Open tracking menu (alias: /tr)");
+		ColorUtil.sendMessage(sender, "&7  &7/track death &7- Track your death location");
+		ColorUtil.sendMessage(sender, "&7  &7/track stop &7- Stop all tracking");
+		ColorUtil.sendMessage(sender, "&7  &7/track stop <player> &7- Stop tracking specific player");
 		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&e/inv <inv|enderchest|armour|clear> <player> &7- Edit player inventories (OP)");
 		ColorUtil.sendMessage(sender, "");
@@ -59,8 +59,6 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.spawn &7- Use /spawn command");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.inv &7- Use /inv command");
-		ColorUtil.sendMessage(sender, "&7- &esmp.command.tracking.menu &7- Open /tracking menu");
-		ColorUtil.sendMessage(sender, "&7- &esmp.command.tracking.give &7- Use /tracking give");
 		ColorUtil.sendMessage(sender, "");
 
 		ColorUtil.sendMessage(sender, "&6&l=== === ===");

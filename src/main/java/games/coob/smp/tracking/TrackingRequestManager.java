@@ -41,11 +41,11 @@ public final class TrackingRequestManager {
         pendingRequests.put(tracker.getUniqueId(), request);
 
         Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
-                .clickEvent(ClickEvent.runCommand("/tracking accept " + tracker.getName()))
+                .clickEvent(ClickEvent.runCommand("/track accept " + tracker.getName()))
                 .hoverEvent(HoverEvent.showText(Component.text("Click to accept tracking request")));
 
         Component denyButton = Component.text("[DENY]", NamedTextColor.RED)
-                .clickEvent(ClickEvent.runCommand("/tracking deny " + tracker.getName()))
+                .clickEvent(ClickEvent.runCommand("/track deny " + tracker.getName()))
                 .hoverEvent(HoverEvent.showText(Component.text("Click to deny tracking request")));
 
         Component message = Component.text()
@@ -89,11 +89,9 @@ public final class TrackingRequestManager {
 
         pendingRequests.remove(tracker.getUniqueId());
 
-        // Set up tracking state
+        // Set up tracking state using new multi-tracking system
         PlayerCache trackerCache = PlayerCache.from(tracker);
-        trackerCache.setTrackingLocation("Player");
-        trackerCache.setTargetByUUID(target.getUniqueId());
-        trackerCache.setCachedPortalTarget(null); // Will be calculated by LocatorTask if needed
+        trackerCache.addTrackedPlayer(target.getUniqueId());
 
         // Register tracker
         TrackingRegistry.startTracking(tracker.getUniqueId());
@@ -138,7 +136,7 @@ public final class TrackingRequestManager {
     }
 
     /**
-     * Cancel all tracking of a specific target player.
+     * Cancel all tracking of a specific target player (by others tracking them).
      */
     public void cancelTracking(Player target) {
         for (UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
@@ -146,16 +144,17 @@ public final class TrackingRequestManager {
             if (tracker == null || !tracker.isOnline()) continue;
 
             PlayerCache cache = PlayerCache.from(tracker);
-            if ("Player".equals(cache.getTrackingLocation())
-                    && target.getUniqueId().equals(cache.getTargetByUUID())) {
+            TrackedTarget trackedTarget = cache.getTrackedTarget(target.getUniqueId());
 
-                cache.setTrackingLocation(null);
-                cache.setTargetByUUID(null);
-                cache.setCachedPortalTarget(null);
-                TrackingRegistry.stopTracking(trackerUUID);
+            if (trackedTarget != null) {
+                cache.removeTrackedPlayer(target.getUniqueId());
 
-                LocatorBarManager.disableReceive(tracker);
-                LocatorBarManager.clearTarget(tracker);
+                // If not tracking anything anymore, stop completely
+                if (!cache.isTracking()) {
+                    TrackingRegistry.stopTracking(trackerUUID);
+                    LocatorBarManager.disableReceive(tracker);
+                    LocatorBarManager.clearTarget(tracker);
+                }
 
                 ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &chas cancelled tracking.");
             }

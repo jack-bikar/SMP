@@ -7,7 +7,9 @@ import games.coob.smp.hologram.BukkitHologram;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
+import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.EntityUtil;
@@ -50,7 +52,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
             LocatorBarManager.disableReceive(player);
 
             // If player was tracking something, re-register them
-            if (cache.getTrackingLocation() != null) {
+            if (cache.isTracking()) {
                 TrackingRegistry.startTracking(player.getUniqueId());
             }
         }
@@ -258,29 +260,33 @@ public final class SMPListener implements Listener { // TODO add the register ev
             player.setHealth(0);
         }
 
-        // Remove from tracking registry
+        // Remove from tracking registry and clean up boss bar
         TrackingRegistry.stopTracking(player.getUniqueId());
+        LocatorTask.cleanupPlayer(player.getUniqueId());
 
         // Disable waypoint transmission so others can't track this player anymore
         LocatorBarManager.disableTransmit(player);
 
-        // Notify and clean up players who were tracking this player
+        // Notify players who were tracking this player (using new multi-tracking system)
         for (java.util.UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
             Player tracker = Bukkit.getPlayer(trackerUUID);
             if (tracker == null || !tracker.isOnline())
                 continue;
 
             PlayerCache trackerCache = PlayerCache.from(tracker);
-            if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
-                trackerCache.setTrackingLocation(null);
-                trackerCache.setTargetByUUID(null);
-                trackerCache.setCachedPortalTarget(null);
-                TrackingRegistry.stopTracking(trackerUUID);
+            TrackedTarget target = trackerCache.getTrackedTarget(player.getUniqueId());
 
-                LocatorBarManager.disableReceive(tracker);
-                LocatorBarManager.clearTarget(tracker);
-
+            if (target != null) {
+                // Remove the offline player from tracking
+                trackerCache.removeTrackedPlayer(player.getUniqueId());
                 ColorUtil.sendMessage(tracker, "&c" + player.getName() + " &chas gone offline. Tracking stopped.");
+
+                // If not tracking anything anymore, stop completely
+                if (!trackerCache.isTracking()) {
+                    TrackingRegistry.stopTracking(trackerUUID);
+                    LocatorBarManager.disableReceive(tracker);
+                    LocatorBarManager.clearTarget(tracker);
+                }
             }
         }
 

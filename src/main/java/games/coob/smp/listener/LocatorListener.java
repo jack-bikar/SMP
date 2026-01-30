@@ -4,6 +4,7 @@ import games.coob.smp.PlayerCache;
 import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.PortalCache;
+import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -53,10 +54,12 @@ public final class LocatorListener implements Listener {
                 " from " + event.getFrom().getName() +
                 " to " + player.getWorld().getName());
 
-        // Invalidate this player's cached portal (they're now in a different world)
+        // Invalidate this player's cached portal targets (they're now in a different world)
         if (TrackingRegistry.isTracking(player.getUniqueId())) {
-            cache.setCachedPortalTarget(null);
-            debug("  Invalidated cached portal for tracker: " + player.getName());
+            for (TrackedTarget target : cache.getTrackedTargets()) {
+                target.setCachedPortalTarget(null);
+            }
+            debug("  Invalidated cached portals for tracker: " + player.getName());
         }
 
         // Invalidate cached portals for anyone tracking this player
@@ -66,8 +69,9 @@ public final class LocatorListener implements Listener {
                 continue;
 
             PlayerCache trackerCache = PlayerCache.from(tracker);
-            if (player.getUniqueId().equals(trackerCache.getTargetByUUID())) {
-                trackerCache.setCachedPortalTarget(null);
+            TrackedTarget target = trackerCache.getTrackedTarget(player.getUniqueId());
+            if (target != null) {
+                target.setCachedPortalTarget(null);
                 debug("  Invalidated cached portal for tracker " + tracker.getName() +
                         " (was tracking " + player.getName() + ")");
             }

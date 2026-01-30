@@ -3,7 +3,7 @@ package games.coob.smp;
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
-import games.coob.smp.command.TrackingCommand;
+import games.coob.smp.command.TrackCommand;
 import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.LocatorListener;
@@ -50,8 +50,8 @@ public final class SMPPlugin extends JavaPlugin {
         getCommand("inv").setExecutor(new InvEditCommand());
         getCommand("inventory").setExecutor(new InvEditCommand());
         getCommand("spawn").setExecutor(new SpawnCommand());
-        getCommand("tracking").setExecutor(new TrackingCommand());
-        getCommand("tracking").setTabCompleter(new TrackingCommand());
+        getCommand("track").setExecutor(new TrackCommand());
+        getCommand("track").setTabCompleter(new TrackCommand());
 
         // Register events
         getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
@@ -72,6 +72,7 @@ public final class SMPPlugin extends JavaPlugin {
         TrackingRegistry.clear();
         PortalCache.clear();
         WaypointPacketSender.clearAll();
+        LocatorTask.cleanupAll();
 
         // Disable effects
         if (PluginUtil.isPluginEnabled("EffectLib")) {

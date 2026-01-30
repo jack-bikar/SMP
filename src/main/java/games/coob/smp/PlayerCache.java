@@ -1,6 +1,8 @@
 package games.coob.smp;
 
 import games.coob.smp.config.ConfigFile;
+import games.coob.smp.tracking.MarkerColor;
+import games.coob.smp.tracking.TrackedTarget;
 import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Bukkit;
@@ -9,7 +11,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,9 +40,20 @@ public final class PlayerCache extends ConfigFile {
 	@Getter
 	private Location overworldEndPortalLocation;
 
+	/**
+	 * Multi-tracking: list of tracked targets (players and/or death location).
+	 * Players have customizable colors; death location is always dark red.
+	 */
+	@Getter
+	private final List<TrackedTarget> trackedTargets = new ArrayList<>();
+
+	/** Legacy field for backward compatibility - use trackedTargets instead */
+	@Deprecated
 	@Getter
 	private String trackingLocation;
 
+	/** Legacy field for backward compatibility - use trackedTargets instead */
+	@Deprecated
 	@Getter
 	private UUID targetByUUID;
 
@@ -61,7 +76,9 @@ public final class PlayerCache extends ConfigFile {
 	/**
 	 * Transient: cached portal location for cross-dimension tracking.
 	 * Not persisted to disk - recalculated on dimension change.
+	 * @deprecated Use TrackedTarget.getCachedPortalTarget() instead
 	 */
+	@Deprecated
 	@Getter
 	@Setter
 	private Location cachedPortalTarget;
@@ -95,6 +112,41 @@ public final class PlayerCache extends ConfigFile {
 		this.portalLocation = getConfig().getLocation(path + "Portal_Location");
 		this.overworldNetherPortalLocation = getConfig().getLocation(path + "Overworld_Nether_Portal");
 		this.overworldEndPortalLocation = getConfig().getLocation(path + "Overworld_End_Portal");
+
+		// Load tracked targets (new multi-tracking system)
+		trackedTargets.clear();
+		if (getConfig().contains(path + "Tracked_Targets")) {
+			List<?> targetList = getConfig().getList(path + "Tracked_Targets");
+			if (targetList != null) {
+				for (Object obj : targetList) {
+					if (obj instanceof Map) {
+						@SuppressWarnings("unchecked")
+						Map<String, Object> map = (Map<String, Object>) obj;
+						String type = (String) map.get("Type");
+						if ("Death".equals(type)) {
+							trackedTargets.add(TrackedTarget.death());
+						} else if ("Player".equals(type)) {
+							String uuidStr = (String) map.get("UUID");
+							String colorStr = (String) map.get("Color");
+							if (uuidStr != null) {
+								try {
+									UUID targetUUID = UUID.fromString(uuidStr);
+									MarkerColor color = MarkerColor.WHITE;
+									if (colorStr != null) {
+										try {
+											color = MarkerColor.valueOf(colorStr);
+										} catch (IllegalArgumentException ignored) {}
+									}
+									trackedTargets.add(TrackedTarget.player(targetUUID, color));
+								} catch (IllegalArgumentException ignored) {}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Legacy loading (backward compatibility)
 		this.trackingLocation = getConfig().getString(path + "Tracking_Location");
 		String uuidStr = getConfig().getString(path + "Track_Player");
 		if (uuidStr != null) {
@@ -124,6 +176,21 @@ public final class PlayerCache extends ConfigFile {
 		getConfig().set(path + "Portal_Location", portalLocation);
 		getConfig().set(path + "Overworld_Nether_Portal", overworldNetherPortalLocation);
 		getConfig().set(path + "Overworld_End_Portal", overworldEndPortalLocation);
+
+		// Save tracked targets (new multi-tracking system)
+		List<Map<String, Object>> targetList = new ArrayList<>();
+		for (TrackedTarget target : trackedTargets) {
+			Map<String, Object> map = new HashMap<>();
+			map.put("Type", target.getType());
+			if (target.isPlayer()) {
+				map.put("UUID", target.getTargetUUID().toString());
+				map.put("Color", target.getColor().name());
+			}
+			targetList.add(map);
+		}
+		getConfig().set(path + "Tracked_Targets", targetList);
+
+		// Legacy fields (for backward compatibility, will be removed later)
 		getConfig().set(path + "Tracking_Location", trackingLocation);
 		getConfig().set(path + "Track_Player", targetByUUID != null ? targetByUUID.toString() : null);
 	}
@@ -173,16 +240,129 @@ public final class PlayerCache extends ConfigFile {
 		save();
 	}
 
+	@Deprecated
 	public void setTrackingLocation(final String trackingLocation) {
 		this.trackingLocation = trackingLocation;
-
 		save();
 	}
 
+	@Deprecated
 	public void setTargetByUUID(final UUID targetByUUID) {
 		this.targetByUUID = targetByUUID;
-
 		save();
+	}
+
+	// -------------------------------------------------------------------------
+	// Multi-tracking methods
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Add a player to track with a specific color.
+	 */
+	public void addTrackedPlayer(UUID playerUUID, MarkerColor color) {
+		// Remove existing if already tracking
+		trackedTargets.removeIf(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID()));
+		trackedTargets.add(TrackedTarget.player(playerUUID, color));
+		save();
+	}
+
+	/**
+	 * Add a player to track with the next default color.
+	 */
+	public void addTrackedPlayer(UUID playerUUID) {
+		int colorIndex = (int) trackedTargets.stream().filter(TrackedTarget::isPlayer).count();
+		addTrackedPlayer(playerUUID, MarkerColor.getDefault(colorIndex));
+	}
+
+	/**
+	 * Start tracking death location (always dark red).
+	 */
+	public void startTrackingDeath() {
+		if (!isTrackingDeath()) {
+			trackedTargets.add(TrackedTarget.death());
+			save();
+		}
+	}
+
+	/**
+	 * Stop tracking death location.
+	 */
+	public void stopTrackingDeath() {
+		trackedTargets.removeIf(TrackedTarget::isDeath);
+		save();
+	}
+
+	/**
+	 * Check if currently tracking death location.
+	 */
+	public boolean isTrackingDeath() {
+		return trackedTargets.stream().anyMatch(TrackedTarget::isDeath);
+	}
+
+	/**
+	 * Stop tracking a specific player.
+	 */
+	public void removeTrackedPlayer(UUID playerUUID) {
+		trackedTargets.removeIf(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID()));
+		save();
+	}
+
+	/**
+	 * Stop all tracking.
+	 */
+	public void clearAllTracking() {
+		trackedTargets.clear();
+		save();
+	}
+
+	/**
+	 * Get tracked target for a specific player UUID.
+	 */
+	@Nullable
+	public TrackedTarget getTrackedTarget(UUID playerUUID) {
+		return trackedTargets.stream()
+				.filter(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID()))
+				.findFirst()
+				.orElse(null);
+	}
+
+	/**
+	 * Get the death tracking target if active.
+	 */
+	@Nullable
+	public TrackedTarget getDeathTarget() {
+		return trackedTargets.stream()
+				.filter(TrackedTarget::isDeath)
+				.findFirst()
+				.orElse(null);
+	}
+
+	/**
+	 * Get all tracked player UUIDs.
+	 */
+	public List<UUID> getTrackedPlayerUUIDs() {
+		return trackedTargets.stream()
+				.filter(TrackedTarget::isPlayer)
+				.map(TrackedTarget::getTargetUUID)
+				.toList();
+	}
+
+	/**
+	 * Check if tracking anything.
+	 */
+	public boolean isTracking() {
+		return !trackedTargets.isEmpty();
+	}
+
+	/**
+	 * Change the color for a tracked player.
+	 */
+	public void setTrackedPlayerColor(UUID playerUUID, MarkerColor color) {
+		TrackedTarget target = getTrackedTarget(playerUUID);
+		if (target != null) {
+			target.setColor(color);
+			save();
+		}
 	}
 
 	/*

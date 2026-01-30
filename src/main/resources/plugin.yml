@@ -62,9 +62,9 @@ commands:
     description: Teleport to spawn
     permission: smp.command.spawn
     permission-message: You don't have permission to use this command.
-  tracking:
-    description: Locator bar tracking commands
-    aliases: [track]
+  track:
+    description: Player and death location tracking
+    aliases: [tr]
 permissions:
   smp.*:
     description: All SMP permissions
@@ -78,19 +78,11 @@ permissions:
     children:
       smp.command.inv: true
       smp.command.spawn: true
-      smp.command.tracking.menu: true
-      smp.command.tracking.give: true
   smp.command.inv:
     description: Use /inv command
     default: op
   smp.command.spawn:
     description: Use /spawn command
-    default: op
-  smp.command.tracking.menu:
-    description: Open tracking menu
-    default: true
-  smp.command.tracking.give:
-    description: Give locator tracker (built-in)
     default: op
   smp.use.*:
     description: All SMP use permissions
