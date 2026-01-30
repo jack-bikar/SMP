@@ -1,6 +1,7 @@
 package games.coob.smp.tracking;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import net.kyori.adventure.text.Component;
@@ -133,6 +134,27 @@ public final class TrackingRequestManager {
         ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &cdenied your tracking request.");
 
         return true;
+    }
+
+    /**
+     * Revoke a single tracker's ability to track the target (called by target from "Who's tracking me" menu).
+     */
+    public void revokeTracker(Player target, Player tracker) {
+        PlayerCache cache = PlayerCache.from(tracker);
+        cache.removeTrackedPlayer(target.getUniqueId());
+
+        if (!cache.isTracking()) {
+            TrackingRegistry.stopTracking(tracker.getUniqueId());
+            LocatorBarManager.disableReceive(tracker);
+            LocatorBarManager.clearTarget(tracker);
+        }
+
+        if (!WaypointColorManager.isAnyoneTracking(target.getUniqueId())) {
+            WaypointColorManager.clearPlayerWaypointColor(target);
+        }
+
+        ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &chas revoked your tracking.");
+        ColorUtil.sendMessage(target, "&aYou revoked tracking for &3" + tracker.getName() + "&a.");
     }
 
     /**

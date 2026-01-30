@@ -1,12 +1,17 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.tracking.WaypointColorManager;
+import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
@@ -71,19 +76,34 @@ public class LocatorPlayersMenu extends SimpleMenu {
 	}
 
 	private ItemStack createPlayerItem(Player player) {
-		return ItemCreator.of(
-				Material.PLAYER_HEAD,
-				"&b&l" + player.getName(),
-				"",
-				"&7Click to track",
-				"&7this player's location.",
-				"",
-				"&eClick to track")
-				.skullOwner(player.getName()).make();
+		PlayerCache cache = PlayerCache.from(viewer);
+		boolean isTracking = cache.getTrackedTarget(player.getUniqueId()) != null;
+
+		if (isTracking) {
+			return ItemCreator.of(
+					Material.PLAYER_HEAD,
+					"&b&l" + player.getName(),
+					"",
+					"&aCurrently tracking",
+					"&cRight-click to stop tracking",
+					"",
+					"&eLeft-click to request (already tracking)")
+					.skullOwner(player.getName()).make();
+		} else {
+			return ItemCreator.of(
+					Material.PLAYER_HEAD,
+					"&b&l" + player.getName(),
+					"",
+					"&7Not tracking",
+					"&eLeft-click to request tracking",
+					"",
+					"&eClick to track")
+					.skullOwner(player.getName()).make();
+		}
 	}
 
 	@Override
-	protected void onMenuClick(Player viewer, int slot, ItemStack clicked) {
+	protected void onMenuClick(Player viewer, int slot, ItemStack clicked, ClickType clickType) {
 		if (clicked == null)
 			return;
 
@@ -113,7 +133,30 @@ public class LocatorPlayersMenu extends SimpleMenu {
 			int playerIndex = currentPage * ITEMS_PER_PAGE + slot;
 			if (playerIndex < players.size()) {
 				Player clickedPlayer = players.get(playerIndex);
-				handlePlayerSelection(viewer, clickedPlayer);
+				PlayerCache cache = PlayerCache.from(viewer);
+				boolean isTracking = cache.getTrackedTarget(clickedPlayer.getUniqueId()) != null;
+
+				if (clickType == ClickType.RIGHT && isTracking) {
+					// Stop tracking this player
+					cache.removeTrackedPlayer(clickedPlayer.getUniqueId());
+					if (!WaypointColorManager.isAnyoneTracking(clickedPlayer.getUniqueId())) {
+						WaypointColorManager.clearPlayerWaypointColor(clickedPlayer);
+					}
+					if (!cache.isTracking()) {
+						TrackingRegistry.stopTracking(viewer.getUniqueId());
+						LocatorBarManager.disableReceive(viewer);
+						LocatorBarManager.clearTarget(viewer);
+					}
+					ColorUtil.sendMessage(viewer, "&aStopped tracking &3" + clickedPlayer.getName() + "&a.");
+					setupItems();
+				} else {
+					// Left-click: send tracking request (skip if already tracking)
+					if (isTracking) {
+						Messenger.info(viewer, "You are already tracking " + clickedPlayer.getName() + ".");
+						return;
+					}
+					handlePlayerSelection(viewer, clickedPlayer);
+				}
 			}
 		}
 	}

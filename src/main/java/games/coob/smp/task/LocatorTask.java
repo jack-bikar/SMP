@@ -4,16 +4,13 @@ import games.coob.smp.PlayerCache;
 import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
-import games.coob.smp.tracking.MarkerColor;
 import games.coob.smp.tracking.PortalCache;
-import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.WaypointPacketSender;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -160,10 +157,9 @@ public final class LocatorTask extends BukkitRunnable {
         boolean sameDimension = targetPlayer.getWorld().equals(tracker.getWorld());
 
         if (sameDimension) {
-            // Same dimension: enable transmit and set waypoint color to match menu
+            // Same dimension: enable transmit only (no team = default waypoint color, no name/tab change)
             target.setCachedPortalTarget(null);
             LocatorBarManager.enableTransmit(targetPlayer);
-            WaypointColorManager.setPlayerWaypointColor(targetPlayer, target.getColor());
             debug("Same dimension - tracking player directly: " + targetPlayer.getName());
         } else {
             // Different dimension: send synthetic waypoint for portal
@@ -208,10 +204,9 @@ public final class LocatorTask extends BukkitRunnable {
 
         if (focusedTarget != null) {
             // Show info about the focused target
-            String targetName;
             int distance;
             String direction;
-            TextColor color;
+            Component nameComponent;
 
             Location targetLoc = getTargetLocation(tracker, cache, focusedTarget);
             if (targetLoc != null) {
@@ -224,30 +219,30 @@ public final class LocatorTask extends BukkitRunnable {
 
             if (focusedTarget.isPlayer()) {
                 Player targetPlayer = Bukkit.getPlayer(focusedTarget.getTargetUUID());
-                targetName = targetPlayer != null ? targetPlayer.getName() : "Unknown";
-                MarkerColor markerColor = focusedTarget.getColor();
-                color = TextColor.color(markerColor.getRgb());
+                String targetName = targetPlayer != null ? targetPlayer.getName() : "Unknown";
 
                 boolean sameDimension = targetPlayer != null && targetPlayer.getWorld().equals(tracker.getWorld());
+                nameComponent = Component.text(targetName, NamedTextColor.WHITE);
                 if (!sameDimension && targetPlayer != null) {
-                    targetName += " &7(" + getDimensionName(targetPlayer.getWorld().getEnvironment()) + ")";
+                    nameComponent = nameComponent
+                            .append(Component.text(" (" + getDimensionName(targetPlayer.getWorld().getEnvironment()) + ")", NamedTextColor.GRAY));
                 }
             } else {
-                targetName = "Death Location";
-                color = TextColor.color(MarkerColor.DARK_RED.getRgb());
+                nameComponent = Component.text("Death Location", NamedTextColor.RED);
 
                 Location deathLoc = cache.getDeathLocation();
                 if (deathLoc != null && !deathLoc.getWorld().equals(tracker.getWorld())) {
-                    targetName += " &7(" + getDimensionName(deathLoc.getWorld().getEnvironment()) + ")";
+                    nameComponent = nameComponent
+                            .append(Component.text(" (" + getDimensionName(deathLoc.getWorld().getEnvironment()) + ")", NamedTextColor.GRAY));
                 }
             }
 
-            Component name = Component.text(targetName, color)
+            Component name = nameComponent
                     .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
                     .append(Component.text(distance + "m " + direction, NamedTextColor.GOLD));
 
             bossBar.name(name);
-            bossBar.color(toBossBarColor(focusedTarget));
+            bossBar.color(defaultBossBarColor(focusedTarget));
 
             // Progress based on distance (closer = more full, max 500m)
             float progress = Math.max(0.0f, Math.min(1.0f, 1.0f - (distance / 500.0f)));
@@ -265,18 +260,10 @@ public final class LocatorTask extends BukkitRunnable {
         tracker.showBossBar(bossBar);
     }
 
-    private BossBar.Color toBossBarColor(TrackedTarget target) {
+    /** Default boss bar color (no team = no menu color; use neutral default). */
+    private BossBar.Color defaultBossBarColor(TrackedTarget target) {
         if (target.isDeath()) return BossBar.Color.RED;
-
-        MarkerColor color = target.getColor();
-        return switch (color) {
-            case RED, DARK_RED -> BossBar.Color.RED;
-            case ORANGE, YELLOW -> BossBar.Color.YELLOW;
-            case LIME, GREEN -> BossBar.Color.GREEN;
-            case CYAN, LIGHT_BLUE, BLUE -> BossBar.Color.BLUE;
-            case PURPLE, MAGENTA, PINK -> BossBar.Color.PINK;
-            default -> BossBar.Color.WHITE;
-        };
+        return BossBar.Color.WHITE;
     }
 
     private void hideBossBar(Player player) {

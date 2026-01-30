@@ -15,6 +15,7 @@ import games.coob.smp.task.HologramTask;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
@@ -33,6 +34,9 @@ public final class SMPPlugin extends JavaPlugin {
 
         // Initialize waypoint packet sender (uses reflection, logs debug info)
         WaypointPacketSender.initialize();
+
+        // Reset any leftover name tag colors from previous runs
+        WaypointColorManager.resetAllNameTagColors();
 
         // Initialize registries
         SchedulerUtil.runLater(1, () -> {
@@ -73,6 +77,7 @@ public final class SMPPlugin extends JavaPlugin {
         PortalCache.clear();
         WaypointPacketSender.clearAll();
         LocatorTask.cleanupAll();
+        WaypointColorManager.resetAllNameTagColors();
 
         // Disable effects
         if (PluginUtil.isPluginEnabled("EffectLib")) {

@@ -230,7 +230,7 @@ public final class InvEditCommand implements CommandExecutor, TabCompleter {
 		}
 
 		@Override
-		protected void onMenuClick(final Player player, final int slot, final ItemStack clicked) {
+		protected void onMenuClick(final Player player, final int slot, final ItemStack clicked, final org.bukkit.event.inventory.ClickType clickType) {
             // Allow all interactions
 		}
 
@@ -349,7 +349,7 @@ public final class InvEditCommand implements CommandExecutor, TabCompleter {
 		}
 
 		@Override
-        protected void onMenuClick(final Player player, final int slot, final ItemStack clicked) {
+        protected void onMenuClick(final Player player, final int slot, final ItemStack clicked, final org.bukkit.event.inventory.ClickType clickType) {
             // Prevent interaction with filler slots
             if (slot >= 4 && slot < 8) {
                 return;

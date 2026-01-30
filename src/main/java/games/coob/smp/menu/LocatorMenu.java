@@ -1,9 +1,9 @@
 package games.coob.smp.menu;
 
-import games.coob.smp.PlayerCache;
 import games.coob.smp.util.ItemCreator;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
 
 /**
@@ -20,9 +20,6 @@ public final class LocatorMenu extends SimpleMenu {
     }
 
     private void setupItems(Player player) {
-        PlayerCache cache = PlayerCache.from(player);
-        int trackingCount = cache.getTrackedTargets().size();
-
         inventory.setItem(PLAYER_BUTTON_SLOT, ItemCreator.of(
                 Material.PLAYER_HEAD,
                 "&r&b&lTrack Player",
@@ -33,23 +30,21 @@ public final class LocatorMenu extends SimpleMenu {
                 "&r&eClick to open menu").make());
 
         inventory.setItem(INFO_BUTTON_SLOT, ItemCreator.of(
-                Material.BOOK,
-                "&r&e&lTracking Info",
+                Material.CLOCK,
+                "&r&e&lWho's tracking me",
                 "",
-                "&r&7View and manage your",
-                "&r&7currently tracked targets.",
+                "&r&7See who is tracking you.",
+                "&r&7Click to revoke.",
                 "",
-                "&r&7Currently tracking: &f" + trackingCount,
-                "",
-                "&r&eClick to view").make());
+                "&r&eClick to open").make());
     }
 
     @Override
-    protected void onMenuClick(Player player, int slot, ItemStack clicked) {
+    protected void onMenuClick(Player player, int slot, ItemStack clicked, ClickType clickType) {
         if (slot == PLAYER_BUTTON_SLOT) {
             LocatorPlayersMenu.openMenu(player);
         } else if (slot == INFO_BUTTON_SLOT) {
-            TrackingInfoMenu.openMenu(player);
+            WhoIsTrackingMeMenu.openMenu(player);
         }
     }
 

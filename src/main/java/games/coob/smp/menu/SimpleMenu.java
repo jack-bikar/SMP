@@ -7,6 +7,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
@@ -36,7 +37,7 @@ public abstract class SimpleMenu implements Listener {
 	public void onInventoryClick(InventoryClickEvent event) {
 		if (event.getWhoClicked() instanceof Player player && event.getInventory().equals(inventory)) {
 			event.setCancelled(true);
-			onMenuClick(player, event.getSlot(), event.getCurrentItem());
+			onMenuClick(player, event.getSlot(), event.getCurrentItem(), event.getClick());
 		}
 	}
 
@@ -47,7 +48,7 @@ public abstract class SimpleMenu implements Listener {
 		}
 	}
 
-	protected abstract void onMenuClick(Player player, int slot, ItemStack clicked);
+	protected abstract void onMenuClick(Player player, int slot, ItemStack clicked, ClickType clickType);
 
 	protected void onMenuClose(Player player, Inventory inventory) {
 	}

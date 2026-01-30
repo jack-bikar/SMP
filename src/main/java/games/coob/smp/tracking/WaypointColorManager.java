@@ -13,8 +13,9 @@ import java.util.UUID;
 
 /**
  * Applies waypoint colors on the locator bar to match the colors chosen in the
- * Tracking Info menu. Uses scoreboard teams: the locator bar displays a player's
- * waypoint in their team color.
+ * Tracking Info menu. Uses the main scoreboard; team color affects both the
+ * waypoint on the locator bar and the player's name tag/tab list while they
+ * are being tracked.
  */
 public final class WaypointColorManager {
 
@@ -25,25 +26,30 @@ public final class WaypointColorManager {
     private static final Map<UUID, MarkerColor> playerColor = new HashMap<>();
 
     static {
-        scoreboard = Bukkit.getScoreboardManager() != null
-                ? Bukkit.getScoreboardManager().getMainScoreboard()
-                : null;
+        if (Bukkit.getScoreboardManager() != null) {
+            scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        }
     }
 
     private WaypointColorManager() {
     }
 
-    private static Team getOrCreateTeam(MarkerColor color) {
-        if (scoreboard == null) {
+    private static Scoreboard getScoreboard() {
+        if (scoreboard == null && Bukkit.getScoreboardManager() != null) {
             scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         }
-        if (scoreboard == null) return null;
+        return scoreboard;
+    }
+
+    private static Team getOrCreateTeam(MarkerColor color) {
+        Scoreboard board = getScoreboard();
+        if (board == null) return null;
 
         return teamsByColor.computeIfAbsent(color, c -> {
             String name = TEAM_PREFIX + c.name();
-            Team team = scoreboard.getTeam(name);
+            Team team = board.getTeam(name);
             if (team == null) {
-                team = scoreboard.registerNewTeam(name);
+                team = board.registerNewTeam(name);
             }
             ChatColor chatColor = c.getChatColor();
             if (chatColor != null) {
@@ -54,18 +60,13 @@ public final class WaypointColorManager {
     }
 
     /**
-     * Set the waypoint color for a tracked player so it matches the menu.
-     * Call when the player is being tracked (same dimension) with the color
-     * chosen in Tracking Info.
+     * Set the waypoint color for a tracked player so the locator bar matches the menu.
      */
     public static void setPlayerWaypointColor(Player target, MarkerColor color) {
         if (target == null || color == null) return;
-        if (scoreboard == null) {
-            scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        }
-        if (scoreboard == null) return;
+        Scoreboard board = getScoreboard();
+        if (board == null) return;
 
-        // Remove from previous team if any
         MarkerColor previous = playerColor.get(target.getUniqueId());
         if (previous != null && previous != color) {
             Team oldTeam = teamsByColor.get(previous);
@@ -84,7 +85,7 @@ public final class WaypointColorManager {
     }
 
     /**
-     * Clear the waypoint color for a player when they are no longer tracked by anyone.
+     * Clear the waypoint/name tag color for a player when they are no longer tracked by anyone.
      */
     public static void clearPlayerWaypointColor(Player target) {
         if (target == null) return;
@@ -99,8 +100,24 @@ public final class WaypointColorManager {
     }
 
     /**
-     * Check if any tracker has this player in their tracked targets (for clearing color when last tracker stops).
+     * Remove all players from this plugin's tracking teams on the main scoreboard.
+     * Use this to reset name tag colors if they were left coloured after the plugin
+     * previously added players to teams.
      */
+    public static void resetAllNameTagColors() {
+        Scoreboard board = getScoreboard();
+        if (board == null) return;
+
+        for (Team team : board.getTeams()) {
+            if (team.getName().startsWith(TEAM_PREFIX)) {
+                for (String entry : new java.util.HashSet<>(team.getEntries())) {
+                    team.removeEntry(entry);
+                }
+            }
+        }
+        playerColor.clear();
+    }
+
     public static boolean isAnyoneTracking(UUID targetUUID) {
         return Bukkit.getOnlinePlayers().stream()
                 .anyMatch(tracker -> {
