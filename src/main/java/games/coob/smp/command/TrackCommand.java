@@ -4,6 +4,7 @@ import games.coob.smp.PlayerCache;
 import games.coob.smp.menu.LocatorMenu;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.TrackingRequestManager;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Bukkit;
@@ -24,6 +25,8 @@ import java.util.List;
  * Usage:
  *   /track - Opens the tracking menu
  *   /track death - Tracks your death location
+ *   /track accept <player> - Accept a tracking request (used by chat button)
+ *   /track deny <player> - Deny a tracking request (used by chat button)
  *   /track stop - Stop all tracking
  *   /track stop <player> - Stop tracking a specific player
  */
@@ -46,6 +49,20 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
 
         switch (subCommand) {
             case "death" -> handleDeathTracking(player);
+            case "accept" -> {
+                if (args.length < 2) {
+                    ColorUtil.sendMessage(sender, "&cUsage: /track accept <player>");
+                    return true;
+                }
+                TrackingRequestManager.getInstance().acceptRequest(player, args[1]);
+            }
+            case "deny" -> {
+                if (args.length < 2) {
+                    ColorUtil.sendMessage(sender, "&cUsage: /track deny <player>");
+                    return true;
+                }
+                TrackingRequestManager.getInstance().denyRequest(player, args[1]);
+            }
             case "stop" -> {
                 if (args.length >= 2) {
                     // Stop tracking specific player
@@ -55,7 +72,7 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
                     handleStopAllTracking(player);
                 }
             }
-            default -> ColorUtil.sendMessage(sender, "&cUnknown subcommand. Use: /track, /track death, /track stop");
+            default -> ColorUtil.sendMessage(sender, "&cUnknown subcommand. Use: /track, /track death, /track accept, /track deny, /track stop");
         }
 
         return true;
@@ -131,14 +148,16 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("death", "stop");
+            return Arrays.asList("death", "accept", "deny", "stop");
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("stop")) {
-            List<String> players = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                players.add(p.getName());
+        if (args.length == 2) {
+            if (args[0].equalsIgnoreCase("accept") || args[0].equalsIgnoreCase("deny") || args[0].equalsIgnoreCase("stop")) {
+                List<String> players = new ArrayList<>();
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    players.add(p.getName());
+                }
+                return players;
             }
-            return players;
         }
         return new ArrayList<>();
     }

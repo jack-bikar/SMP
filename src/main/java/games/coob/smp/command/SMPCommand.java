@@ -39,6 +39,8 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&e/track &7- Open tracking menu (alias: /tr)");
 		ColorUtil.sendMessage(sender, "&7  &7/track death &7- Track your death location");
+		ColorUtil.sendMessage(sender, "&7  &7/track accept <player> &7- Accept tracking request");
+		ColorUtil.sendMessage(sender, "&7  &7/track deny <player> &7- Deny tracking request");
 		ColorUtil.sendMessage(sender, "&7  &7/track stop &7- Stop all tracking");
 		ColorUtil.sendMessage(sender, "&7  &7/track stop <player> &7- Stop tracking specific player");
 		ColorUtil.sendMessage(sender, "");
