@@ -17,7 +17,7 @@ import java.util.logging.Level;
  */
 public final class WaypointPacketSender {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     // Track active synthetic waypoints per player (tracker UUID -> waypoint source
     // UUID)

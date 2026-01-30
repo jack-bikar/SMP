@@ -5,6 +5,7 @@ import games.coob.smp.menu.LocatorMenu;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Bukkit;
@@ -18,6 +19,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Main tracking command: /track (alias: /tr)
@@ -118,7 +120,12 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
         }
 
         cache.removeTrackedPlayer(target.getUniqueId());
-        
+
+        // Clear waypoint color if no one else is tracking this player
+        if (!WaypointColorManager.isAnyoneTracking(target.getUniqueId())) {
+            WaypointColorManager.clearPlayerWaypointColor(target);
+        }
+
         // If not tracking anything anymore, stop completely
         if (!cache.isTracking()) {
             TrackingRegistry.stopTracking(player.getUniqueId());
@@ -137,10 +144,19 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        // Clear tracking first, then clear waypoint colors for players no longer tracked by anyone
+        List<UUID> wasTracking = new ArrayList<>(cache.getTrackedPlayerUUIDs());
         cache.clearAllTracking();
         TrackingRegistry.stopTracking(player.getUniqueId());
         LocatorBarManager.disableReceive(player);
         LocatorBarManager.clearTarget(player);
+
+        for (UUID targetUUID : wasTracking) {
+            if (!WaypointColorManager.isAnyoneTracking(targetUUID)) {
+                Player t = Bukkit.getPlayer(targetUUID);
+                if (t != null) WaypointColorManager.clearPlayerWaypointColor(t);
+            }
+        }
 
         Messenger.success(player, "Stopped all tracking.");
     }

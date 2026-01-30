@@ -15,7 +15,7 @@ import java.util.logging.Level;
  */
 public final class LocatorBarManager {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final double WORLD_MAX = 6.0e7;
     private static final double NONE = 0.0;
 

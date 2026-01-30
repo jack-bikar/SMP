@@ -3,6 +3,7 @@ package games.coob.smp.menu;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.tracking.MarkerColor;
 import games.coob.smp.tracking.TrackedTarget;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Bukkit;
@@ -98,6 +99,11 @@ public class ColorPickerMenu extends SimpleMenu {
             PlayerCache cache = PlayerCache.from(viewer);
             cache.removeTrackedPlayer(targetPlayerUUID);
 
+            if (!WaypointColorManager.isAnyoneTracking(targetPlayerUUID)) {
+                Player targetPlayer = Bukkit.getPlayer(targetPlayerUUID);
+                if (targetPlayer != null) WaypointColorManager.clearPlayerWaypointColor(targetPlayer);
+            }
+
             Player targetPlayer = Bukkit.getPlayer(targetPlayerUUID);
             String targetName = targetPlayer != null ? targetPlayer.getName() : "Unknown";
             Messenger.success(viewer, "Stopped tracking " + targetName + ".");
@@ -114,7 +120,12 @@ public class ColorPickerMenu extends SimpleMenu {
                 PlayerCache cache = PlayerCache.from(viewer);
                 cache.setTrackedPlayerColor(targetPlayerUUID, selectedColor);
 
+                // Apply waypoint color immediately so locator bar matches menu
                 Player targetPlayer = Bukkit.getPlayer(targetPlayerUUID);
+                if (targetPlayer != null) {
+                    WaypointColorManager.setPlayerWaypointColor(targetPlayer, selectedColor);
+                }
+
                 String targetName = targetPlayer != null ? targetPlayer.getName() : "Unknown";
                 Messenger.success(viewer, "Changed " + targetName + "'s marker to " + selectedColor.getDisplayName() + "&a.");
 

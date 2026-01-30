@@ -31,7 +31,7 @@ import java.util.logging.Level;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class LocatorListener implements Listener {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final LocatorListener instance = new LocatorListener();
 
     public static LocatorListener getInstance() {

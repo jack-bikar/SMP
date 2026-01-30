@@ -9,6 +9,7 @@ import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.util.ColorUtil;
@@ -263,6 +264,9 @@ public final class SMPListener implements Listener { // TODO add the register ev
         // Remove from tracking registry and clean up boss bar
         TrackingRegistry.stopTracking(player.getUniqueId());
         LocatorTask.cleanupPlayer(player.getUniqueId());
+
+        // Clear waypoint color so locator bar doesn't keep our team color
+        WaypointColorManager.clearPlayerWaypointColor(player);
 
         // Disable waypoint transmission so others can't track this player anymore
         LocatorBarManager.disableTransmit(player);

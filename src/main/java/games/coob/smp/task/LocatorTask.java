@@ -6,6 +6,7 @@ import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.MarkerColor;
 import games.coob.smp.tracking.PortalCache;
+import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.WaypointPacketSender;
@@ -150,7 +151,7 @@ public final class LocatorTask extends BukkitRunnable {
         Player targetPlayer = Bukkit.getPlayer(target.getTargetUUID());
 
         if (targetPlayer == null || !targetPlayer.isOnline()) {
-            // Target went offline - remove from tracking
+            // Target went offline - remove from tracking (waypoint color cleared on quit)
             cache.removeTrackedPlayer(target.getTargetUUID());
             debug("Player target offline, removed from tracking");
             return;
@@ -159,9 +160,10 @@ public final class LocatorTask extends BukkitRunnable {
         boolean sameDimension = targetPlayer.getWorld().equals(tracker.getWorld());
 
         if (sameDimension) {
-            // Same dimension: enable transmit for target so they appear on locator bar
+            // Same dimension: enable transmit and set waypoint color to match menu
             target.setCachedPortalTarget(null);
             LocatorBarManager.enableTransmit(targetPlayer);
+            WaypointColorManager.setPlayerWaypointColor(targetPlayer, target.getColor());
             debug("Same dimension - tracking player directly: " + targetPlayer.getName());
         } else {
             // Different dimension: send synthetic waypoint for portal
