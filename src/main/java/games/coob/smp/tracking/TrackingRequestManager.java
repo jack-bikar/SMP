@@ -1,7 +1,9 @@
 package games.coob.smp.tracking;
 
 import games.coob.smp.PlayerCache;
-import games.coob.smp.tracking.WaypointColorManager;
+import games.coob.smp.task.LocatorTask;
+import games.coob.smp.tracking.LocatorBarManager;
+import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import net.kyori.adventure.text.Component;
@@ -147,10 +149,8 @@ public final class TrackingRequestManager {
             TrackingRegistry.stopTracking(tracker.getUniqueId());
             LocatorBarManager.disableReceive(tracker);
             LocatorBarManager.clearTarget(tracker);
-        }
-
-        if (!WaypointColorManager.isAnyoneTracking(target.getUniqueId())) {
-            WaypointColorManager.clearPlayerWaypointColor(target);
+            LocatorTask.cleanupPlayer(tracker.getUniqueId());
+            WaypointPacketSender.clearWaypoint(tracker);
         }
 
         ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &chas revoked your tracking.");
@@ -176,6 +176,8 @@ public final class TrackingRequestManager {
                     TrackingRegistry.stopTracking(trackerUUID);
                     LocatorBarManager.disableReceive(tracker);
                     LocatorBarManager.clearTarget(tracker);
+                    LocatorTask.cleanupPlayer(trackerUUID);
+                    WaypointPacketSender.clearWaypoint(tracker);
                 }
 
                 ColorUtil.sendMessage(tracker, "&c" + target.getName() + " &chas cancelled tracking.");

@@ -2,9 +2,11 @@ package games.coob.smp.command;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.menu.LocatorMenu;
+import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.Messenger;
 import org.bukkit.Bukkit;
@@ -123,6 +125,8 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
             TrackingRegistry.stopTracking(player.getUniqueId());
             LocatorBarManager.disableReceive(player);
             LocatorBarManager.clearTarget(player);
+            LocatorTask.cleanupPlayer(player.getUniqueId());
+            WaypointPacketSender.clearWaypoint(player);
         }
 
         ColorUtil.sendMessage(player, "&aStopped tracking &3" + target.getName() + "&a.");
@@ -140,6 +144,8 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
         TrackingRegistry.stopTracking(player.getUniqueId());
         LocatorBarManager.disableReceive(player);
         LocatorBarManager.clearTarget(player);
+        LocatorTask.cleanupPlayer(player.getUniqueId());
+        WaypointPacketSender.clearWaypoint(player);
 
         Messenger.success(player, "Stopped all tracking.");
     }

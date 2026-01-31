@@ -271,6 +271,7 @@ public final class LocatorTask extends BukkitRunnable {
         if (bossBar != null) {
             player.hideBossBar(bossBar);
         }
+        WaypointPacketSender.clearWaypoint(player);
         LocatorBarManager.disableReceive(player);
         LocatorBarManager.clearTarget(player);
     }

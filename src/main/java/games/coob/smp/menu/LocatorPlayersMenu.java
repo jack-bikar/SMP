@@ -1,10 +1,11 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.TrackingRequestManager;
-import games.coob.smp.tracking.WaypointColorManager;
+import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.ItemCreator;
 import games.coob.smp.util.Messenger;
@@ -139,13 +140,12 @@ public class LocatorPlayersMenu extends SimpleMenu {
 				if (clickType == ClickType.RIGHT && isTracking) {
 					// Stop tracking this player
 					cache.removeTrackedPlayer(clickedPlayer.getUniqueId());
-					if (!WaypointColorManager.isAnyoneTracking(clickedPlayer.getUniqueId())) {
-						WaypointColorManager.clearPlayerWaypointColor(clickedPlayer);
-					}
 					if (!cache.isTracking()) {
 						TrackingRegistry.stopTracking(viewer.getUniqueId());
 						LocatorBarManager.disableReceive(viewer);
 						LocatorBarManager.clearTarget(viewer);
+						LocatorTask.cleanupPlayer(viewer.getUniqueId());
+						WaypointPacketSender.clearWaypoint(viewer);
 					}
 					ColorUtil.sendMessage(viewer, "&aStopped tracking &3" + clickedPlayer.getName() + "&a.");
 					setupItems();

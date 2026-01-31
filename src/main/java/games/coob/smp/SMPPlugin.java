@@ -62,8 +62,8 @@ public final class SMPPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
 
-        // Start tasks
-        SchedulerUtil.runTimer(20, new LocatorTask());
+        // Start tasks (40 ticks = 2 seconds for locator updates)
+        SchedulerUtil.runTimer(40, new LocatorTask());
         SchedulerUtil.runTimer(20, new HologramTask());
     }
 

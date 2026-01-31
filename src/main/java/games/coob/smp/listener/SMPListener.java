@@ -11,6 +11,7 @@ import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.EntityUtil;
 import games.coob.smp.util.PluginUtil;
@@ -48,8 +49,9 @@ public final class SMPListener implements Listener { // TODO add the register ev
         PlayerCache cache = PlayerCache.from(player);
 
         // Hide locator bar by default (will be enabled when tracking starts)
+        // Use direct API here since this is a fresh join - no other players affected
         if (Settings.LocatorSection.ENABLE_TRACKING) {
-            LocatorBarManager.disableReceive(player);
+            LocatorBarManager.disableReceiveDirect(player);
 
             // If player was tracking something, re-register them and show the bar immediately
             if (cache.isTracking()) {
@@ -264,6 +266,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
         // Remove from tracking registry and clean up boss bar
         TrackingRegistry.stopTracking(player.getUniqueId());
         LocatorTask.cleanupPlayer(player.getUniqueId());
+        LocatorBarManager.cleanupPlayer(player.getUniqueId());
 
         // Disable waypoint transmission so others can't track this player anymore
         LocatorBarManager.disableTransmit(player);
@@ -287,6 +290,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
                     TrackingRegistry.stopTracking(trackerUUID);
                     LocatorBarManager.disableReceive(tracker);
                     LocatorBarManager.clearTarget(tracker);
+                    LocatorTask.cleanupPlayer(trackerUUID);
+                    WaypointPacketSender.clearWaypoint(tracker);
                 }
             }
         }
