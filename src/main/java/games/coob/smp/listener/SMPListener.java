@@ -55,7 +55,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
             LocatorBarManager.disableReceive(player);
             LocatorBarManager.disableTransmit(player);
 
-            // If player was tracking something, re-register them and show the bar immediately
+            // If player was tracking something, re-register them and show the bar
+            // immediately
             if (cache.isTracking()) {
                 TrackingRegistry.startTracking(player.getUniqueId());
                 LocatorBarManager.enableReceive(player);
@@ -146,6 +147,9 @@ public final class SMPListener implements Listener { // TODO add the register ev
     public void onPlayerDeath(final PlayerDeathEvent event) {
         final Player player = event.getEntity();
         final Location location = player.getLocation().clone().add(0, 1, 0);
+
+        // Always set death location for /track death (independent of death storage)
+        PlayerCache.from(player).setDeathLocation(player.getLocation());
 
         // TODO only use if the server has the EffectLib plugin
         if (Settings.DeathEffectSection.ENABLE_DEATH_EFFECTS && PluginUtil.isPluginEnabled("EffectLib")) {
@@ -273,7 +277,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
         // Disable waypoint transmission so others can't track this player anymore
         LocatorBarManager.disableTransmit(player);
 
-        // Notify players who were tracking this player (using new multi-tracking system)
+        // Notify players who were tracking this player (using new multi-tracking
+        // system)
         for (java.util.UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
             Player tracker = Bukkit.getPlayer(trackerUUID);
             if (tracker == null || !tracker.isOnline())
