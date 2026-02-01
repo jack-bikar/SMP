@@ -57,19 +57,27 @@ public final class DeathChestListener implements Listener {
 
 	@EventHandler
 	public void onPlayerDeath(final PlayerDeathEvent event) {
-		if (Settings.DeathStorageSection.ENABLE_DEATH_STORAGE) {
-			final Player player = event.getEntity();
+		if (!Settings.DeathStorageSection.ENABLE_DEATH_STORAGE) {
+			return;
+		}
+		final Player player = event.getEntity();
+		// Don't spawn death chest when inventory is empty
+		if (player.getInventory().isEmpty()) {
+			return;
+		}
+		final ItemStack[] drops = Stream.of(player.getInventory().getContents())
+				.filter(Objects::nonNull)
+				.filter(item -> item.getType() != Material.AIR)
+				.toArray(ItemStack[]::new);
+		if (drops.length == 0) {
+			return;
+		}
+		{
 			final Location location = player.getLocation();
 			final Block block = location.getBlock();
 			final PlayerCache cache = PlayerCache.from(player);
 			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
 			final BukkitHologram hologram = HologramProvider.createHologram();
-			final ItemStack[] drops = Stream.of(player.getInventory().getContents()) // Create a stream of ItemStack
-					.filter(Objects::nonNull) // Filter all non null values (removing empty slot)
-					.toArray(ItemStack[]::new); // Convert the result to ItemStack array
-
-			if (player.getInventory().isEmpty())
-				return;
 
 			if (player.getWorld().getEnvironment() == World.Environment.NORMAL)
 				cache.setDeathLocation(location);
@@ -104,7 +112,8 @@ public final class DeathChestListener implements Listener {
 
 			for (final Player closePlayer : Bukkit.getOnlinePlayers()) {
 				if (closePlayer.getWorld().equals(block.getWorld())
-						&& closePlayer.getLocation().distance(hologramLocation) <= Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE) {
+						&& closePlayer.getLocation()
+								.distance(hologramLocation) <= Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE) {
 					hologram.show(hologramLocation, closePlayer, hologramLine);
 				}
 			}
