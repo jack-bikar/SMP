@@ -18,9 +18,9 @@ import java.util.logging.Level;
  * Manages the Player Locator Bar visibility and targeting.
  * Uses waypoint attributes (1.21.5+) to control visibility.
  * 
- * Uses AttributeModifiers instead of base value changes to avoid the server
- * broadcasting attribute updates to all players (which would hide everyone's bar).
- * Modifiers are per-player and don't trigger global broadcasts.
+ * Strategy: Set base values ONCE on player join (initializePlayer), then only
+ * toggle visibility via AttributeModifiers. This avoids repeated base value
+ * broadcasts that can cause issues.
  */
 public final class LocatorBarManager {
 
@@ -34,7 +34,9 @@ public final class LocatorBarManager {
     private static NamespacedKey disableReceiveKey;
     private static NamespacedKey disableTransmitKey;
 
-    // Track who has receive/transmit enabled to avoid redundant updates
+    // Track which players have been initialized (base values set)
+    private static final Set<UUID> initialized = ConcurrentHashMap.newKeySet();
+    // Skip redundant enable/disable calls (LocatorTask runs every ~2s)
     private static final Set<UUID> receiveEnabled = ConcurrentHashMap.newKeySet();
     private static final Set<UUID> transmitEnabled = ConcurrentHashMap.newKeySet();
 
@@ -76,32 +78,56 @@ public final class LocatorBarManager {
     }
 
     // -------------------------------------------------------------------------
+    // Initialization (call once on player join)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Initialize waypoint attributes for a player. Call once on join.
+     * Sets base values to WORLD_MAX so modifiers can toggle visibility.
+     */
+    public static void initializePlayer(Player player) {
+        if (player == null)
+            return;
+        if (!initialized.add(player.getUniqueId())) {
+            debug("initializePlayer: " + player.getName() + " already initialized");
+            return;
+        }
+
+        // Set base values once - this broadcasts but only happens on join
+        if (WAYPOINT_RECEIVE_RANGE != null) {
+            setBaseValue(player, WAYPOINT_RECEIVE_RANGE, WORLD_MAX);
+            debug("initializePlayer: " + player.getName() + " receive base set to " + WORLD_MAX);
+        }
+        if (WAYPOINT_TRANSMIT_RANGE != null) {
+            setBaseValue(player, WAYPOINT_TRANSMIT_RANGE, WORLD_MAX);
+            debug("initializePlayer: " + player.getName() + " transmit base set to " + WORLD_MAX);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Receive (can this player SEE the locator bar?)
     // -------------------------------------------------------------------------
 
     /**
      * Enable the locator bar for this player (allow receiving waypoints).
-     * Sets base value to WORLD_MAX and removes any disable modifier.
+     * Removes the disable modifier, restoring the base value.
      */
     public static void enableReceive(Player player) {
         if (player == null || WAYPOINT_RECEIVE_RANGE == null) return;
-        if (receiveEnabled.add(player.getUniqueId())) {
-            removeDisableModifier(player, WAYPOINT_RECEIVE_RANGE, getDisableReceiveKey());
-            setBaseValue(player, WAYPOINT_RECEIVE_RANGE, WORLD_MAX);
-            debug("enableReceive: " + player.getName() + " - set base to " + WORLD_MAX);
-        }
+        if (!receiveEnabled.add(player.getUniqueId())) return; // Already enabled, skip
+        removeDisableModifier(player, WAYPOINT_RECEIVE_RANGE, getDisableReceiveKey());
+        debug("enableReceive: " + player.getName());
     }
 
     /**
      * Disable the locator bar for this player (hide the bar).
      * Adds a modifier that multiplies the effective value by 0.
-     * This is per-player and doesn't broadcast to other players.
      */
     public static void disableReceive(Player player) {
         if (player == null || WAYPOINT_RECEIVE_RANGE == null) return;
         receiveEnabled.remove(player.getUniqueId());
         addDisableModifier(player, WAYPOINT_RECEIVE_RANGE, getDisableReceiveKey());
-        debug("disableReceive: " + player.getName() + " - added disable modifier");
+        debug("disableReceive: " + player.getName());
     }
 
     /**
@@ -118,15 +144,13 @@ public final class LocatorBarManager {
 
     /**
      * Enable waypoint transmission (this player becomes visible on others' bars).
-     * Sets base value to WORLD_MAX and removes any disable modifier.
+     * Removes the disable modifier, restoring the base value.
      */
     public static void enableTransmit(Player player) {
         if (player == null || WAYPOINT_TRANSMIT_RANGE == null) return;
-        if (transmitEnabled.add(player.getUniqueId())) {
-            removeDisableModifier(player, WAYPOINT_TRANSMIT_RANGE, getDisableTransmitKey());
-            setBaseValue(player, WAYPOINT_TRANSMIT_RANGE, WORLD_MAX);
-            debug("enableTransmit: " + player.getName() + " - set base to " + WORLD_MAX);
-        }
+        if (!transmitEnabled.add(player.getUniqueId())) return; // Already enabled, skip
+        removeDisableModifier(player, WAYPOINT_TRANSMIT_RANGE, getDisableTransmitKey());
+        debug("enableTransmit: " + player.getName());
     }
 
     /**
@@ -137,13 +161,14 @@ public final class LocatorBarManager {
         if (player == null || WAYPOINT_TRANSMIT_RANGE == null) return;
         transmitEnabled.remove(player.getUniqueId());
         addDisableModifier(player, WAYPOINT_TRANSMIT_RANGE, getDisableTransmitKey());
-        debug("disableTransmit: " + player.getName() + " - added disable modifier");
+        debug("disableTransmit: " + player.getName());
     }
 
     /**
      * Clean up tracking state for a player (call on quit).
      */
     public static void cleanupPlayer(UUID playerUUID) {
+        initialized.remove(playerUUID);
         receiveEnabled.remove(playerUUID);
         transmitEnabled.remove(playerUUID);
     }
@@ -185,7 +210,8 @@ public final class LocatorBarManager {
 
     /** Set base attribute value (used when enabling). */
     private static void setBaseValue(Player player, Attribute attribute, double value) {
-        if (player == null || attribute == null) return;
+        if (player == null || attribute == null)
+            return;
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance != null) {
             instance.setBaseValue(value);
@@ -197,26 +223,22 @@ public final class LocatorBarManager {
      * Uses MULTIPLY_SCALAR_1 with -1, which makes effective = base * (1 + -1) = 0.
      */
     private static void addDisableModifier(Player player, Attribute attribute, NamespacedKey key) {
-        if (player == null || attribute == null) return;
+        if (player == null || attribute == null)
+            return;
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance == null) {
             debug("addDisableModifier: No attribute instance for " + attribute.name());
             return;
         }
 
-        // Remove existing modifier first (in case it's already there)
         AttributeModifier existing = instance.getModifier(key);
-        if (existing != null) {
-            debug("addDisableModifier: Modifier already exists for " + player.getName());
-            return;
-        }
+        if (existing != null) return; // Already disabled (idempotent)
 
         // Add modifier: MULTIPLY_SCALAR_1 with -1 makes effective value = base * 0 = 0
         AttributeModifier modifier = new AttributeModifier(
                 key,
                 -1.0, // amount: -1 means multiply by (1 + -1) = 0
-                AttributeModifier.Operation.MULTIPLY_SCALAR_1
-        );
+                AttributeModifier.Operation.MULTIPLY_SCALAR_1);
         instance.addModifier(modifier);
         debug("addDisableModifier: Added for " + player.getName() + ", effective value now: " + instance.getValue());
     }
@@ -225,7 +247,8 @@ public final class LocatorBarManager {
      * Remove the disable modifier, restoring the base value.
      */
     private static void removeDisableModifier(Player player, Attribute attribute, NamespacedKey key) {
-        if (player == null || attribute == null) return;
+        if (player == null || attribute == null)
+            return;
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance == null) {
             debug("removeDisableModifier: No attribute instance for " + attribute.name());
@@ -235,10 +258,10 @@ public final class LocatorBarManager {
         AttributeModifier existing = instance.getModifier(key);
         if (existing != null) {
             instance.removeModifier(existing);
-            debug("removeDisableModifier: Removed for " + player.getName() + ", effective value now: " + instance.getValue());
-        } else {
-            debug("removeDisableModifier: No modifier to remove for " + player.getName());
+            debug("removeDisableModifier: Removed for " + player.getName() + ", effective value now: "
+                    + instance.getValue());
         }
+        // No modifier = already enabled (normal when LocatorTask calls enable every run)
     }
 
     private static void debug(String message) {

@@ -16,15 +16,16 @@ import java.util.*;
 
 /**
  * Hologram implementation using Paper 1.21+ API
- * Uses ArmorStands with Paper's showEntity/hideEntity API for per-player visibility
+ * Uses ArmorStands with Paper's showEntity/hideEntity API for per-player
+ * visibility
  */
 public class BukkitHologram implements Serializable {
 
 	@Getter
-    private final UUID uniqueId;
+	private final UUID uniqueId;
 	private Location location;
 	@Setter
-    private String[] lines;
+	private String[] lines;
 	private final List<ArmorStand> armorStands = new ArrayList<>();
 	private final Set<Player> visibleToPlayers = new HashSet<>();
 
@@ -40,10 +41,12 @@ public class BukkitHologram implements Serializable {
 
 	/**
 	 * Initialize hologram location and armor stands without showing to any player.
-	 * Used for non-persistent holograms that are shown only when players enter range.
+	 * Used for non-persistent holograms that are shown only when players enter
+	 * range.
 	 */
 	public void ensureCreated(Location location, String... linesOfText) {
-		if (this.location != null) return;
+		if (this.location != null)
+			return;
 		this.location = location.clone();
 		this.lines = linesOfText;
 		Location currentLoc = location.clone();
@@ -51,7 +54,7 @@ public class BukkitHologram implements Serializable {
 			ArmorStand stand = location.getWorld().spawn(currentLoc, ArmorStand.class, as -> {
 				as.setVisible(false);
 				as.setGravity(false);
-				as.setCustomName(ColorUtil.colorize(line));
+				as.customName(ColorUtil.toComponent(line));
 				as.setCustomNameVisible(true);
 				as.setMarker(true);
 				as.setSmall(true);
@@ -74,7 +77,7 @@ public class BukkitHologram implements Serializable {
 				ArmorStand stand = location.getWorld().spawn(currentLoc, ArmorStand.class, as -> {
 					as.setVisible(false);
 					as.setGravity(false);
-					as.setCustomName(ColorUtil.colorize(line));
+					as.customName(ColorUtil.toComponent(line));
 					as.setCustomNameVisible(true);
 					as.setMarker(true);
 					as.setSmall(true);
@@ -102,7 +105,8 @@ public class BukkitHologram implements Serializable {
 			return;
 
 		// Hide all armor stands from this player using Paper 1.21+ API
-		// Note: hideEntity is deprecated but still the standard way for per-player visibility in Paper
+		// Note: hideEntity is deprecated but still the standard way for per-player
+		// visibility in Paper
 		for (ArmorStand stand : armorStands) {
 			player.hideEntity(SMPPlugin.getInstance(), stand);
 		}
@@ -131,15 +135,14 @@ public class BukkitHologram implements Serializable {
 		armorStands.clear();
 	}
 
-    public Location getLocation() {
+	public Location getLocation() {
 		ValidationUtil.checkBoolean(location != null, "Cannot call getLocation when location is not set");
 		return location.clone();
 	}
 
-    public String[] getLines() {
+	public String[] getLines() {
 		return lines != null ? lines.clone() : new String[0];
 	}
-
 
 	@Override
 	public Map<String, Object> serialize() {

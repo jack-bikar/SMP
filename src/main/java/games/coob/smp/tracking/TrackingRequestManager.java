@@ -100,7 +100,9 @@ public final class TrackingRequestManager {
         TrackingRegistry.startTracking(tracker.getUniqueId());
 
         // Enable locator bar - LocatorTask will handle targeting
-        LocatorBarManager.enableTransmit(target);
+        if (!WaypointPacketSender.isAvailable()) {
+            LocatorBarManager.enableTransmit(target);
+        }
         LocatorBarManager.enableReceive(tracker);
 
         // Set initial target (same dimension = direct, different = task will handle portal)
@@ -144,6 +146,8 @@ public final class TrackingRequestManager {
     public void revokeTracker(Player target, Player tracker) {
         PlayerCache cache = PlayerCache.from(tracker);
         cache.removeTrackedPlayer(target.getUniqueId());
+        WaypointPacketSender.removeWaypoint(tracker,
+                WaypointPacketSender.generateWaypointId(tracker.getUniqueId(), target.getUniqueId()));
 
         if (!cache.isTracking()) {
             TrackingRegistry.stopTracking(tracker.getUniqueId());
@@ -170,6 +174,8 @@ public final class TrackingRequestManager {
 
             if (trackedTarget != null) {
                 cache.removeTrackedPlayer(target.getUniqueId());
+                WaypointPacketSender.removeWaypoint(tracker,
+                        WaypointPacketSender.generateWaypointId(trackerUUID, target.getUniqueId()));
 
                 // If not tracking anything anymore, stop completely
                 if (!cache.isTracking()) {

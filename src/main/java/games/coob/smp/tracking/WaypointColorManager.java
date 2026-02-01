@@ -1,8 +1,8 @@
 package games.coob.smp.tracking;
 
 import games.coob.smp.PlayerCache;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
@@ -43,7 +43,8 @@ public final class WaypointColorManager {
 
     private static Team getOrCreateTeam(MarkerColor color) {
         Scoreboard board = getScoreboard();
-        if (board == null) return null;
+        if (board == null)
+            return null;
 
         return teamsByColor.computeIfAbsent(color, c -> {
             String name = TEAM_PREFIX + c.name();
@@ -51,21 +52,24 @@ public final class WaypointColorManager {
             if (team == null) {
                 team = board.registerNewTeam(name);
             }
-            ChatColor chatColor = c.getChatColor();
-            if (chatColor != null) {
-                team.setColor(chatColor);
+            NamedTextColor textColor = c.getTextColor();
+            if (textColor != null) {
+                team.color(textColor);
             }
             return team;
         });
     }
 
     /**
-     * Set the waypoint color for a tracked player so the locator bar matches the menu.
+     * Set the waypoint color for a tracked player so the locator bar matches the
+     * menu.
      */
     public static void setPlayerWaypointColor(Player target, MarkerColor color) {
-        if (target == null || color == null) return;
+        if (target == null || color == null)
+            return;
         Scoreboard board = getScoreboard();
-        if (board == null) return;
+        if (board == null)
+            return;
 
         MarkerColor previous = playerColor.get(target.getUniqueId());
         if (previous != null && previous != color) {
@@ -85,10 +89,12 @@ public final class WaypointColorManager {
     }
 
     /**
-     * Clear the waypoint/name tag color for a player when they are no longer tracked by anyone.
+     * Clear the waypoint/name tag color for a player when they are no longer
+     * tracked by anyone.
      */
     public static void clearPlayerWaypointColor(Player target) {
-        if (target == null) return;
+        if (target == null)
+            return;
 
         MarkerColor current = playerColor.remove(target.getUniqueId());
         if (current != null) {
@@ -106,7 +112,8 @@ public final class WaypointColorManager {
      */
     public static void resetAllNameTagColors() {
         Scoreboard board = getScoreboard();
-        if (board == null) return;
+        if (board == null)
+            return;
 
         for (Team team : board.getTeams()) {
             if (team.getName().startsWith(TEAM_PREFIX)) {

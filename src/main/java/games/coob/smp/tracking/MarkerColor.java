@@ -1,6 +1,6 @@
 package games.coob.smp.tracking;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 
 /**
@@ -8,35 +8,35 @@ import org.bukkit.Material;
  * Used for the Tracking Info menu and for scoreboard team waypoint colors.
  */
 public enum MarkerColor {
-    WHITE(Material.WHITE_WOOL, "&fWhite", 0xFFFFFF, ChatColor.WHITE),
-    ORANGE(Material.ORANGE_WOOL, "&6Orange", 0xD87F33, ChatColor.GOLD),
-    MAGENTA(Material.MAGENTA_WOOL, "&dMagenta", 0xB24CD8, ChatColor.LIGHT_PURPLE),
-    LIGHT_BLUE(Material.LIGHT_BLUE_WOOL, "&bLight Blue", 0x6699D8, ChatColor.AQUA),
-    YELLOW(Material.YELLOW_WOOL, "&eYellow", 0xE5E533, ChatColor.YELLOW),
-    LIME(Material.LIME_WOOL, "&aLime", 0x7FCC19, ChatColor.GREEN),
-    PINK(Material.PINK_WOOL, "&dPink", 0xF27FA5, ChatColor.LIGHT_PURPLE),
-    GRAY(Material.GRAY_WOOL, "&8Gray", 0x4C4C4C, ChatColor.DARK_GRAY),
-    LIGHT_GRAY(Material.LIGHT_GRAY_WOOL, "&7Light Gray", 0x999999, ChatColor.GRAY),
-    CYAN(Material.CYAN_WOOL, "&3Cyan", 0x4C7F99, ChatColor.DARK_AQUA),
-    PURPLE(Material.PURPLE_WOOL, "&5Purple", 0x7F3FB2, ChatColor.DARK_PURPLE),
-    BLUE(Material.BLUE_WOOL, "&9Blue", 0x334CB2, ChatColor.BLUE),
-    BROWN(Material.BROWN_WOOL, "&6Brown", 0x664C33, ChatColor.GOLD),
-    GREEN(Material.GREEN_WOOL, "&2Green", 0x667F33, ChatColor.DARK_GREEN),
-    RED(Material.RED_WOOL, "&cRed", 0x993333, ChatColor.RED),
-    BLACK(Material.BLACK_WOOL, "&0Black", 0x191919, ChatColor.BLACK),
+    WHITE(Material.WHITE_WOOL, "&fWhite", 0xFFFFFF, NamedTextColor.WHITE),
+    ORANGE(Material.ORANGE_WOOL, "&6Orange", 0xD87F33, NamedTextColor.GOLD),
+    MAGENTA(Material.MAGENTA_WOOL, "&dMagenta", 0xB24CD8, NamedTextColor.LIGHT_PURPLE),
+    LIGHT_BLUE(Material.LIGHT_BLUE_WOOL, "&bLight Blue", 0x6699D8, NamedTextColor.AQUA),
+    YELLOW(Material.YELLOW_WOOL, "&eYellow", 0xE5E533, NamedTextColor.YELLOW),
+    LIME(Material.LIME_WOOL, "&aLime", 0x7FCC19, NamedTextColor.GREEN),
+    PINK(Material.PINK_WOOL, "&dPink", 0xF27FA5, NamedTextColor.LIGHT_PURPLE),
+    GRAY(Material.GRAY_WOOL, "&8Gray", 0x4C4C4C, NamedTextColor.DARK_GRAY),
+    LIGHT_GRAY(Material.LIGHT_GRAY_WOOL, "&7Light Gray", 0x999999, NamedTextColor.GRAY),
+    CYAN(Material.CYAN_WOOL, "&3Cyan", 0x4C7F99, NamedTextColor.DARK_AQUA),
+    PURPLE(Material.PURPLE_WOOL, "&5Purple", 0x7F3FB2, NamedTextColor.DARK_PURPLE),
+    BLUE(Material.BLUE_WOOL, "&9Blue", 0x334CB2, NamedTextColor.BLUE),
+    BROWN(Material.BROWN_WOOL, "&6Brown", 0x664C33, NamedTextColor.GOLD),
+    GREEN(Material.GREEN_WOOL, "&2Green", 0x667F33, NamedTextColor.DARK_GREEN),
+    RED(Material.RED_WOOL, "&cRed", 0x993333, NamedTextColor.RED),
+    BLACK(Material.BLACK_WOOL, "&0Black", 0x191919, NamedTextColor.BLACK),
     // Special color for death tracking (always dark red)
-    DARK_RED(Material.RED_WOOL, "&4Dark Red", 0x660000, ChatColor.DARK_RED);
+    DARK_RED(Material.RED_WOOL, "&4Dark Red", 0x660000, NamedTextColor.DARK_RED);
 
     private final Material woolMaterial;
     private final String displayName;
     private final int rgb;
-    private final ChatColor chatColor;
+    private final NamedTextColor textColor;
 
-    MarkerColor(Material woolMaterial, String displayName, int rgb, ChatColor chatColor) {
+    MarkerColor(Material woolMaterial, String displayName, int rgb, NamedTextColor textColor) {
         this.woolMaterial = woolMaterial;
         this.displayName = displayName;
         this.rgb = rgb;
-        this.chatColor = chatColor;
+        this.textColor = textColor;
     }
 
     public Material getWoolMaterial() {
@@ -64,10 +64,11 @@ public enum MarkerColor {
     }
 
     /**
-     * Get the Bukkit ChatColor for this marker (used for scoreboard team waypoint color).
+     * Get the Adventure NamedTextColor for this marker (used for scoreboard team
+     * waypoint color).
      */
-    public ChatColor getChatColor() {
-        return chatColor;
+    public NamedTextColor getTextColor() {
+        return textColor;
     }
 
     /**
@@ -87,8 +88,8 @@ public enum MarkerColor {
      */
     public static MarkerColor getDefault(int index) {
         MarkerColor[] playerColors = {
-            WHITE, ORANGE, MAGENTA, LIGHT_BLUE, YELLOW, LIME, PINK,
-            CYAN, PURPLE, BLUE, GREEN, RED
+                WHITE, ORANGE, MAGENTA, LIGHT_BLUE, YELLOW, LIME, PINK,
+                CYAN, PURPLE, BLUE, GREEN, RED
         };
         return playerColors[index % playerColors.length];
     }

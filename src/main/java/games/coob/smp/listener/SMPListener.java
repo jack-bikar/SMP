@@ -48,10 +48,12 @@ public final class SMPListener implements Listener { // TODO add the register ev
         final Player player = event.getPlayer();
         PlayerCache cache = PlayerCache.from(player);
 
-        // Hide locator bar by default (will be enabled when tracking starts)
-        // Use direct API here since this is a fresh join - no other players affected
+        // Initialize waypoint attributes (sets base values once)
+        // Then hide locator bar by default (will be enabled when tracking starts)
         if (Settings.LocatorSection.ENABLE_TRACKING) {
-            LocatorBarManager.disableReceiveDirect(player);
+            LocatorBarManager.initializePlayer(player);
+            LocatorBarManager.disableReceive(player);
+            LocatorBarManager.disableTransmit(player);
 
             // If player was tracking something, re-register them and show the bar immediately
             if (cache.isTracking()) {
@@ -283,6 +285,8 @@ public final class SMPListener implements Listener { // TODO add the register ev
             if (target != null) {
                 // Remove the offline player from tracking
                 trackerCache.removeTrackedPlayer(player.getUniqueId());
+                WaypointPacketSender.removeWaypoint(tracker,
+                        WaypointPacketSender.generateWaypointId(trackerUUID, player.getUniqueId()));
                 ColorUtil.sendMessage(tracker, "&c" + player.getName() + " &chas gone offline. Tracking stopped.");
 
                 // If not tracking anything anymore, stop completely

@@ -6,22 +6,26 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
- * Sends synthetic waypoint packets to players for cross-dimension tracking.
+ * Sends synthetic waypoint packets to players for per-player tracking.
  * Uses reflection to access NMS ClientboundTrackedWaypointPacket.
  */
 public final class WaypointPacketSender {
 
     private static final boolean DEBUG = false;
 
-    // Track active synthetic waypoints per player (tracker UUID -> waypoint source
-    // UUID)
-    private static final Map<UUID, UUID> ACTIVE_WAYPOINTS = new ConcurrentHashMap<>();
+    // UUID namespace for synthetic waypoints
+    private static final UUID WAYPOINT_NAMESPACE = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    // Track active synthetic waypoints per player (tracker UUID -> waypoint IDs)
+    private static final Map<UUID, Set<UUID>> ACTIVE_WAYPOINTS = new ConcurrentHashMap<>();
 
     // Reflection cache
     private static Class<?> packetClass;
@@ -169,6 +173,15 @@ public final class WaypointPacketSender {
     }
 
     /**
+     * Generate a deterministic waypoint id for a tracker-target pair.
+     */
+    public static UUID generateWaypointId(UUID trackerUUID, UUID targetUUID) {
+        return new UUID(
+                WAYPOINT_NAMESPACE.getMostSignificantBits() ^ trackerUUID.getMostSignificantBits(),
+                WAYPOINT_NAMESPACE.getLeastSignificantBits() ^ targetUUID.getLeastSignificantBits());
+    }
+
+    /**
      * Send a waypoint at the specified location to the player.
      * Creates or updates the waypoint.
      *
@@ -187,32 +200,33 @@ public final class WaypointPacketSender {
                 return false;
             }
 
-            Object packet;
-            UUID existingWaypoint = ACTIVE_WAYPOINTS.get(player.getUniqueId());
+            Set<UUID> active = ACTIVE_WAYPOINTS.computeIfAbsent(player.getUniqueId(),
+                    k -> ConcurrentHashMap.newKeySet());
+            boolean existing = active.contains(waypointId);
 
-            if (existingWaypoint != null && existingWaypoint.equals(waypointId)) {
+            Object packet;
+            if (existing) {
                 // Update existing waypoint
                 if (updateWaypointMethod != null) {
                     packet = updateWaypointMethod.invoke(null, waypointId, defaultIcon, vec3i);
                     debug("Updating waypoint for " + player.getName() + " at " + formatLocation(location));
                 } else {
-                    // Fallback: remove and re-add
-                    removeWaypoint(player, waypointId);
+                    // Fallback: remove and re-add this waypoint
+                    if (removeWaypointMethod != null) {
+                        Object removePacket = removeWaypointMethod.invoke(null, waypointId);
+                        sendPacket(player, removePacket);
+                    }
                     packet = addWaypointMethod.invoke(null, waypointId, defaultIcon, vec3i);
                     debug("Re-adding waypoint for " + player.getName() + " at " + formatLocation(location));
                 }
             } else {
-                // Remove old waypoint if exists
-                if (existingWaypoint != null) {
-                    removeWaypoint(player, existingWaypoint);
-                }
                 // Add new waypoint
                 packet = addWaypointMethod.invoke(null, waypointId, defaultIcon, vec3i);
-                ACTIVE_WAYPOINTS.put(player.getUniqueId(), waypointId);
                 debug("Adding new waypoint for " + player.getName() + " at " + formatLocation(location));
             }
 
             sendPacket(player, packet);
+            active.add(waypointId);
             return true;
 
         } catch (Exception e) {
@@ -226,6 +240,14 @@ public final class WaypointPacketSender {
      * Remove the waypoint from the player.
      */
     public static void removeWaypoint(Player player, UUID waypointId) {
+        Set<UUID> active = ACTIVE_WAYPOINTS.get(player.getUniqueId());
+        if (active != null) {
+            active.remove(waypointId);
+            if (active.isEmpty()) {
+                ACTIVE_WAYPOINTS.remove(player.getUniqueId());
+            }
+        }
+
         if (!isAvailable() || removeWaypointMethod == null) {
             debug("Cannot remove waypoint - not available");
             return;
@@ -234,7 +256,6 @@ public final class WaypointPacketSender {
         try {
             Object packet = removeWaypointMethod.invoke(null, waypointId);
             sendPacket(player, packet);
-            ACTIVE_WAYPOINTS.remove(player.getUniqueId());
             debug("Removed waypoint for " + player.getName());
         } catch (Exception e) {
             debug("Error removing waypoint: " + e.getMessage());
@@ -242,12 +263,23 @@ public final class WaypointPacketSender {
     }
 
     /**
-     * Remove any active waypoint for the player.
+     * Remove all active waypoints for the player.
      */
     public static void clearWaypoint(Player player) {
-        UUID waypointId = ACTIVE_WAYPOINTS.get(player.getUniqueId());
-        if (waypointId != null) {
-            removeWaypoint(player, waypointId);
+        Set<UUID> active = ACTIVE_WAYPOINTS.remove(player.getUniqueId());
+        if (active == null || active.isEmpty()) {
+            return;
+        }
+        if (!isAvailable() || removeWaypointMethod == null) {
+            return;
+        }
+        for (UUID waypointId : new HashSet<>(active)) {
+            try {
+                Object packet = removeWaypointMethod.invoke(null, waypointId);
+                sendPacket(player, packet);
+            } catch (Exception e) {
+                debug("Error removing waypoint: " + e.getMessage());
+            }
         }
     }
 
@@ -255,7 +287,8 @@ public final class WaypointPacketSender {
      * Check if player has an active synthetic waypoint.
      */
     public static boolean hasActiveWaypoint(Player player) {
-        return ACTIVE_WAYPOINTS.containsKey(player.getUniqueId());
+        Set<UUID> active = ACTIVE_WAYPOINTS.get(player.getUniqueId());
+        return active != null && !active.isEmpty();
     }
 
     /**

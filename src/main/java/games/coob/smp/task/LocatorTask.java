@@ -31,8 +31,7 @@ public final class LocatorTask extends BukkitRunnable {
 
     private static final boolean DEBUG = false;
 
-    // UUID namespace for synthetic waypoints
-    private static final UUID WAYPOINT_NAMESPACE = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID DEATH_WAYPOINT_TARGET = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     // Boss bars per player
     private static final Map<UUID, BossBar> playerBossBars = new HashMap<>();
@@ -150,24 +149,32 @@ public final class LocatorTask extends BukkitRunnable {
         if (targetPlayer == null || !targetPlayer.isOnline()) {
             // Target went offline - remove from tracking (waypoint color cleared on quit)
             cache.removeTrackedPlayer(target.getTargetUUID());
+            UUID waypointId = WaypointPacketSender.generateWaypointId(tracker.getUniqueId(), target.getTargetUUID());
+            WaypointPacketSender.removeWaypoint(tracker, waypointId);
             debug("Player target offline, removed from tracking");
             return;
         }
 
         boolean sameDimension = targetPlayer.getWorld().equals(tracker.getWorld());
+        boolean usePackets = WaypointPacketSender.isAvailable();
+        UUID waypointId = WaypointPacketSender.generateWaypointId(tracker.getUniqueId(), target.getTargetUUID());
 
         if (sameDimension) {
             // Same dimension: enable transmit only (no team = default waypoint color, no name/tab change)
             target.setCachedPortalTarget(null);
-            LocatorBarManager.enableTransmit(targetPlayer);
-            debug("Same dimension - tracking player directly: " + targetPlayer.getName());
+            if (usePackets) {
+                WaypointPacketSender.sendWaypoint(tracker, targetPlayer.getLocation(), waypointId);
+                debug("Same dimension - sent waypoint for " + targetPlayer.getName());
+            } else {
+                LocatorBarManager.enableTransmit(targetPlayer);
+                debug("Same dimension - tracking player directly: " + targetPlayer.getName());
+            }
         } else {
             // Different dimension: send synthetic waypoint for portal
             Location portalTarget = getOrCalculatePortalTarget(tracker, target, targetPlayer.getWorld().getEnvironment());
             Location targetLocation = portalTarget != null ? portalTarget
                     : getFallbackLocation(tracker, targetPlayer.getWorld().getEnvironment());
 
-            UUID waypointId = generateWaypointId(tracker.getUniqueId(), target.getTargetUUID());
             WaypointPacketSender.sendWaypoint(tracker, targetLocation, waypointId);
             debug("Cross-dimension - sent waypoint for portal to " + targetPlayer.getName());
         }
@@ -177,6 +184,8 @@ public final class LocatorTask extends BukkitRunnable {
         Location deathLocation = cache.getDeathLocation();
 
         if (deathLocation == null || deathLocation.getWorld() == null) {
+            UUID waypointId = WaypointPacketSender.generateWaypointId(tracker.getUniqueId(), DEATH_WAYPOINT_TARGET);
+            WaypointPacketSender.removeWaypoint(tracker, waypointId);
             cache.stopTrackingDeath();
             debug("Death location null, stopped tracking");
             return;
@@ -193,7 +202,7 @@ public final class LocatorTask extends BukkitRunnable {
                     : getFallbackLocation(tracker, deathLocation.getWorld().getEnvironment());
         }
 
-        UUID waypointId = generateWaypointId(tracker.getUniqueId(), UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        UUID waypointId = WaypointPacketSender.generateWaypointId(tracker.getUniqueId(), DEATH_WAYPOINT_TARGET);
         WaypointPacketSender.sendWaypoint(tracker, targetLocation, waypointId);
         debug("Updated death location waypoint");
     }
@@ -359,12 +368,6 @@ public final class LocatorTask extends BukkitRunnable {
             case THE_END -> "End";
             default -> "Unknown";
         };
-    }
-
-    private UUID generateWaypointId(UUID trackerUUID, UUID targetUUID) {
-        return new UUID(
-                WAYPOINT_NAMESPACE.getMostSignificantBits() ^ trackerUUID.getMostSignificantBits(),
-                WAYPOINT_NAMESPACE.getLeastSignificantBits() ^ targetUUID.getLeastSignificantBits());
     }
 
     private boolean isEnvironmentAllowed(Player player) {

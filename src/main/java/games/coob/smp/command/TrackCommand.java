@@ -120,6 +120,8 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
         }
 
         cache.removeTrackedPlayer(target.getUniqueId());
+        WaypointPacketSender.removeWaypoint(player,
+                WaypointPacketSender.generateWaypointId(player.getUniqueId(), target.getUniqueId()));
 
         if (!cache.isTracking()) {
             TrackingRegistry.stopTracking(player.getUniqueId());

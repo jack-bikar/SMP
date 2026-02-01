@@ -140,6 +140,8 @@ public class LocatorPlayersMenu extends SimpleMenu {
 				if (clickType == ClickType.RIGHT && isTracking) {
 					// Stop tracking this player
 					cache.removeTrackedPlayer(clickedPlayer.getUniqueId());
+					WaypointPacketSender.removeWaypoint(viewer,
+							WaypointPacketSender.generateWaypointId(viewer.getUniqueId(), clickedPlayer.getUniqueId()));
 					if (!cache.isTracking()) {
 						TrackingRegistry.stopTracking(viewer.getUniqueId());
 						LocatorBarManager.disableReceive(viewer);
