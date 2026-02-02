@@ -18,13 +18,20 @@ import org.bukkit.inventory.ItemStack;
 import java.util.List;
 
 /**
- * Menu for selecting players to track
+ * Menu for selecting players to track. Paginated with 10 players per page.
+ * Max 10 players can be tracked at once per player.
  */
 public class LocatorPlayersMenu extends SimpleMenu {
 
 	private final List<Player> players;
 	private int currentPage = 0;
-	private static final int ITEMS_PER_PAGE = 27;
+	private static final int ITEMS_PER_PAGE = 10;
+	/** Slots 0-9 hold player heads; row 3 has back/nav. */
+	private static final int PLAYER_SLOT_START = 0;
+	private static final int PLAYER_SLOT_END = 9;
+	private static final int SLOT_BACK = 27;
+	private static final int SLOT_PREV = 28;
+	private static final int SLOT_NEXT = 34;
 
 	public LocatorPlayersMenu(final Player viewer) {
 		super(viewer, 9 * 4, "&lSelect a player to track");
@@ -45,30 +52,31 @@ public class LocatorPlayersMenu extends SimpleMenu {
 		int startIndex = currentPage * ITEMS_PER_PAGE;
 		int endIndex = Math.min(startIndex + ITEMS_PER_PAGE, players.size());
 
-		// Add player heads
+		// Player heads in slots 0-9 only
 		for (int i = startIndex; i < endIndex; i++) {
 			Player player = players.get(i);
-			int slot = i - startIndex;
+			int slot = PLAYER_SLOT_START + (i - startIndex);
 			inventory.setItem(slot, createPlayerItem(player));
 		}
 
-		// Back button (bottom-left)
-		inventory.setItem(27, ItemCreator.of(
+		// Back button
+		inventory.setItem(SLOT_BACK, ItemCreator.of(
 				Material.ARROW,
 				"&c&lBack",
 				"",
 				"&7Return to player tracker menu.").make());
 
-		// Navigation buttons
+		// Previous page
 		if (currentPage > 0) {
-			inventory.setItem(28, ItemCreator.of(
+			inventory.setItem(SLOT_PREV, ItemCreator.of(
 					Material.ARROW,
 					"&a&lPrevious Page",
 					"",
 					"&7Go to the previous page.").make());
 		}
+		// Next page
 		if (endIndex < players.size()) {
-			inventory.setItem(34, ItemCreator.of(
+			inventory.setItem(SLOT_NEXT, ItemCreator.of(
 					Material.ARROW,
 					"&a&lNext Page",
 					"",
@@ -109,17 +117,17 @@ public class LocatorPlayersMenu extends SimpleMenu {
 			return;
 
 		// Handle back button
-		if (clicked.getType() == Material.ARROW && slot == 27) {
+		if (clicked.getType() == Material.ARROW && slot == SLOT_BACK) {
 			LocatorMenu.openMenu(viewer);
 			return;
 		}
 
 		// Handle navigation
 		if (clicked.getType() == Material.ARROW) {
-			if (slot == 28 && currentPage > 0) {
+			if (slot == SLOT_PREV && currentPage > 0) {
 				currentPage--;
 				setupItems();
-			} else if (slot == 34) {
+			} else if (slot == SLOT_NEXT) {
 				int startIndex = (currentPage + 1) * ITEMS_PER_PAGE;
 				if (startIndex < players.size()) {
 					currentPage++;
@@ -129,9 +137,9 @@ public class LocatorPlayersMenu extends SimpleMenu {
 			return;
 		}
 
-		// Handle player selection
-		if (clicked.getType() == Material.PLAYER_HEAD) {
-			int playerIndex = currentPage * ITEMS_PER_PAGE + slot;
+		// Handle player selection (only slots 0-9 are player heads)
+		if (clicked.getType() == Material.PLAYER_HEAD && slot >= PLAYER_SLOT_START && slot <= PLAYER_SLOT_END) {
+			int playerIndex = currentPage * ITEMS_PER_PAGE + (slot - PLAYER_SLOT_START);
 			if (playerIndex < players.size()) {
 				Player clickedPlayer = players.get(playerIndex);
 				PlayerCache cache = PlayerCache.from(viewer);
@@ -155,6 +163,11 @@ public class LocatorPlayersMenu extends SimpleMenu {
 					// Left-click: send tracking request (skip if already tracking)
 					if (isTracking) {
 						Messenger.info(viewer, "You are already tracking " + clickedPlayer.getName() + ".");
+						return;
+					}
+					if (!cache.canTrackMorePlayers()) {
+						ColorUtil.sendMessage(viewer, "&cYou can only track up to &e" + PlayerCache.MAX_PLAYERS_TO_TRACK
+								+ " &cplayers. Stop tracking someone first.");
 						return;
 					}
 					handlePlayerSelection(viewer, clickedPlayer);

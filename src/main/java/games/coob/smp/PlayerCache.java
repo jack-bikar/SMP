@@ -40,6 +40,9 @@ public final class PlayerCache extends ConfigFile {
 	@Getter
 	private Location overworldEndPortalLocation;
 
+	/** Maximum number of other players a single player can track at once. */
+	public static final int MAX_PLAYERS_TO_TRACK = 10;
+
 	/**
 	 * Multi-tracking: list of tracked targets (players and/or death location).
 	 * Players have customizable colors; death location is always dark red.
@@ -76,6 +79,7 @@ public final class PlayerCache extends ConfigFile {
 	/**
 	 * Transient: cached portal location for cross-dimension tracking.
 	 * Not persisted to disk - recalculated on dimension change.
+	 * 
 	 * @deprecated Use TrackedTarget.getCachedPortalTarget() instead
 	 */
 	@Deprecated
@@ -135,10 +139,12 @@ public final class PlayerCache extends ConfigFile {
 									if (colorStr != null) {
 										try {
 											color = MarkerColor.valueOf(colorStr);
-										} catch (IllegalArgumentException ignored) {}
+										} catch (IllegalArgumentException ignored) {
+										}
 									}
 									trackedTargets.add(TrackedTarget.player(targetUUID, color));
-								} catch (IllegalArgumentException ignored) {}
+								} catch (IllegalArgumentException ignored) {
+								}
 							}
 						}
 					}
@@ -257,7 +263,24 @@ public final class PlayerCache extends ConfigFile {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Number of other players currently tracked (excluding death location).
+	 */
+	public int getTrackedPlayerCount() {
+		return (int) trackedTargets.stream().filter(TrackedTarget::isPlayer).count();
+	}
+
+	/**
+	 * Whether this cache can track more players (under
+	 * {@link #MAX_PLAYERS_TO_TRACK}).
+	 */
+	public boolean canTrackMorePlayers() {
+		return getTrackedPlayerCount() < MAX_PLAYERS_TO_TRACK;
+	}
+
+	/**
 	 * Add a player to track with a specific color.
+	 * Does not check limit; callers should use {@link #canTrackMorePlayers()}
+	 * first.
 	 */
 	public void addTrackedPlayer(UUID playerUUID, MarkerColor color) {
 		// Remove existing if already tracking

@@ -38,6 +38,12 @@ public final class TrackingRequestManager {
      * Send a tracking request from tracker to target.
      */
     public void sendTrackingRequest(Player tracker, Player target) {
+        PlayerCache trackerCache = PlayerCache.from(tracker);
+        if (!trackerCache.canTrackMorePlayers()) {
+            ColorUtil.sendMessage(tracker,
+                    "&cYou can only track up to &e" + PlayerCache.MAX_PLAYERS_TO_TRACK + " &cplayers at once.");
+            return;
+        }
         pendingRequests.remove(tracker.getUniqueId());
 
         TrackingRequest request = new TrackingRequest(tracker.getUniqueId(), target.getUniqueId());
@@ -61,7 +67,8 @@ public final class TrackingRequestManager {
                 .build();
 
         target.sendMessage(message);
-        ColorUtil.sendMessage(tracker, "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
+        ColorUtil.sendMessage(tracker,
+                "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
 
         SchedulerUtil.runLater(EXPIRATION_SECONDS * 20L, () -> {
             TrackingRequest req = pendingRequests.remove(tracker.getUniqueId());
@@ -94,6 +101,13 @@ public final class TrackingRequestManager {
 
         // Set up tracking state using new multi-tracking system
         PlayerCache trackerCache = PlayerCache.from(tracker);
+        if (!trackerCache.canTrackMorePlayers()) {
+            ColorUtil.sendMessage(target,
+                    "&cThat player can only track up to &e" + PlayerCache.MAX_PLAYERS_TO_TRACK + " &cplayers at once.");
+            ColorUtil.sendMessage(tracker, "&cYou can only track up to &e" + PlayerCache.MAX_PLAYERS_TO_TRACK
+                    + " &cplayers. Remove someone first.");
+            return false;
+        }
         trackerCache.addTrackedPlayer(target.getUniqueId());
 
         // Register tracker
@@ -105,7 +119,8 @@ public final class TrackingRequestManager {
         }
         LocatorBarManager.enableReceive(tracker);
 
-        // Set initial target (same dimension = direct, different = task will handle portal)
+        // Set initial target (same dimension = direct, different = task will handle
+        // portal)
         if (target.getWorld().equals(tracker.getWorld())) {
             LocatorBarManager.setTarget(tracker, target);
         }
@@ -141,7 +156,8 @@ public final class TrackingRequestManager {
     }
 
     /**
-     * Revoke a single tracker's ability to track the target (called by target from "Who's tracking me" menu).
+     * Revoke a single tracker's ability to track the target (called by target from
+     * "Who's tracking me" menu).
      */
     public void revokeTracker(Player target, Player tracker) {
         PlayerCache cache = PlayerCache.from(tracker);
@@ -167,7 +183,8 @@ public final class TrackingRequestManager {
     public void cancelTracking(Player target) {
         for (UUID trackerUUID : TrackingRegistry.getActiveTrackers()) {
             Player tracker = Bukkit.getPlayer(trackerUUID);
-            if (tracker == null || !tracker.isOnline()) continue;
+            if (tracker == null || !tracker.isOnline())
+                continue;
 
             PlayerCache cache = PlayerCache.from(tracker);
             TrackedTarget trackedTarget = cache.getTrackedTarget(target.getUniqueId());
