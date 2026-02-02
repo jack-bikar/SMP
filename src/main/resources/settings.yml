@@ -89,6 +89,56 @@ Combat_Settings:
   # How many seconds should the player wait until he's no longer considered as being in combat
   Combat_Timer: 10
 
+  # Punishment type when a player logs out while in combat
+  # Options: INSTANT_DEATH, GHOST_BODY, RANDOM_ITEM_DROP, PVP_LOCKOUT, DEBUFF, NONE
+  # - INSTANT_DEATH: Player dies immediately on logout, drops items normally
+  # - GHOST_BODY: NPC body remains for other players to kill (recommended)
+  # - RANDOM_ITEM_DROP: Random items are dropped at logout location
+  # - PVP_LOCKOUT: Player can't deal damage for a period after rejoining
+  # - DEBUFF: Player gets negative effects (slowness, weakness, mining fatigue) on rejoin
+  # - NONE: No punishment (not recommended for PvP servers)
+  Punishment_Type: "GHOST_BODY"
+
+  # Ghost body settings (only used if Punishment_Type is GHOST_BODY)
+  Ghost_Body:
+    # How long (in seconds) the ghost body stays before despawning
+    Duration: 30
+    # Should the ghost body have the player's exact health when they logged out?
+    Use_Player_Health: true
+    # Should the ghost body have the player's armor?
+    Use_Player_Armor: true
+    # Should the ghost body fight back? (uses player's held item)
+    Fight_Back: false
+
+  # PvP lockout settings (only used if Punishment_Type is PVP_LOCKOUT)
+  PvP_Lockout:
+    # How long (in minutes) the player cannot deal damage after combat-logging
+    Duration_Minutes: 15
+    # Should they still be able to take damage?
+    Can_Take_Damage: true
+
+  # Debuff settings (only used if Punishment_Type is DEBUFF)
+  Debuff:
+    # How long (in minutes) the debuffs last
+    Duration_Minutes: 10
+    # Slowness level (1-255, 0 to disable)
+    Slowness_Level: 2
+    # Weakness level (1-255, 0 to disable)
+    Weakness_Level: 2
+    # Mining Fatigue level (1-255, 0 to disable)
+    Mining_Fatigue_Level: 2
+
+  # Random item drop settings (only used if Punishment_Type is RANDOM_ITEM_DROP)
+  Random_Item_Drop:
+    # How many random items to drop from the player's inventory
+    # Set to -1 to drop all items (same as INSTANT_DEATH)
+    # Recommended: 5-15 for balanced punishment
+    Amount: 10
+    # Should armor be included in the random selection?
+    Include_Armor: true
+    # Should the hotbar be included in the random selection?
+    Include_Hotbar: true
+
 # -------------------------------------------------------------------------------------------------
 # Edit your TP request feature (teleport request menu and accept/deny in chat)
 # -------------------------------------------------------------------------------------------------

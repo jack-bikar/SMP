@@ -64,6 +64,7 @@ public final class SMPPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
+        getServer().getPluginManager().registerEvents(games.coob.smp.combat.CombatListener.getInstance(), this);
 
         // Start tasks (40 ticks = 2 seconds for locator updates)
         SchedulerUtil.runTimer(40, new LocatorTask());
@@ -81,6 +82,10 @@ public final class SMPPlugin extends JavaPlugin {
         WaypointPacketSender.clearAll();
         LocatorTask.cleanupAll();
         WaypointColorManager.resetAllNameTagColors();
+
+        // Clean up combat system
+        games.coob.smp.combat.CombatNPC.cleanupAll();
+        games.coob.smp.combat.CombatPunishmentManager.cleanup();
 
         // Disable effects
         if (PluginUtil.isPluginEnabled("EffectLib")) {

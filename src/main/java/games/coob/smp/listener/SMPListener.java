@@ -62,6 +62,7 @@ public final class SMPListener implements Listener { // TODO add the register ev
                 LocatorBarManager.enableReceive(player);
             }
         }
+
     }
 
     /**
@@ -264,11 +265,6 @@ public final class SMPListener implements Listener { // TODO add the register ev
             cache.setDrawingAxe(false);
         }
 
-        if (cache.isInCombat()) {
-            cache.setInCombat(false);
-            player.setHealth(0);
-        }
-
         // Remove from tracking registry and clean up boss bar
         TrackingRegistry.stopTracking(player.getUniqueId());
         LocatorTask.cleanupPlayer(player.getUniqueId());
@@ -309,19 +305,6 @@ public final class SMPListener implements Listener { // TODO add the register ev
             if (player.hasMetadata(hologram.getUniqueId().toString()))
                 player.removeMetadata(hologram.getUniqueId().toString(), SMPPlugin.getInstance());
 
-    }
-
-    @EventHandler
-    public void onPlayerDamage(final EntityDamageByEntityEvent event) {
-        final Entity entity = event.getEntity();
-
-        if (entity instanceof final Player player) {
-            final PlayerCache cache = PlayerCache.from(player);
-
-            cache.setInCombat(true);
-            SchedulerUtil.runLater(20L * Settings.CombatSection.SECONDS_TILL_PLAYER_LEAVES_COMBAT,
-                    () -> cache.setInCombat(false));
-        }
     }
 
 }

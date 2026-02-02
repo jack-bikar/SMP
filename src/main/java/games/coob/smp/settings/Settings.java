@@ -109,10 +109,70 @@ public final class Settings extends ConfigFile {
 	public static class CombatSection {
 		public static boolean ENABLE_COMBAT_PUNISHMENTS;
 		public static int SECONDS_TILL_PLAYER_LEAVES_COMBAT;
+		public static PunishmentType PUNISHMENT_TYPE;
+
+		// Ghost body settings
+		public static int GHOST_BODY_DURATION;
+		public static boolean GHOST_BODY_USE_PLAYER_HEALTH;
+		public static boolean GHOST_BODY_USE_PLAYER_ARMOR;
+		public static boolean GHOST_BODY_FIGHT_BACK;
+
+		// PvP lockout settings
+		public static int PVP_LOCKOUT_DURATION_MINUTES;
+		public static boolean PVP_LOCKOUT_CAN_TAKE_DAMAGE;
+
+		// Debuff settings
+		public static int DEBUFF_DURATION_MINUTES;
+		public static int DEBUFF_SLOWNESS_LEVEL;
+		public static int DEBUFF_WEAKNESS_LEVEL;
+		public static int DEBUFF_MINING_FATIGUE_LEVEL;
+
+		// Random item drop settings
+		public static int RANDOM_ITEM_DROP_AMOUNT;
+		public static boolean RANDOM_ITEM_DROP_INCLUDE_ARMOR;
+		public static boolean RANDOM_ITEM_DROP_INCLUDE_HOTBAR;
 
 		public static void load(FileConfiguration config) {
 			ENABLE_COMBAT_PUNISHMENTS = config.getBoolean("Combat_Settings.Enable_Combat_Punishments", true);
 			SECONDS_TILL_PLAYER_LEAVES_COMBAT = config.getInt("Combat_Settings.Combat_Timer", 10);
+
+			String punishmentTypeStr = config.getString("Combat_Settings.Punishment_Type", "GHOST_BODY");
+			try {
+				PUNISHMENT_TYPE = PunishmentType.valueOf(punishmentTypeStr.toUpperCase());
+			} catch (IllegalArgumentException e) {
+				PUNISHMENT_TYPE = PunishmentType.GHOST_BODY;
+			}
+
+			// Ghost body
+			GHOST_BODY_DURATION = config.getInt("Combat_Settings.Ghost_Body.Duration", 30);
+			GHOST_BODY_USE_PLAYER_HEALTH = config.getBoolean("Combat_Settings.Ghost_Body.Use_Player_Health", true);
+			GHOST_BODY_USE_PLAYER_ARMOR = config.getBoolean("Combat_Settings.Ghost_Body.Use_Player_Armor", true);
+			GHOST_BODY_FIGHT_BACK = config.getBoolean("Combat_Settings.Ghost_Body.Fight_Back", false);
+
+			// PvP lockout
+			PVP_LOCKOUT_DURATION_MINUTES = config.getInt("Combat_Settings.PvP_Lockout.Duration_Minutes", 15);
+			PVP_LOCKOUT_CAN_TAKE_DAMAGE = config.getBoolean("Combat_Settings.PvP_Lockout.Can_Take_Damage", true);
+
+			// Debuff
+			DEBUFF_DURATION_MINUTES = config.getInt("Combat_Settings.Debuff.Duration_Minutes", 10);
+			DEBUFF_SLOWNESS_LEVEL = config.getInt("Combat_Settings.Debuff.Slowness_Level", 2);
+			DEBUFF_WEAKNESS_LEVEL = config.getInt("Combat_Settings.Debuff.Weakness_Level", 2);
+			DEBUFF_MINING_FATIGUE_LEVEL = config.getInt("Combat_Settings.Debuff.Mining_Fatigue_Level", 2);
+
+			// Random item drop
+			RANDOM_ITEM_DROP_AMOUNT = config.getInt("Combat_Settings.Random_Item_Drop.Amount", 10);
+			RANDOM_ITEM_DROP_INCLUDE_ARMOR = config.getBoolean("Combat_Settings.Random_Item_Drop.Include_Armor", true);
+			RANDOM_ITEM_DROP_INCLUDE_HOTBAR = config.getBoolean("Combat_Settings.Random_Item_Drop.Include_Hotbar",
+					true);
+		}
+
+		public enum PunishmentType {
+			INSTANT_DEATH,
+			GHOST_BODY,
+			RANDOM_ITEM_DROP,
+			PVP_LOCKOUT,
+			DEBUFF,
+			NONE
 		}
 	}
 

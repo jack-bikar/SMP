@@ -76,6 +76,15 @@ public final class PlayerCache extends ConfigFile {
 	@Setter
 	private boolean inCombat;
 
+	// Combat punishment state
+	@Getter
+	@Setter
+	private long pvpLockoutExpiry;
+
+	@Getter
+	@Setter
+	private long debuffExpiry;
+
 	/**
 	 * Transient: cached portal location for cross-dimension tracking.
 	 * Not persisted to disk - recalculated on dimension change.
@@ -162,6 +171,10 @@ public final class PlayerCache extends ConfigFile {
 				this.targetByUUID = null;
 			}
 		}
+
+		// Load combat punishment state
+		this.pvpLockoutExpiry = getConfig().getLong(path + "PvP_Lockout_Expiry", 0);
+		this.debuffExpiry = getConfig().getLong(path + "Debuff_Expiry", 0);
 	}
 
 	/**
@@ -199,6 +212,10 @@ public final class PlayerCache extends ConfigFile {
 		// Legacy fields (for backward compatibility, will be removed later)
 		getConfig().set(path + "Tracking_Location", trackingLocation);
 		getConfig().set(path + "Track_Player", targetByUUID != null ? targetByUUID.toString() : null);
+
+		// Save combat punishment state
+		getConfig().set(path + "PvP_Lockout_Expiry", pvpLockoutExpiry);
+		getConfig().set(path + "Debuff_Expiry", debuffExpiry);
 	}
 
 	/**
