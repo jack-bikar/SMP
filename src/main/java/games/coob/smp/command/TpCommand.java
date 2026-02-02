@@ -1,6 +1,7 @@
 package games.coob.smp.command;
 
 import games.coob.smp.menu.TpPlayersMenu;
+import games.coob.smp.settings.Settings;
 import games.coob.smp.tp.TpRequestManager;
 import games.coob.smp.util.ColorUtil;
 import org.bukkit.Bukkit;
@@ -23,6 +24,15 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
 		if (!(sender instanceof Player player)) {
 			ColorUtil.sendMessage(sender, "&cThis command can only be used by players.");
+			return true;
+		}
+
+		if (!Settings.TpSection.ENABLE_TP) {
+			if (sender.isOp() && args.length > 0) {
+				Bukkit.dispatchCommand(sender, "minecraft:tp " + String.join(" ", args));
+				return true;
+			}
+			ColorUtil.sendMessage(sender, "&cTP requests are disabled.");
 			return true;
 		}
 
@@ -56,6 +66,19 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 	@Override
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
 		List<String> out = new ArrayList<>();
+		if (!Settings.TpSection.ENABLE_TP && sender.isOp()) {
+			// Forward tab completion for vanilla /tp (player names)
+			String prefix = args.length > 0 ? args[args.length - 1].toLowerCase() : "";
+			for (Player p : Bukkit.getOnlinePlayers()) {
+				if (p.getName().toLowerCase().startsWith(prefix)) {
+					out.add(p.getName());
+				}
+			}
+			return out;
+		}
+		if (!Settings.TpSection.ENABLE_TP) {
+			return out;
+		}
 		if (args.length == 1) {
 			String a = args[0].toLowerCase();
 			if ("accept".startsWith(a))

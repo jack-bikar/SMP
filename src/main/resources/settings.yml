@@ -90,6 +90,13 @@ Combat_Settings:
   Combat_Timer: 10
 
 # -------------------------------------------------------------------------------------------------
+# Edit your TP request feature (teleport request menu and accept/deny in chat)
+# -------------------------------------------------------------------------------------------------
+TP:
+  # Enable or disable the TP request command and menu
+  Enable_TP: true
+
+# -------------------------------------------------------------------------------------------------
 # What commands should trigger the main plugin command group?
 #
 # * THE FIRST ALIAS IS THE MAIN LABEL, PLEASE DO NOT REMOVE IT. *

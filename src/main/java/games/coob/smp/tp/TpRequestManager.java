@@ -1,6 +1,7 @@
 package games.coob.smp.tp;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import net.kyori.adventure.text.Component;
@@ -39,6 +40,10 @@ public final class TpRequestManager {
      * Target receives clickable [ACCEPT] [DENY] in chat.
      */
     public void sendRequest(Player requester, Player target) {
+        if (!Settings.TpSection.ENABLE_TP) {
+            ColorUtil.sendMessage(requester, "&cTP requests are disabled.");
+            return;
+        }
         if (requester.equals(target)) {
             ColorUtil.sendMessage(requester, "&cYou cannot teleport to yourself.");
             return;
@@ -82,6 +87,10 @@ public final class TpRequestManager {
      * if requester is not in combat.
      */
     public boolean acceptRequest(Player target, String requesterName) {
+        if (!Settings.TpSection.ENABLE_TP) {
+            ColorUtil.sendMessage(target, "&cTP requests are disabled.");
+            return false;
+        }
         Player requester = Bukkit.getPlayer(requesterName);
         if (requester == null || !requester.isOnline()) {
             ColorUtil.sendMessage(target, "&cPlayer not found or offline.");
@@ -116,6 +125,10 @@ public final class TpRequestManager {
      * Target denies the TP request from requester.
      */
     public boolean denyRequest(Player target, String requesterName) {
+        if (!Settings.TpSection.ENABLE_TP) {
+            ColorUtil.sendMessage(target, "&cTP requests are disabled.");
+            return false;
+        }
         Player requester = Bukkit.getPlayer(requesterName);
         if (requester == null) {
             ColorUtil.sendMessage(target, "&cPlayer not found.");

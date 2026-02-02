@@ -40,6 +40,7 @@ public final class Settings extends ConfigFile {
 		ProjectileSection.load(config);
 		DeathEffectSection.load(config);
 		CombatSection.load(config);
+		TpSection.load(config);
 	}
 
 	// Death Storage Section
@@ -65,13 +66,15 @@ public final class Settings extends ConfigFile {
 	public static class LocatorSection {
 		public static boolean ENABLE_LOCATOR_BAR;
 		public static String ALLOWED_ENVIRONEMENTS;
-		// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking is disabled
+		// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking
+		// is disabled
 		public static boolean ENABLE_TRACKING;
 
 		public static void load(FileConfiguration config) {
 			ENABLE_LOCATOR_BAR = config.getBoolean("Locator_Toggle.Enable_Locator_Bar", false);
 			ALLOWED_ENVIRONEMENTS = config.getString("Locator_Toggle.Allowed_Environements", "all");
-			// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking is disabled
+			// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking
+			// is disabled
 			ENABLE_TRACKING = !ENABLE_LOCATOR_BAR;
 		}
 	}
@@ -110,6 +113,15 @@ public final class Settings extends ConfigFile {
 		public static void load(FileConfiguration config) {
 			ENABLE_COMBAT_PUNISHMENTS = config.getBoolean("Combat_Settings.Enable_Combat_Punishments", true);
 			SECONDS_TILL_PLAYER_LEAVES_COMBAT = config.getInt("Combat_Settings.Combat_Timer", 10);
+		}
+	}
+
+	// TP request feature
+	public static class TpSection {
+		public static boolean ENABLE_TP;
+
+		public static void load(FileConfiguration config) {
+			ENABLE_TP = config.getBoolean("TP.Enable_TP", true);
 		}
 	}
 }
