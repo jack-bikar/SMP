@@ -23,7 +23,6 @@ public class TpPlayersMenu extends SimpleMenu {
 	private static final int ITEMS_PER_PAGE = 10;
 	private static final int PLAYER_SLOT_START = 0;
 	private static final int PLAYER_SLOT_END = 9;
-	private static final int SLOT_CLOSE = 27;
 	private static final int SLOT_PREV = 28;
 	private static final int SLOT_NEXT = 34;
 
@@ -52,12 +51,6 @@ public class TpPlayersMenu extends SimpleMenu {
 			int slot = PLAYER_SLOT_START + (i - startIndex);
 			inventory.setItem(slot, createPlayerItem(player));
 		}
-
-		inventory.setItem(SLOT_CLOSE, ItemCreator.of(
-				Material.ARROW,
-				"&c&lClose",
-				"",
-				"&7Close this menu.").make());
 
 		if (currentPage > 0) {
 			inventory.setItem(SLOT_PREV, ItemCreator.of(
@@ -89,11 +82,6 @@ public class TpPlayersMenu extends SimpleMenu {
 	protected void onMenuClick(Player viewer, int slot, ItemStack clicked, ClickType clickType) {
 		if (clicked == null)
 			return;
-
-		if (clicked.getType() == Material.ARROW && slot == SLOT_CLOSE) {
-			viewer.closeInventory();
-			return;
-		}
 
 		if (clicked.getType() == Material.ARROW) {
 			if (slot == SLOT_PREV && currentPage > 0) {

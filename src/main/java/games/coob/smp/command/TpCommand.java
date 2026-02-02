@@ -85,6 +85,11 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 				out.add("accept");
 			if ("deny".startsWith(a))
 				out.add("deny");
+			for (Player p : Bukkit.getOnlinePlayers()) {
+				if (p != sender && p.getName().toLowerCase().startsWith(a)) {
+					out.add(p.getName());
+				}
+			}
 			return out;
 		}
 		if (args.length == 2 && (args[0].equalsIgnoreCase("accept") || args[0].equalsIgnoreCase("deny"))) {
