@@ -4,6 +4,7 @@ import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
 import games.coob.smp.command.TrackCommand;
+import games.coob.smp.command.TpCommand;
 import games.coob.smp.hologram.HologramRegistry;
 import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.LocatorListener;
@@ -56,6 +57,8 @@ public final class SMPPlugin extends JavaPlugin {
         getCommand("spawn").setExecutor(new SpawnCommand());
         getCommand("track").setExecutor(new TrackCommand());
         getCommand("track").setTabCompleter(new TrackCommand());
+        getCommand("tp").setExecutor(new TpCommand());
+        getCommand("tp").setTabCompleter(new TpCommand());
 
         // Register events
         getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);

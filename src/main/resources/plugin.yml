@@ -65,6 +65,8 @@ commands:
   track:
     description: Player and death location tracking
     aliases: [tr]
+  tp:
+    description: Teleport request (opens menu or accept/deny from chat)
 permissions:
   smp.*:
     description: All SMP permissions
