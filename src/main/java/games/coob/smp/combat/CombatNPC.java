@@ -49,14 +49,14 @@ public class CombatNPC {
 		this.npc.setCustomNameVisible(true);
 		this.npc.setRemoveWhenFarAway(false);
 		this.npc.setCanPickupItems(false);
-		this.npc.setBaby(false);
+		this.npc.setAdult();
 
 		// Set metadata to identify this as a combat NPC
 		this.npc.setMetadata(METADATA_KEY, new FixedMetadataValue(SMPPlugin.getInstance(), playerUUID.toString()));
 
 		// Apply health
 		if (Settings.CombatSection.GHOST_BODY_USE_PLAYER_HEALTH) {
-			this.npc.setMaxHealth(health);
+			this.npc.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
 			this.npc.setHealth(health);
 		}
 
