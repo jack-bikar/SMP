@@ -33,7 +33,7 @@ public class CombatNPC {
 	private final ItemStack[] inventory;
 	private final ItemStack[] armor;
 	private final double health;
-	private final int despawnTaskId;
+	private final org.bukkit.scheduler.BukkitTask despawnTask;
 
 	private CombatNPC(UUID playerUUID, String playerName, Location location, ItemStack[] inventory,
 			ItemStack[] armor, double health) {
@@ -45,7 +45,7 @@ public class CombatNPC {
 
 		// Spawn zombie NPC
 		this.npc = (Zombie) location.getWorld().spawnEntity(location, EntityType.ZOMBIE);
-		this.npc.setCustomName(ColorUtil.colorize("&c" + playerName + " &7(Combat Logger)"));
+		this.npc.customName(ColorUtil.toComponent("&c" + playerName + " &7(Combat Logger)"));
 		this.npc.setCustomNameVisible(true);
 		this.npc.setRemoveWhenFarAway(false);
 		this.npc.setCanPickupItems(false);
@@ -88,7 +88,7 @@ public class CombatNPC {
 		}
 
 		// Schedule despawn
-		this.despawnTaskId = SchedulerUtil.runLater(20L * Settings.CombatSection.GHOST_BODY_DURATION, this::despawn);
+		this.despawnTask = SchedulerUtil.runLater(20L * Settings.CombatSection.GHOST_BODY_DURATION, this::despawn);
 
 		activeNPCs.put(playerUUID, this);
 	}
@@ -101,7 +101,7 @@ public class CombatNPC {
 
 		// Remove existing NPC if any
 		if (activeNPCs.containsKey(uuid)) {
-			activeNPCs.get(uuid).remove();
+			activeNPCs.get(uuid).removeNPC();
 		}
 
 		// Get player data
@@ -147,7 +147,7 @@ public class CombatNPC {
 			return;
 
 		// Cancel despawn task
-		Bukkit.getScheduler().cancelTask(combatNPC.despawnTaskId);
+		combatNPC.despawnTask.cancel();
 
 		// Drop inventory at NPC location
 		Location dropLocation = npc.getLocation();
@@ -208,7 +208,7 @@ public class CombatNPC {
 	 * Removes this NPC without dropping items (called when player rejoins).
 	 */
 	private void removeNPC() {
-		Bukkit.getScheduler().cancelTask(despawnTaskId);
+		despawnTask.cancel();
 		npc.remove();
 
 		// Return inventory to player when they rejoin
