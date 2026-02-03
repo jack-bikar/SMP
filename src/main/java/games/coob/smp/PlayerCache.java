@@ -85,6 +85,19 @@ public final class PlayerCache extends ConfigFile {
 	@Setter
 	private long debuffExpiry;
 
+	// Duel state (transient - not persisted)
+	@Getter
+	@Setter
+	private boolean inDuel;
+
+	@Getter
+	@Setter
+	private java.util.UUID duelOpponent;
+
+	@Getter
+	@Setter
+	private java.util.UUID activeDuelId;
+
 	/**
 	 * Transient: cached portal location for cross-dimension tracking.
 	 * Not persisted to disk - recalculated on dimension change.

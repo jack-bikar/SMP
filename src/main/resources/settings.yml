@@ -147,6 +147,89 @@ TP:
   Enable_TP: true
 
 # -------------------------------------------------------------------------------------------------
+# Edit your duel system settings
+# -------------------------------------------------------------------------------------------------
+Duel:
+  # Enable or disable the duel system
+  Enable_Duels: true
+
+  # Request settings
+  Request_Timeout_Seconds: 60
+  Countdown_Seconds: 5
+
+  # Arena mode: NATURAL (random teleport to unexplored areas), CREATED (admin-created arenas), RANDOM (pick either)
+  Arena_Mode: "NATURAL"
+
+  # Border settings (shrinking zone that forces action)
+  Border:
+    # Starting radius in blocks
+    Start_Radius: 50
+    # Final radius in blocks
+    End_Radius: 10
+    # Time in seconds for border to fully shrink
+    Shrink_Time_Seconds: 180
+    # Distance from border edge where warnings start
+    Warning_Distance: 5
+    # Knockback strength when outside border
+    Knockback_Strength: 1.5
+    # Damage per second when outside border
+    Damage_Per_Second: 2.0
+    # Particle type for border visualization (FLAME, SOUL_FIRE_FLAME, END_ROD, etc.)
+    Particle_Type: "FLAME"
+
+  # Natural teleport settings (for NATURAL arena mode)
+  Natural_Arena:
+    # Search radius from spawn for random location
+    Search_Radius: 5000
+    # Minimum distance between the two players when teleported
+    Min_Player_Distance: 30
+    # Maximum attempts to find a valid location
+    Max_Search_Attempts: 50
+    # Biomes that cannot be used for duels
+    Banned_Biomes:
+      - "OCEAN"
+      - "DEEP_OCEAN"
+      - "FROZEN_OCEAN"
+      - "COLD_OCEAN"
+      - "LUKEWARM_OCEAN"
+      - "WARM_OCEAN"
+      - "RIVER"
+    # Blocks that cannot be at spawn location
+    Banned_Blocks:
+      - "LAVA"
+      - "CACTUS"
+      - "SWEET_BERRY_BUSH"
+      - "FIRE"
+      - "MAGMA_BLOCK"
+
+  # Loot settings (what happens to items when duel ends)
+  Loot:
+    # Mode: DROP_ITEMS (normal death drops), KEEP_INVENTORY (loser keeps items), LOOT_PHASE (winner has time to collect)
+    Mode: "LOOT_PHASE"
+    # Duration of loot phase in seconds (only for LOOT_PHASE mode)
+    Loot_Phase_Seconds: 30
+    # Should the winner keep their inventory regardless of mode?
+    Winner_Keeps_Inventory: true
+
+  # Cleanup settings (what happens after duel ends)
+  Cleanup:
+    # Remove blocks placed during the duel
+    Remove_Placed_Blocks: true
+    # Remove items dropped during the duel (after loot phase if applicable)
+    Remove_Dropped_Items: true
+    # Remove entities spawned during the duel (arrows, potions, etc.)
+    Remove_Entities: true
+    # Unload chunks used for natural arenas after duel
+    Unload_Natural_Chunks: true
+
+  # Queue settings (random matchmaking)
+  Queue:
+    # Minimum players required in queue to start a match
+    Min_Players_To_Match: 2
+    # How often to check for matches (in seconds)
+    Match_Check_Interval_Seconds: 10
+
+# -------------------------------------------------------------------------------------------------
 # What commands should trigger the main plugin command group?
 #
 # * THE FIRST ALIAS IS THE MAIN LABEL, PLEASE DO NOT REMOVE IT. *

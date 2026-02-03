@@ -67,6 +67,15 @@ commands:
     aliases: [tr]
   tp:
     description: Teleport request (opens menu or accept/deny from chat)
+  duel:
+    description: Duel system commands
+    aliases: [d]
+    permission: smp.duel
+    permission-message: You don't have permission to use this command.
+  arena:
+    description: Arena management commands
+    permission: smp.admin.arena
+    permission-message: You don't have permission to manage arenas.
 permissions:
   smp.*:
     description: All SMP permissions
@@ -74,6 +83,8 @@ permissions:
     children:
       smp.command.*: true
       smp.use.*: true
+      smp.admin.*: true
+      smp.duel.*: true
   smp.command.*:
     description: All SMP command permissions
     default: op
@@ -89,3 +100,23 @@ permissions:
   smp.use.*:
     description: All SMP use permissions
     default: true
+  smp.admin.*:
+    description: All SMP admin permissions
+    default: op
+    children:
+      smp.admin.arena: true
+  smp.admin.arena:
+    description: Manage duel arenas
+    default: op
+  smp.duel:
+    description: Use the duel command
+    default: true
+  smp.duel.queue:
+    description: Use the duel queue system
+    default: true
+  smp.duel.*:
+    description: All duel permissions
+    default: true
+    children:
+      smp.duel: true
+      smp.duel.queue: true

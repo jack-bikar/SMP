@@ -41,6 +41,7 @@ public final class Settings extends ConfigFile {
 		DeathEffectSection.load(config);
 		CombatSection.load(config);
 		TpSection.load(config);
+		DuelSection.load(config);
 	}
 
 	// Death Storage Section
@@ -182,6 +183,106 @@ public final class Settings extends ConfigFile {
 
 		public static void load(FileConfiguration config) {
 			ENABLE_TP = config.getBoolean("TP.Enable_TP", true);
+		}
+	}
+
+	// Duel Section
+	public static class DuelSection {
+		public static boolean ENABLE_DUELS;
+		public static int REQUEST_TIMEOUT_SECONDS;
+		public static int COUNTDOWN_SECONDS;
+		public static ArenaMode ARENA_MODE;
+
+		// Border settings
+		public static int BORDER_START_RADIUS;
+		public static int BORDER_END_RADIUS;
+		public static int BORDER_SHRINK_TIME_SECONDS;
+		public static int BORDER_WARNING_DISTANCE;
+		public static double BORDER_KNOCKBACK_STRENGTH;
+		public static double BORDER_DAMAGE_PER_SECOND;
+		public static String BORDER_PARTICLE_TYPE;
+
+		// Natural arena settings
+		public static int NATURAL_SEARCH_RADIUS;
+		public static int NATURAL_MIN_PLAYER_DISTANCE;
+		public static int NATURAL_MAX_SEARCH_ATTEMPTS;
+		public static java.util.List<String> NATURAL_BANNED_BIOMES;
+		public static java.util.List<String> NATURAL_BANNED_BLOCKS;
+
+		// Loot settings
+		public static LootMode LOOT_MODE;
+		public static int LOOT_PHASE_SECONDS;
+		public static boolean WINNER_KEEPS_INVENTORY;
+
+		// Cleanup settings
+		public static boolean CLEANUP_REMOVE_PLACED_BLOCKS;
+		public static boolean CLEANUP_REMOVE_DROPPED_ITEMS;
+		public static boolean CLEANUP_REMOVE_ENTITIES;
+		public static boolean CLEANUP_UNLOAD_NATURAL_CHUNKS;
+
+		// Queue settings
+		public static int QUEUE_MIN_PLAYERS;
+		public static int QUEUE_MATCH_CHECK_INTERVAL;
+
+		public static void load(FileConfiguration config) {
+			ENABLE_DUELS = config.getBoolean("Duel.Enable_Duels", true);
+			REQUEST_TIMEOUT_SECONDS = config.getInt("Duel.Request_Timeout_Seconds", 60);
+			COUNTDOWN_SECONDS = config.getInt("Duel.Countdown_Seconds", 5);
+
+			String arenaModeStr = config.getString("Duel.Arena_Mode", "NATURAL");
+			try {
+				ARENA_MODE = ArenaMode.valueOf(arenaModeStr.toUpperCase());
+			} catch (IllegalArgumentException e) {
+				ARENA_MODE = ArenaMode.NATURAL;
+			}
+
+			// Border
+			BORDER_START_RADIUS = config.getInt("Duel.Border.Start_Radius", 50);
+			BORDER_END_RADIUS = config.getInt("Duel.Border.End_Radius", 10);
+			BORDER_SHRINK_TIME_SECONDS = config.getInt("Duel.Border.Shrink_Time_Seconds", 180);
+			BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.Warning_Distance", 5);
+			BORDER_KNOCKBACK_STRENGTH = config.getDouble("Duel.Border.Knockback_Strength", 1.5);
+			BORDER_DAMAGE_PER_SECOND = config.getDouble("Duel.Border.Damage_Per_Second", 2.0);
+			BORDER_PARTICLE_TYPE = config.getString("Duel.Border.Particle_Type", "FLAME");
+
+			// Natural arena
+			NATURAL_SEARCH_RADIUS = config.getInt("Duel.Natural_Arena.Search_Radius", 5000);
+			NATURAL_MIN_PLAYER_DISTANCE = config.getInt("Duel.Natural_Arena.Min_Player_Distance", 30);
+			NATURAL_MAX_SEARCH_ATTEMPTS = config.getInt("Duel.Natural_Arena.Max_Search_Attempts", 50);
+			NATURAL_BANNED_BIOMES = config.getStringList("Duel.Natural_Arena.Banned_Biomes");
+			NATURAL_BANNED_BLOCKS = config.getStringList("Duel.Natural_Arena.Banned_Blocks");
+
+			// Loot
+			String lootModeStr = config.getString("Duel.Loot.Mode", "LOOT_PHASE");
+			try {
+				LOOT_MODE = LootMode.valueOf(lootModeStr.toUpperCase());
+			} catch (IllegalArgumentException e) {
+				LOOT_MODE = LootMode.LOOT_PHASE;
+			}
+			LOOT_PHASE_SECONDS = config.getInt("Duel.Loot.Loot_Phase_Seconds", 30);
+			WINNER_KEEPS_INVENTORY = config.getBoolean("Duel.Loot.Winner_Keeps_Inventory", true);
+
+			// Cleanup
+			CLEANUP_REMOVE_PLACED_BLOCKS = config.getBoolean("Duel.Cleanup.Remove_Placed_Blocks", true);
+			CLEANUP_REMOVE_DROPPED_ITEMS = config.getBoolean("Duel.Cleanup.Remove_Dropped_Items", true);
+			CLEANUP_REMOVE_ENTITIES = config.getBoolean("Duel.Cleanup.Remove_Entities", true);
+			CLEANUP_UNLOAD_NATURAL_CHUNKS = config.getBoolean("Duel.Cleanup.Unload_Natural_Chunks", true);
+
+			// Queue
+			QUEUE_MIN_PLAYERS = config.getInt("Duel.Queue.Min_Players_To_Match", 2);
+			QUEUE_MATCH_CHECK_INTERVAL = config.getInt("Duel.Queue.Match_Check_Interval_Seconds", 10);
+		}
+
+		public enum ArenaMode {
+			NATURAL,
+			CREATED,
+			RANDOM
+		}
+
+		public enum LootMode {
+			DROP_ITEMS,
+			KEEP_INVENTORY,
+			LOOT_PHASE
 		}
 	}
 }

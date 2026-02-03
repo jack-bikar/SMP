@@ -38,9 +38,21 @@ public final class SerializedMap {
 		return value != null ? String.valueOf(value) : null;
 	}
 
+	public boolean getBoolean(String key, boolean defaultValue) {
+		Object value = map.get(key);
+		if (value instanceof Boolean) {
+			return (Boolean) value;
+		}
+		if (value instanceof String) {
+			return Boolean.parseBoolean((String) value);
+		}
+		return defaultValue;
+	}
+
 	public UUID getUUID(String key) {
 		String uuidStr = getString(key);
-		if (uuidStr == null) return null;
+		if (uuidStr == null)
+			return null;
 		try {
 			return UUID.fromString(uuidStr);
 		} catch (IllegalArgumentException e) {
@@ -57,13 +69,16 @@ public final class SerializedMap {
 			@SuppressWarnings("unchecked")
 			Map<String, Object> locMap = (Map<String, Object>) value;
 			String world = (String) locMap.get("world");
-			if (world == null) return null;
+			if (world == null)
+				return null;
 			org.bukkit.World bukkitWorld = org.bukkit.Bukkit.getWorld(world);
-			if (bukkitWorld == null) return null;
+			if (bukkitWorld == null)
+				return null;
 			Object xObj = locMap.get("x");
 			Object yObj = locMap.get("y");
 			Object zObj = locMap.get("z");
-			if (xObj == null || yObj == null || zObj == null) return null;
+			if (xObj == null || yObj == null || zObj == null)
+				return null;
 			double x = ((Number) xObj).doubleValue();
 			double y = ((Number) yObj).doubleValue();
 			double z = ((Number) zObj).doubleValue();

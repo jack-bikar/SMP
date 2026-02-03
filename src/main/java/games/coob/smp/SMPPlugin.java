@@ -60,11 +60,28 @@ public final class SMPPlugin extends JavaPlugin {
         getCommand("tp").setExecutor(new TpCommand());
         getCommand("tp").setTabCompleter(new TpCommand());
 
+        // Register duel commands
+        games.coob.smp.duel.DuelCommand duelCommand = new games.coob.smp.duel.DuelCommand();
+        getCommand("duel").setExecutor(duelCommand);
+        getCommand("duel").setTabCompleter(duelCommand);
+
+        games.coob.smp.duel.ArenaCommand arenaCommand = new games.coob.smp.duel.ArenaCommand();
+        getCommand("arena").setExecutor(arenaCommand);
+        getCommand("arena").setTabCompleter(arenaCommand);
+
         // Register events
         getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
         getServer().getPluginManager().registerEvents(games.coob.smp.combat.CombatListener.getInstance(), this);
+        getServer().getPluginManager().registerEvents(games.coob.smp.duel.DuelListener.getInstance(), this);
+
+        // Initialize duel registries
+        games.coob.smp.duel.model.ArenaRegistry.getInstance();
+        games.coob.smp.duel.model.DuelStatistics.getInstance();
+
+        // Start duel queue system
+        games.coob.smp.duel.DuelQueueManager.getInstance().start();
 
         // Start tasks (40 ticks = 2 seconds for locator updates)
         SchedulerUtil.runTimer(40, new LocatorTask());
@@ -86,6 +103,13 @@ public final class SMPPlugin extends JavaPlugin {
         // Clean up combat system
         games.coob.smp.combat.CombatNPC.cleanupAll();
         games.coob.smp.combat.CombatPunishmentManager.cleanup();
+
+        // Clean up duel system
+        games.coob.smp.duel.DuelManager.getInstance().cleanup();
+        games.coob.smp.duel.DuelQueueManager.getInstance().stop();
+        games.coob.smp.duel.NaturalTeleporter.clearExploredCache();
+        games.coob.smp.duel.model.ArenaRegistry.getInstance().save();
+        games.coob.smp.duel.model.DuelStatistics.getInstance().save();
 
         // Disable effects
         if (PluginUtil.isPluginEnabled("EffectLib")) {
