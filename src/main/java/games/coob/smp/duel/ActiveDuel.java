@@ -286,7 +286,7 @@ public class ActiveDuel {
 			games.coob.smp.duel.model.DuelStatistics.getInstance().addLoss(loser.getUniqueId());
 		}
 
-		// Teleport players to lobby or original location
+		// Teleport winner and loser back to their initial location (before the duel)
 		teleportPlayersBack();
 
 		// Clear player states
@@ -301,7 +301,8 @@ public class ActiveDuel {
 	}
 
 	/**
-	 * Teleports players back to lobby or original location.
+	 * Teleports players back to their previous location (before the duel).
+	 * Falls back to lobby spawn, then world spawn if no previous location was saved.
 	 */
 	private void teleportPlayersBack() {
 		Location lobby = games.coob.smp.duel.model.ArenaRegistry.getInstance().getLobbySpawn();
@@ -310,9 +311,10 @@ public class ActiveDuel {
 			if (player == null || !player.isOnline())
 				continue;
 
-			Location destination = lobby;
+			// Prefer previous location (where they were before the duel)
+			Location destination = originalLocations.get(player.getUniqueId());
 			if (destination == null) {
-				destination = originalLocations.get(player.getUniqueId());
+				destination = lobby;
 			}
 			if (destination == null) {
 				destination = player.getWorld().getSpawnLocation();

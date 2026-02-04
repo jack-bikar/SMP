@@ -57,8 +57,23 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 				}
 				TpRequestManager.getInstance().denyRequest(player, args[1]);
 			}
-			default -> ColorUtil.sendMessage(sender,
-					"&cUnknown subcommand. Use /tp, /tp accept <player>, or /tp deny <player>");
+			default -> {
+				Player target = Bukkit.getPlayer(args[0]);
+				if (target == null || !target.isOnline()) {
+					ColorUtil.sendMessage(sender, "&cPlayer not found or offline.");
+					return true;
+				}
+				if (player.equals(target)) {
+					ColorUtil.sendMessage(sender, "&cYou cannot teleport to yourself.");
+					return true;
+				}
+				if (player.hasPermission("smp.tp.bypass") || player.isOp()) {
+					player.teleport(target.getLocation());
+					ColorUtil.sendMessage(sender, "&aTeleported to &3" + target.getName() + "&a.");
+				} else {
+					TpRequestManager.getInstance().sendRequest(player, target);
+				}
+			}
 		}
 		return true;
 	}

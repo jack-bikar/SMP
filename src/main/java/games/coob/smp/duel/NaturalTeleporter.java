@@ -12,16 +12,13 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Handles random teleportation to unexplored areas for natural arena duels.
- * Based on CosmicTeleportTask but optimized for duel scenarios.
+ * Handles random teleportation for natural arena duels.
+ * Picks completely random coordinates within radius (no unexplored check) for scalability on large SMPs.
+ * Players still teleport down from the sky (cosmic-style). Based on CosmicTeleportTask.
  */
 public class NaturalTeleporter {
 
-	private static final int LOCATION_SEARCH_ATTEMPTS = 50;
 	private static final Random random = new Random();
-
-	// Track chunks that have been visited before (persistent across server runtime)
-	private static final Set<String> exploredChunks = new HashSet<>();
 
 	/**
 	 * Result of a natural teleport operation.
@@ -63,31 +60,31 @@ public class NaturalTeleporter {
 	public static CompletableFuture<TeleportResult> teleportPlayers(Player player1, Player player2) {
 		CompletableFuture<TeleportResult> future = new CompletableFuture<>();
 
-		// Run location search asynchronously to avoid lag
-		SchedulerUtil.runAsync(() -> {
+		// Run location search on main thread so chunk access works (purely random, no unexplored check)
+		SchedulerUtil.runTask(() -> {
 			World world = player1.getWorld();
 			int searchRadius = Settings.DuelSection.NATURAL_SEARCH_RADIUS;
 			int minPlayerDistance = Settings.DuelSection.NATURAL_MIN_PLAYER_DISTANCE;
 			int maxAttempts = Settings.DuelSection.NATURAL_MAX_SEARCH_ATTEMPTS;
 
-			Location centerLocation = findUnexploredLocation(world, searchRadius, maxAttempts);
+			Location centerLocation = findRandomLocation(world, searchRadius, maxAttempts);
 			if (centerLocation == null) {
-				SchedulerUtil.runTask(() -> future.complete(TeleportResult.failure(
-						"Could not find a suitable unexplored location after " + maxAttempts + " attempts.")));
+				future.complete(TeleportResult.failure(
+						"Could not find a suitable location after " + maxAttempts + " attempts. Try again."));
 				return;
 			}
 
 			// Find two spawn points with minimum distance
-			Location spawn1 = findSpawnPoint(centerLocation, minPlayerDistance / 2, 10);
+			Location spawn1 = findSpawnPoint(centerLocation, minPlayerDistance / 2, 15);
 			Location spawn2 = findOppositeSpawnPoint(centerLocation, spawn1, minPlayerDistance);
 
 			if (spawn1 == null || spawn2 == null) {
-				SchedulerUtil.runTask(() -> future.complete(TeleportResult.failure(
-						"Could not find suitable spawn points near the arena center.")));
+				future.complete(TeleportResult.failure(
+						"Could not find suitable spawn points near the arena center. Try again."));
 				return;
 			}
 
-			// Collect chunks that will be used
+			// Collect chunks that will be used (for cleanup after duel)
 			Set<Chunk> usedChunks = new HashSet<>();
 			usedChunks.add(centerLocation.getChunk());
 			usedChunks.add(spawn1.getChunk());
@@ -106,68 +103,69 @@ public class NaturalTeleporter {
 				}
 			}
 
-			// Mark chunks as explored
-			for (Chunk chunk : usedChunks) {
-				markChunkExplored(chunk);
-			}
-
 			final Location finalCenter = centerLocation;
 			final Location finalSpawn1 = spawn1;
 			final Location finalSpawn2 = spawn2;
 			final Set<Chunk> finalUsedChunks = usedChunks;
 
-			// Teleport on main thread
-			SchedulerUtil.runTask(() -> {
-				// Load chunks before teleporting
-				for (Chunk chunk : finalUsedChunks) {
-					if (!chunk.isLoaded()) {
-						chunk.load(true);
-					}
+			// Load chunks before teleporting
+			for (Chunk chunk : finalUsedChunks) {
+				if (!chunk.isLoaded()) {
+					chunk.load(true);
 				}
+			}
 
-				// Set yaw to face each other
-				finalSpawn1.setYaw(getYawToFace(finalSpawn1, finalSpawn2));
-				finalSpawn1.setPitch(0);
-				finalSpawn2.setYaw(getYawToFace(finalSpawn2, finalSpawn1));
-				finalSpawn2.setPitch(0);
+			// Set yaw to face each other (used when they land)
+			final Location spawn1WithYaw = finalSpawn1.clone();
+			final Location spawn2WithYaw = finalSpawn2.clone();
+			spawn1WithYaw.setYaw(getYawToFace(finalSpawn1, finalSpawn2));
+			spawn1WithYaw.setPitch(0);
+			spawn2WithYaw.setYaw(getYawToFace(finalSpawn2, finalSpawn1));
+			spawn2WithYaw.setPitch(0);
 
-				// Teleport players
-				player1.teleport(finalSpawn1);
-				player2.teleport(finalSpawn2);
+			// Fly down from sky to surface (cosmic-style); complete future when both have landed
+			final int[] landed = { 0 };
+			Runnable onBothLanded = () -> {
+				landed[0]++;
+				if (landed[0] == 2) {
+					future.complete(TeleportResult.success(finalCenter, finalSpawn1, finalSpawn2, finalUsedChunks));
+				}
+			};
 
-				future.complete(TeleportResult.success(finalCenter, finalSpawn1, finalSpawn2, finalUsedChunks));
-			});
+			DuelFlyDownTeleporter.teleportToGround(player1, spawn1WithYaw, onBothLanded);
+			DuelFlyDownTeleporter.teleportToGround(player2, spawn2WithYaw, onBothLanded);
 		});
 
 		return future;
 	}
 
 	/**
-	 * Finds an unexplored location suitable for a duel arena.
+	 * Finds a random location suitable for a duel arena.
+	 * Purely random within radius (no unexplored check) for scalability on large SMPs.
 	 */
-	private static Location findUnexploredLocation(World world, int searchRadius, int maxAttempts) {
+	private static Location findRandomLocation(World world, int searchRadius, int maxAttempts) {
 		Location worldSpawn = world.getSpawnLocation();
 
 		for (int attempt = 0; attempt < maxAttempts; attempt++) {
-			// Generate random coordinates within search radius
+			// Completely random coordinates within search radius
 			int x = worldSpawn.getBlockX() + random.nextInt(searchRadius * 2) - searchRadius;
 			int z = worldSpawn.getBlockZ() + random.nextInt(searchRadius * 2) - searchRadius;
 
-			// Check if chunk is explored
+			// Ensure chunk is loaded for block access (main thread)
 			Chunk chunk = world.getChunkAt(x >> 4, z >> 4);
-			if (isChunkExplored(chunk)) {
-				continue;
+			if (!chunk.isLoaded()) {
+				chunk.load(true);
 			}
 
-			// Get the location at ground level
 			Location location = new Location(world, x + 0.5, 0, z + 0.5);
 
-			// Check biome
-			if (isBannedBiome(location)) {
+			// Optional: skip banned biomes (can be disabled in config for more success)
+			if (Settings.DuelSection.NATURAL_BANNED_BIOMES != null && !Settings.DuelSection.NATURAL_BANNED_BIOMES.isEmpty()
+					&& isBannedBiome(location)) {
 				continue;
 			}
 
-			// Find highest safe block
+			// Find highest safe block at this x,z
 			int highestY = findHighestSafeBlock(location);
 			if (highestY == -1) {
 				continue;
@@ -175,7 +173,6 @@ public class NaturalTeleporter {
 
 			location.setY(highestY);
 
-			// Verify location is safe
 			if (isSafeLocation(location)) {
 				return location;
 			}
@@ -326,33 +323,15 @@ public class NaturalTeleporter {
 	/**
 	 * Calculates yaw to face from one location to another.
 	 */
-	private static float getYawToFace(Location from, Location to) {
+	/**
+	 * Returns the yaw angle (in degrees) to face from one location toward another.
+	 * Public so arena teleport can set spawn yaw for facing each other.
+	 */
+	public static float getYawToFace(Location from, Location to) {
 		double dx = to.getX() - from.getX();
 		double dz = to.getZ() - from.getZ();
 		double yaw = Math.atan2(-dx, dz) * 180 / Math.PI;
 		return (float) yaw;
-	}
-
-	/**
-	 * Marks a chunk as explored.
-	 */
-	private static void markChunkExplored(Chunk chunk) {
-		exploredChunks.add(getChunkKey(chunk));
-	}
-
-	/**
-	 * Checks if a chunk has been explored.
-	 */
-	private static boolean isChunkExplored(Chunk chunk) {
-		// Also check if the chunk has been generated/inhabited
-		return exploredChunks.contains(getChunkKey(chunk)) || chunk.isLoaded();
-	}
-
-	/**
-	 * Gets a unique key for a chunk.
-	 */
-	private static String getChunkKey(Chunk chunk) {
-		return chunk.getWorld().getName() + ":" + chunk.getX() + ":" + chunk.getZ();
 	}
 
 	/**
@@ -382,9 +361,8 @@ public class NaturalTeleporter {
 	}
 
 	/**
-	 * Clears the explored chunks cache (for server reload).
+	 * No-op; kept for API compatibility (explored cache removed for scalability).
 	 */
 	public static void clearExploredCache() {
-		exploredChunks.clear();
 	}
 }

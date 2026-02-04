@@ -114,6 +114,9 @@ permissions:
   smp.duel.queue:
     description: Use the duel queue system
     default: true
+  smp.tp.bypass:
+    description: Teleport to players without sending a request
+    default: op
   smp.duel.*:
     description: All duel permissions
     default: true

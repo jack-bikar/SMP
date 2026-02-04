@@ -256,18 +256,27 @@ public class DuelManager {
 			return;
 		}
 
-		// Teleport players to arena spawn points
-		challenger.teleport(arena.getSpawn1());
-		opponent.teleport(arena.getSpawn2());
+		// Spawn locations with yaw so players face each other
+		Location spawn1 = arena.getSpawn1().clone();
+		Location spawn2 = arena.getSpawn2().clone();
+		spawn1.setYaw(NaturalTeleporter.getYawToFace(spawn1, spawn2));
+		spawn1.setPitch(0);
+		spawn2.setYaw(NaturalTeleporter.getYawToFace(spawn2, spawn1));
+		spawn2.setPitch(0);
 
-		// Create the active duel
-		ActiveDuel duel = new ActiveDuel(challenger, opponent, arena, arena.getCenter(), null);
+		// Fly down from sky to arena spawn points (cosmic-style)
+		final int[] landed = { 0 };
+		Runnable onBothLanded = () -> {
+			landed[0]++;
+			if (landed[0] == 2) {
+				ActiveDuel duel = new ActiveDuel(challenger, opponent, arena, arena.getCenter(), null);
+				registerDuel(duel);
+				duel.startCountdown();
+			}
+		};
 
-		// Register the duel
-		registerDuel(duel);
-
-		// Start countdown
-		duel.startCountdown();
+		DuelFlyDownTeleporter.teleportToGround(challenger, spawn1, onBothLanded);
+		DuelFlyDownTeleporter.teleportToGround(opponent, spawn2, onBothLanded);
 	}
 
 	/**

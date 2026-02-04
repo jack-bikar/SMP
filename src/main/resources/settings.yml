@@ -162,10 +162,10 @@ Duel:
 
   # Border settings (shrinking zone that forces action)
   Border:
-    # Starting radius in blocks
-    Start_Radius: 50
+    # Starting radius in blocks (keep smaller for tighter arenas)
+    Start_Radius: 30
     # Final radius in blocks
-    End_Radius: 10
+    End_Radius: 5
     # Time in seconds for border to fully shrink
     Shrink_Time_Seconds: 180
     # Distance from border edge where warnings start
@@ -178,13 +178,14 @@ Duel:
     Particle_Type: "FLAME"
 
   # Natural teleport settings (for NATURAL arena mode)
+  # Location is purely random within radius (no unexplored check) for scalability on large SMPs
   Natural_Arena:
-    # Search radius from spawn for random location
+    # Search radius from world spawn for random location (can be large)
     Search_Radius: 5000
     # Minimum distance between the two players when teleported
     Min_Player_Distance: 30
-    # Maximum attempts to find a valid location
-    Max_Search_Attempts: 50
+    # Maximum attempts to find a valid location (purely random within radius, no unexplored check)
+    Max_Search_Attempts: 80
     # Biomes that cannot be used for duels
     Banned_Biomes:
       - "OCEAN"

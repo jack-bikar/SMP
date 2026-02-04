@@ -237,8 +237,8 @@ public final class Settings extends ConfigFile {
 			}
 
 			// Border
-			BORDER_START_RADIUS = config.getInt("Duel.Border.Start_Radius", 50);
-			BORDER_END_RADIUS = config.getInt("Duel.Border.End_Radius", 10);
+			BORDER_START_RADIUS = config.getInt("Duel.Border.Start_Radius", 30);
+			BORDER_END_RADIUS = config.getInt("Duel.Border.End_Radius", 5);
 			BORDER_SHRINK_TIME_SECONDS = config.getInt("Duel.Border.Shrink_Time_Seconds", 180);
 			BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.Warning_Distance", 5);
 			BORDER_KNOCKBACK_STRENGTH = config.getDouble("Duel.Border.Knockback_Strength", 1.5);
@@ -248,7 +248,7 @@ public final class Settings extends ConfigFile {
 			// Natural arena
 			NATURAL_SEARCH_RADIUS = config.getInt("Duel.Natural_Arena.Search_Radius", 5000);
 			NATURAL_MIN_PLAYER_DISTANCE = config.getInt("Duel.Natural_Arena.Min_Player_Distance", 30);
-			NATURAL_MAX_SEARCH_ATTEMPTS = config.getInt("Duel.Natural_Arena.Max_Search_Attempts", 50);
+			NATURAL_MAX_SEARCH_ATTEMPTS = config.getInt("Duel.Natural_Arena.Max_Search_Attempts", 80);
 			NATURAL_BANNED_BIOMES = config.getStringList("Duel.Natural_Arena.Banned_Biomes");
 			NATURAL_BANNED_BLOCKS = config.getStringList("Duel.Natural_Arena.Banned_Blocks");
 
