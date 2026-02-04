@@ -174,8 +174,18 @@ Duel:
     Knockback_Strength: 1.5
     # Damage per second when outside border
     Damage_Per_Second: 2.0
-    # Particle type for border visualization (FLAME, SOUL_FIRE_FLAME, END_ROD, etc.)
-    Particle_Type: "FLAME"
+    # Use per-player world borders for duel visuals (recommended, supports multiple duels)
+    Use_World_Border: true
+    # World border visual settings (per-player)
+    World_Border:
+      # Smoothly animate the border shrink on clients
+      Smooth_Shrink: true
+      # Client warning distance (red vignette)
+      Warning_Distance: 5
+      # Additional damage from the world border itself (set 0 to avoid double damage)
+      Damage_Amount: 0.0
+      # Distance from border before damage starts (kept for completeness)
+      Damage_Buffer: 0.0
 
   # Natural teleport settings (for NATURAL arena mode)
   # Location is purely random within radius (no unexplored check) for scalability on large SMPs
@@ -211,6 +221,9 @@ Duel:
     Loot_Phase_Seconds: 30
     # Should the winner keep their inventory regardless of mode?
     Winner_Keeps_Inventory: true
+
+  # End-of-duel return settings (after someone wins)
+  End_Return_Countdown_Seconds: 15
 
   # Cleanup settings (what happens after duel ends)
   Cleanup:

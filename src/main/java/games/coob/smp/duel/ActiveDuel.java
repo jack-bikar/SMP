@@ -6,7 +6,11 @@ import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import lombok.Getter;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Chunk;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -32,7 +36,8 @@ public class ActiveDuel {
 	public enum DuelState {
 		COUNTDOWN, // Pre-fight countdown
 		ACTIVE, // Fight in progress
-		LOOT_PHASE, // Winner collecting loot
+		LOOT_PHASE, // Winner collecting loot (only for DROP_ITEMS/LOOT_PHASE modes when used)
+		RETURN_COUNTDOWN, // Waiting before teleporting players back
 		ENDED // Duel has ended
 	}
 
@@ -59,10 +64,15 @@ public class ActiveDuel {
 	private final Map<UUID, ItemStack[]> originalArmor = new HashMap<>();
 	private final Map<UUID, Location> originalLocations = new HashMap<>();
 	private final Map<UUID, Double> originalHealth = new HashMap<>();
+	private final Map<UUID, GameMode> originalGameModes = new HashMap<>();
+
+	// Return countdown: players who have already teleported back (clicked or timer)
+	private final Set<UUID> returnedPlayers = new HashSet<>();
 
 	// Tasks
 	private BukkitTask countdownTask;
 	private BukkitTask lootPhaseTask;
+	private BukkitTask returnCountdownTask;
 
 	/**
 	 * Creates a new active duel.
@@ -104,6 +114,7 @@ public class ActiveDuel {
 		originalArmor.put(player.getUniqueId(), player.getInventory().getArmorContents().clone());
 		originalLocations.put(player.getUniqueId(), player.getLocation().clone());
 		originalHealth.put(player.getUniqueId(), player.getHealth());
+		originalGameModes.put(player.getUniqueId(), player.getGameMode());
 	}
 
 	/**
@@ -176,7 +187,7 @@ public class ActiveDuel {
 	 * @param loser  The losing player
 	 */
 	public void declareWinner(Player winner, Player loser) {
-		if (state == DuelState.ENDED || state == DuelState.LOOT_PHASE)
+		if (state == DuelState.ENDED || state == DuelState.LOOT_PHASE || state == DuelState.RETURN_COUNTDOWN)
 			return;
 
 		this.winner = winner;
@@ -187,33 +198,144 @@ public class ActiveDuel {
 			countdownTask.cancel();
 		}
 
-		// Handle based on loot mode
-		Settings.DuelSection.LootMode lootMode = Settings.DuelSection.LOOT_MODE;
+		// Stop border
+		border.stop();
 
-		switch (lootMode) {
-			case DROP_ITEMS -> {
-				// Items already dropped by death
-				this.state = DuelState.LOOT_PHASE;
-				startLootPhase();
-			}
-			case KEEP_INVENTORY -> {
-				// Loser keeps their items (restore from saved state)
+		// Loser: put in spectator (death cancelled - they never actually died)
+		if (loser.isOnline()) {
+			loser.setGameMode(GameMode.SPECTATOR);
+			if (Settings.DuelSection.LOOT_MODE == Settings.DuelSection.LootMode.KEEP_INVENTORY) {
 				restorePlayerInventory(loser);
-				endDuel();
-			}
-			case LOOT_PHASE -> {
-				this.state = DuelState.LOOT_PHASE;
-				startLootPhase();
 			}
 		}
 
-		// Winner announcement
+		// Titles: "Won duel" / "Lost duel" (center of screen)
+		if (winner.isOnline()) {
+			winner.showTitle(net.kyori.adventure.title.Title.title(
+					Component.text("Won duel").color(net.kyori.adventure.text.format.NamedTextColor.GREEN),
+					Component.empty(),
+					net.kyori.adventure.title.Title.Times.times(
+							java.time.Duration.ofMillis(500),
+							java.time.Duration.ofSeconds(3),
+							java.time.Duration.ofMillis(500))));
+		}
+		if (loser.isOnline()) {
+			loser.showTitle(net.kyori.adventure.title.Title.title(
+					Component.text("Lost duel").color(net.kyori.adventure.text.format.NamedTextColor.RED),
+					Component.empty(),
+					net.kyori.adventure.title.Title.Times.times(
+							java.time.Duration.ofMillis(500),
+							java.time.Duration.ofSeconds(3),
+							java.time.Duration.ofMillis(500))));
+		}
+
+		// Chat messages
 		ColorUtil.sendMessage(winner, "&a&lYou won the duel against &e" + loser.getName() + "&a!");
-		ColorUtil.sendMessage(loser, "&c&lYou lost the duel against &e" + winner.getName() + "&c!");
+		if (loser.isOnline()) {
+			ColorUtil.sendMessage(loser, "&c&lYou lost the duel against &e" + winner.getName() + "&c!");
+		}
+
+		// Start return countdown: both get clickable message and 15s (config) until auto-teleport
+		startReturnCountdown();
 	}
 
 	/**
-	 * Starts the loot collection phase.
+	 * Starts the return countdown: clickable "teleport back" message and timer before auto-teleport.
+	 */
+	private void startReturnCountdown() {
+		this.state = DuelState.RETURN_COUNTDOWN;
+		int countdownSeconds = Settings.DuelSection.END_RETURN_COUNTDOWN_SECONDS;
+
+		Component clickToReturn = Component.text("[Click here to return now]")
+				.color(net.kyori.adventure.text.format.NamedTextColor.GREEN)
+				.hoverEvent(HoverEvent.showText(Component.text("Teleport back to your previous location")))
+				.clickEvent(ClickEvent.runCommand("/duel return"));
+
+		for (Player p : new Player[] { challenger, opponent }) {
+			if (p != null && p.isOnline()) {
+				ColorUtil.sendMessage(p, "&eYou will be returned in &6" + countdownSeconds + " &eseconds.");
+				p.sendMessage(Component.text("").append(clickToReturn));
+			}
+		}
+
+		returnCountdownTask = SchedulerUtil.runLater(20L * countdownSeconds, this::finishReturnAndEndDuel);
+	}
+
+	/**
+	 * Teleports one player back immediately (click or /duel return). Returns true if the player was in return countdown.
+	 */
+	public boolean returnNow(Player player) {
+		if (state != DuelState.RETURN_COUNTDOWN)
+			return false;
+		if (!hasPlayer(player))
+			return false;
+		UUID id = player.getUniqueId();
+		if (returnedPlayers.contains(id))
+			return true; // Already returned
+
+		returnedPlayers.add(id);
+		teleportOnePlayerBack(player);
+
+		if (returnedPlayers.size() >= 2) {
+			if (returnCountdownTask != null) {
+				returnCountdownTask.cancel();
+				returnCountdownTask = null;
+			}
+			finishReturnAndEndDuel();
+		}
+		return true;
+	}
+
+	/**
+	 * Teleports a single player back to their original location and restores game mode.
+	 */
+	private void teleportOnePlayerBack(Player player) {
+		if (!player.isOnline())
+			return;
+		Location destination = originalLocations.get(player.getUniqueId());
+		if (destination == null) {
+			destination = games.coob.smp.duel.model.ArenaRegistry.getInstance().getLobbySpawn();
+		}
+		if (destination == null) {
+			destination = player.getWorld().getSpawnLocation();
+		}
+		player.teleport(destination);
+		GameMode gm = originalGameModes.get(player.getUniqueId());
+		if (gm != null) {
+			player.setGameMode(gm);
+		}
+		if (player.equals(winner) && Settings.DuelSection.WINNER_KEEPS_INVENTORY) {
+			Double originalHp = originalHealth.get(player.getUniqueId());
+			if (originalHp != null) {
+				double maxHp = player.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH) != null
+						? player.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue()
+						: 20.0;
+				player.setHealth(Math.min(originalHp, maxHp));
+			}
+		}
+	}
+
+	/**
+	 * Called when return countdown timer ends or both players have returned; teleports any remaining players then ends duel.
+	 */
+	private void finishReturnAndEndDuel() {
+		if (state == DuelState.ENDED)
+			return;
+		if (returnCountdownTask != null) {
+			returnCountdownTask.cancel();
+			returnCountdownTask = null;
+		}
+		// Teleport any player who hasn't returned yet
+		for (Player p : new Player[] { challenger, opponent }) {
+			if (p != null && p.isOnline() && !returnedPlayers.contains(p.getUniqueId())) {
+				teleportOnePlayerBack(p);
+			}
+		}
+		endDuel();
+	}
+
+	/**
+	 * Starts the loot collection phase (only used for non-death flows if needed in future).
 	 */
 	private void startLootPhase() {
 		int lootPhaseSeconds = Settings.DuelSection.LOOT_PHASE_SECONDS;
@@ -279,6 +401,10 @@ public class ActiveDuel {
 			countdownTask.cancel();
 		if (lootPhaseTask != null)
 			lootPhaseTask.cancel();
+		if (returnCountdownTask != null) {
+			returnCountdownTask.cancel();
+			returnCountdownTask = null;
+		}
 
 		// Update statistics
 		if (winner != null && loser != null) {
@@ -302,7 +428,7 @@ public class ActiveDuel {
 
 	/**
 	 * Teleports players back to their previous location (before the duel).
-	 * Falls back to lobby spawn, then world spawn if no previous location was saved.
+	 * Skips players already in returnedPlayers (they were teleported via returnNow or finishReturnAndEndDuel).
 	 */
 	private void teleportPlayersBack() {
 		Location lobby = games.coob.smp.duel.model.ArenaRegistry.getInstance().getLobbySpawn();
@@ -310,8 +436,9 @@ public class ActiveDuel {
 		for (Player player : new Player[] { challenger, opponent }) {
 			if (player == null || !player.isOnline())
 				continue;
+			if (returnedPlayers.contains(player.getUniqueId()))
+				continue; // Already teleported during return countdown
 
-			// Prefer previous location (where they were before the duel)
 			Location destination = originalLocations.get(player.getUniqueId());
 			if (destination == null) {
 				destination = lobby;
@@ -321,6 +448,12 @@ public class ActiveDuel {
 			}
 
 			player.teleport(destination);
+
+			// Restore game mode
+			GameMode gm = originalGameModes.get(player.getUniqueId());
+			if (gm != null) {
+				player.setGameMode(gm);
+			}
 
 			// Restore health for winner (if keeping inventory)
 			if (player.equals(winner) && Settings.DuelSection.WINNER_KEEPS_INVENTORY) {

@@ -2,6 +2,7 @@ package games.coob.smp.duel;
 
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
+import games.coob.smp.util.SchedulerUtil;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.bukkit.entity.*;
@@ -11,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -48,7 +50,34 @@ public final class DuelListener implements Listener {
 	}
 
 	/**
-	 * Handle player death in duel.
+	 * Cancel lethal damage in duel: prevent death, put loser in spectator, show titles, start return countdown.
+	 * This runs before the death event so the player never actually dies.
+	 */
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void onEntityDamage(final EntityDamageEvent event) {
+		if (!(event.getEntity() instanceof Player victim))
+			return;
+
+		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(victim);
+		if (duel == null || duel.getState() != ActiveDuel.DuelState.ACTIVE)
+			return;
+
+		// Would this damage kill the player?
+		double damageAmount = event.getFinalDamage();
+		if (victim.getHealth() - damageAmount > 0)
+			return;
+
+		// Cancel death: cancel the damage and handle duel end ourselves
+		event.setCancelled(true);
+		victim.setHealth(0.5);
+		Player winner = duel.getOpponent(victim);
+		if (winner != null) {
+			DuelManager.getInstance().handlePlayerDeath(victim, winner);
+		}
+	}
+
+	/**
+	 * Handle player death in duel (fallback if damage was not cancelled, e.g. void kill).
 	 */
 	@EventHandler(priority = EventPriority.HIGH)
 	public void onPlayerDeath(final PlayerDeathEvent event) {
@@ -59,35 +88,39 @@ public final class DuelListener implements Listener {
 			return;
 
 		Player killer = player.getKiller();
+		// Modify drops: keep inventory so they don't lose loot
+		event.setKeepInventory(true);
+		event.setKeepLevel(true);
+		event.getDrops().clear();
+		event.setDroppedExp(0);
 
-		// Modify drops based on loot mode
-		Settings.DuelSection.LootMode lootMode = Settings.DuelSection.LOOT_MODE;
-
-		if (lootMode == Settings.DuelSection.LootMode.KEEP_INVENTORY) {
-			event.setKeepInventory(true);
-			event.setKeepLevel(true);
-			event.getDrops().clear();
-			event.setDroppedExp(0);
-		}
-
-		// Handle death
 		DuelManager.getInstance().handlePlayerDeath(player, killer);
 	}
 
 	/**
-	 * Handle player respawn in duel.
+	 * Handle player respawn in duel (fallback when death wasn't cancelled, e.g. void).
 	 */
 	@EventHandler(priority = EventPriority.HIGH)
 	public void onPlayerRespawn(final PlayerRespawnEvent event) {
 		Player player = event.getPlayer();
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
 
-		if (duel != null) {
-			// Respawn at lobby or original location
-			org.bukkit.Location lobby = games.coob.smp.duel.model.ArenaRegistry.getInstance().getLobbySpawn();
-			if (lobby != null) {
-				event.setRespawnLocation(lobby);
+		if (duel == null)
+			return;
+
+		if (duel.getState() == ActiveDuel.DuelState.RETURN_COUNTDOWN && player.equals(duel.getLoser())) {
+			// Respawn loser in arena as spectator so they see the return countdown
+			org.bukkit.Location center = duel.getCenter();
+			if (center != null) {
+				org.bukkit.Location respawn = center.clone().add(0.5, 1, 0.5);
+				respawn.setWorld(center.getWorld());
+				event.setRespawnLocation(respawn);
 			}
+			// Set spectator next tick (player not fully respawned yet)
+			SchedulerUtil.runLater(1, () -> {
+				if (player.isOnline() && duel.getState() == ActiveDuel.DuelState.RETURN_COUNTDOWN)
+					player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+			});
 		}
 	}
 

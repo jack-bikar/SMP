@@ -65,6 +65,13 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 			case "leave", "exit" -> {
 				handleLeave(player);
 			}
+			case "return", "back" -> {
+				if (DuelManager.getInstance().returnNow(player)) {
+					ColorUtil.sendMessage(player, "&aReturned to your previous location.");
+				} else {
+					ColorUtil.sendMessage(player, "&cYou are not in a duel return countdown.");
+				}
+			}
 			case "stats", "statistics" -> {
 				if (args.length < 2) {
 					showStats(player, player);
@@ -116,6 +123,7 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(player, "&e/duel deny <player> &7- Deny a duel request");
 		ColorUtil.sendMessage(player, "&e/duel queue &7- Join random matchmaking");
 		ColorUtil.sendMessage(player, "&e/duel leave &7- Leave queue or loot phase");
+		ColorUtil.sendMessage(player, "&e/duel return &7- Teleport back now (after duel ends)");
 		ColorUtil.sendMessage(player, "&e/duel stats [player] &7- View duel statistics");
 	}
 
@@ -126,10 +134,15 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 			return;
 		}
 
-		// Check if in loot phase
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
 		if (duel != null && duel.getState() == ActiveDuel.DuelState.LOOT_PHASE) {
 			duel.leaveLootPhase(player);
+			return;
+		}
+		if (duel != null && duel.getState() == ActiveDuel.DuelState.RETURN_COUNTDOWN) {
+			if (DuelManager.getInstance().returnNow(player)) {
+				ColorUtil.sendMessage(player, "&aReturned to your previous location.");
+			}
 			return;
 		}
 
@@ -179,6 +192,8 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 				completions.add("queue");
 			if ("leave".startsWith(input))
 				completions.add("leave");
+			if ("return".startsWith(input))
+				completions.add("return");
 			if ("stats".startsWith(input))
 				completions.add("stats");
 

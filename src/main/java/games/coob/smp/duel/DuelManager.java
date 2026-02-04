@@ -359,16 +359,24 @@ public class DuelManager {
 	}
 
 	/**
-	 * Handles player death during a duel.
+	 * Handles player death during a duel (or "virtual" death when lethal damage was cancelled).
 	 */
 	public void handlePlayerDeath(Player player, Player killer) {
 		ActiveDuel duel = getActiveDuel(player);
-		if (duel != null && duel.isFighting()) {
+		if (duel != null && (duel.isFighting() || duel.getState() == ActiveDuel.DuelState.ACTIVE)) {
 			Player opponent = duel.getOpponent(player);
 			if (opponent != null) {
 				duel.declareWinner(opponent, player);
 			}
 		}
+	}
+
+	/**
+	 * Teleports the player back immediately (from return countdown). Used by /duel return or clickable message.
+	 */
+	public boolean returnNow(Player player) {
+		ActiveDuel duel = getActiveDuel(player);
+		return duel != null && duel.returnNow(player);
 	}
 
 	/**

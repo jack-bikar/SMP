@@ -200,7 +200,11 @@ public final class Settings extends ConfigFile {
 		public static int BORDER_WARNING_DISTANCE;
 		public static double BORDER_KNOCKBACK_STRENGTH;
 		public static double BORDER_DAMAGE_PER_SECOND;
-		public static String BORDER_PARTICLE_TYPE;
+		public static boolean BORDER_USE_WORLD_BORDER;
+		public static boolean BORDER_WORLD_BORDER_SMOOTH_SHRINK;
+		public static int BORDER_WORLD_BORDER_WARNING_DISTANCE;
+		public static double BORDER_WORLD_BORDER_DAMAGE_AMOUNT;
+		public static double BORDER_WORLD_BORDER_DAMAGE_BUFFER;
 
 		// Natural arena settings
 		public static int NATURAL_SEARCH_RADIUS;
@@ -213,6 +217,9 @@ public final class Settings extends ConfigFile {
 		public static LootMode LOOT_MODE;
 		public static int LOOT_PHASE_SECONDS;
 		public static boolean WINNER_KEEPS_INVENTORY;
+
+		// End-of-duel return countdown (seconds before auto-teleport)
+		public static int END_RETURN_COUNTDOWN_SECONDS;
 
 		// Cleanup settings
 		public static boolean CLEANUP_REMOVE_PLACED_BLOCKS;
@@ -243,7 +250,12 @@ public final class Settings extends ConfigFile {
 			BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.Warning_Distance", 5);
 			BORDER_KNOCKBACK_STRENGTH = config.getDouble("Duel.Border.Knockback_Strength", 1.5);
 			BORDER_DAMAGE_PER_SECOND = config.getDouble("Duel.Border.Damage_Per_Second", 2.0);
-			BORDER_PARTICLE_TYPE = config.getString("Duel.Border.Particle_Type", "FLAME");
+			BORDER_USE_WORLD_BORDER = config.getBoolean("Duel.Border.Use_World_Border", true);
+			BORDER_WORLD_BORDER_SMOOTH_SHRINK = config.getBoolean("Duel.Border.World_Border.Smooth_Shrink", true);
+			BORDER_WORLD_BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.World_Border.Warning_Distance",
+					BORDER_WARNING_DISTANCE);
+			BORDER_WORLD_BORDER_DAMAGE_AMOUNT = config.getDouble("Duel.Border.World_Border.Damage_Amount", 0.0);
+			BORDER_WORLD_BORDER_DAMAGE_BUFFER = config.getDouble("Duel.Border.World_Border.Damage_Buffer", 0.0);
 
 			// Natural arena
 			NATURAL_SEARCH_RADIUS = config.getInt("Duel.Natural_Arena.Search_Radius", 5000);
@@ -261,6 +273,9 @@ public final class Settings extends ConfigFile {
 			}
 			LOOT_PHASE_SECONDS = config.getInt("Duel.Loot.Loot_Phase_Seconds", 30);
 			WINNER_KEEPS_INVENTORY = config.getBoolean("Duel.Loot.Winner_Keeps_Inventory", true);
+
+			// End return countdown
+			END_RETURN_COUNTDOWN_SECONDS = config.getInt("Duel.End_Return_Countdown_Seconds", 15);
 
 			// Cleanup
 			CLEANUP_REMOVE_PLACED_BLOCKS = config.getBoolean("Duel.Cleanup.Remove_Placed_Blocks", true);

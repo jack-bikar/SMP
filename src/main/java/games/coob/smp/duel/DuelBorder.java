@@ -3,14 +3,18 @@ package games.coob.smp.duel;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Particle;
+import org.bukkit.WorldBorder;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Soft border system for duels with shrinking mechanics.
@@ -25,7 +29,11 @@ public class DuelBorder {
 	private final double warningDistance;
 	private final double knockbackStrength;
 	private final double damagePerSecond;
-	private final Particle particleType;
+	private final boolean useWorldBorder;
+	private final boolean smoothWorldBorderShrink;
+	private final int worldBorderWarningDistance;
+	private final double worldBorderDamageAmount;
+	private final double worldBorderDamageBuffer;
 
 	private double currentRadius;
 	private long startTime;
@@ -33,10 +41,11 @@ public class DuelBorder {
 	private boolean shrinking;
 
 	private BukkitTask borderTask;
-	private BukkitTask particleTask;
+	private WorldBorder worldBorder;
 
 	private final Set<Player> playersInDuel = new HashSet<>();
 	private final Set<Player> warnedPlayers = new HashSet<>();
+	private final Map<UUID, WorldBorder> previousWorldBorders = new HashMap<>();
 
 	public DuelBorder(Location center) {
 		this.center = center.clone();
@@ -46,15 +55,11 @@ public class DuelBorder {
 		this.warningDistance = Settings.DuelSection.BORDER_WARNING_DISTANCE;
 		this.knockbackStrength = Settings.DuelSection.BORDER_KNOCKBACK_STRENGTH;
 		this.damagePerSecond = Settings.DuelSection.BORDER_DAMAGE_PER_SECOND;
-
-		// Parse particle type
-		Particle particle;
-		try {
-			particle = Particle.valueOf(Settings.DuelSection.BORDER_PARTICLE_TYPE.toUpperCase());
-		} catch (IllegalArgumentException e) {
-			particle = Particle.FLAME;
-		}
-		this.particleType = particle;
+		this.useWorldBorder = Settings.DuelSection.BORDER_USE_WORLD_BORDER;
+		this.smoothWorldBorderShrink = Settings.DuelSection.BORDER_WORLD_BORDER_SMOOTH_SHRINK;
+		this.worldBorderWarningDistance = Settings.DuelSection.BORDER_WORLD_BORDER_WARNING_DISTANCE;
+		this.worldBorderDamageAmount = Settings.DuelSection.BORDER_WORLD_BORDER_DAMAGE_AMOUNT;
+		this.worldBorderDamageBuffer = Settings.DuelSection.BORDER_WORLD_BORDER_DAMAGE_BUFFER;
 
 		this.currentRadius = startRadius;
 		this.active = false;
@@ -74,11 +79,24 @@ public class DuelBorder {
 			playersInDuel.add(player);
 		}
 
+		if (useWorldBorder) {
+			worldBorder = Bukkit.createWorldBorder();
+			worldBorder.setCenter(center.getX(), center.getZ());
+			worldBorder.setSize(startRadius * 2);
+			worldBorder.setWarningDistance(worldBorderWarningDistance);
+			worldBorder.setDamageAmount(worldBorderDamageAmount);
+			worldBorder.setDamageBuffer(worldBorderDamageBuffer);
+
+			for (Player player : playersInDuel) {
+				if (player.isOnline()) {
+					previousWorldBorders.put(player.getUniqueId(), player.getWorldBorder());
+					player.setWorldBorder(worldBorder);
+				}
+			}
+		}
+
 		// Start the main border task (runs every second)
 		borderTask = SchedulerUtil.runTimer(20, 20, this::tick);
-
-		// Start particle visualization (runs every 5 ticks)
-		particleTask = SchedulerUtil.runTimer(5, 5, this::drawBorder);
 	}
 
 	/**
@@ -87,6 +105,10 @@ public class DuelBorder {
 	public void startShrinking() {
 		this.shrinking = true;
 		this.startTime = System.currentTimeMillis();
+
+		if (useWorldBorder && smoothWorldBorderShrink && worldBorder != null) {
+			worldBorder.setSize(endRadius * 2, shrinkTimeSeconds);
+		}
 
 		for (Player player : playersInDuel) {
 			ColorUtil.sendMessage(player, "&c&lBorder is now shrinking! Stay inside!");
@@ -113,6 +135,10 @@ public class DuelBorder {
 			}
 		}
 
+		if (useWorldBorder && !smoothWorldBorderShrink && worldBorder != null) {
+			worldBorder.setSize(currentRadius * 2);
+		}
+
 		// Check each player
 		for (Player player : new HashSet<>(playersInDuel)) {
 			if (!player.isOnline())
@@ -135,36 +161,6 @@ public class DuelBorder {
 			} else {
 				// Safe zone
 				warnedPlayers.remove(player);
-			}
-		}
-	}
-
-	/**
-	 * Draws the border using particles.
-	 */
-	private void drawBorder() {
-		if (!active)
-			return;
-
-		// Draw circle of particles at border edge
-		int points = (int) (currentRadius * 4); // More points for larger radius
-		points = Math.min(points, 100); // Cap at 100 points
-
-		for (int i = 0; i < points; i++) {
-			double angle = (2 * Math.PI * i) / points;
-			double x = center.getX() + currentRadius * Math.cos(angle);
-			double z = center.getZ() + currentRadius * Math.sin(angle);
-
-			// Draw particles at multiple heights for visibility
-			for (int y = 0; y < 3; y++) {
-				Location particleLocation = new Location(center.getWorld(), x, center.getY() + y, z);
-
-				// Only show to nearby players for performance
-				for (Player player : playersInDuel) {
-					if (player.isOnline() && player.getLocation().distance(particleLocation) < 50) {
-						player.spawnParticle(particleType, particleLocation, 1, 0, 0, 0, 0);
-					}
-				}
 			}
 		}
 	}
@@ -225,6 +221,13 @@ public class DuelBorder {
 	public void removePlayer(Player player) {
 		playersInDuel.remove(player);
 		warnedPlayers.remove(player);
+
+		if (useWorldBorder) {
+			WorldBorder previous = previousWorldBorders.remove(player.getUniqueId());
+			if (player.isOnline()) {
+				player.setWorldBorder(previous != null ? previous : player.getWorld().getWorldBorder());
+			}
+		}
 	}
 
 	/**
@@ -239,9 +242,16 @@ public class DuelBorder {
 			borderTask = null;
 		}
 
-		if (particleTask != null) {
-			particleTask.cancel();
-			particleTask = null;
+		if (useWorldBorder) {
+			for (Map.Entry<UUID, WorldBorder> entry : previousWorldBorders.entrySet()) {
+				Player player = Bukkit.getPlayer(entry.getKey());
+				if (player != null && player.isOnline()) {
+					WorldBorder previous = entry.getValue();
+					player.setWorldBorder(previous != null ? previous : player.getWorld().getWorldBorder());
+				}
+			}
+			previousWorldBorders.clear();
+			worldBorder = null;
 		}
 
 		playersInDuel.clear();
