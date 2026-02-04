@@ -253,11 +253,11 @@ public final class Settings extends ConfigFile {
 			NATURAL_BANNED_BLOCKS = config.getStringList("Duel.Natural_Arena.Banned_Blocks");
 
 			// Loot
-			String lootModeStr = config.getString("Duel.Loot.Mode", "LOOT_PHASE");
+			String lootModeStr = config.getString("Duel.Loot.Mode", "KEEP_INVENTORY");
 			try {
 				LOOT_MODE = LootMode.valueOf(lootModeStr.toUpperCase());
 			} catch (IllegalArgumentException e) {
-				LOOT_MODE = LootMode.LOOT_PHASE;
+				LOOT_MODE = LootMode.KEEP_INVENTORY;
 			}
 			LOOT_PHASE_SECONDS = config.getInt("Duel.Loot.Loot_Phase_Seconds", 30);
 			WINNER_KEEPS_INVENTORY = config.getBoolean("Duel.Loot.Winner_Keeps_Inventory", true);

@@ -326,7 +326,10 @@ public class ActiveDuel {
 			if (player.equals(winner) && Settings.DuelSection.WINNER_KEEPS_INVENTORY) {
 				Double originalHp = originalHealth.get(player.getUniqueId());
 				if (originalHp != null) {
-					player.setHealth(Math.min(originalHp, player.getMaxHealth()));
+					double maxHp = player.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH) != null
+							? player.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue()
+							: 20.0;
+					player.setHealth(Math.min(originalHp, maxHp));
 				}
 			}
 		}

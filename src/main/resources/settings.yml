@@ -206,7 +206,7 @@ Duel:
   # Loot settings (what happens to items when duel ends)
   Loot:
     # Mode: DROP_ITEMS (normal death drops), KEEP_INVENTORY (loser keeps items), LOOT_PHASE (winner has time to collect)
-    Mode: "LOOT_PHASE"
+    Mode: "KEEP_INVENTORY"
     # Duration of loot phase in seconds (only for LOOT_PHASE mode)
     Loot_Phase_Seconds: 30
     # Should the winner keep their inventory regardless of mode?

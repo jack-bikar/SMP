@@ -5,6 +5,7 @@ import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import lombok.Getter;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
