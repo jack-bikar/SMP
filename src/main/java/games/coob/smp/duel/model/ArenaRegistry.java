@@ -17,18 +17,27 @@ public class ArenaRegistry extends ConfigFile {
 	@Getter
 	private static final ArenaRegistry instance = new ArenaRegistry();
 
-	private final Map<String, ArenaData> arenas = new HashMap<>();
+	// Initialized in onLoad() because super() calls load() before our instance initializers run
+	private Map<String, ArenaData> arenas;
 
 	@Getter
 	private Location lobbySpawn;
 
 	private ArenaRegistry() {
 		super("arenas.yml");
+		// Ensure arenas is initialized (onLoad is called from super() before we get here)
+		if (arenas == null) {
+			arenas = new HashMap<>();
+		}
 	}
 
 	@Override
 	protected void onLoad() {
-		arenas.clear();
+		if (arenas == null) {
+			arenas = new HashMap<>();
+		} else {
+			arenas.clear();
+		}
 
 		// Load lobby spawn
 		lobbySpawn = getConfig().getLocation("Lobby_Spawn");
@@ -55,8 +64,10 @@ public class ArenaRegistry extends ConfigFile {
 
 		// Save arenas
 		getConfig().set("Arenas", null); // Clear existing
-		for (ArenaData arena : arenas.values()) {
-			getConfig().set("Arenas." + arena.getName(), arena.serialize());
+		if (arenas != null) {
+			for (ArenaData arena : arenas.values()) {
+				getConfig().set("Arenas." + arena.getName(), arena.serialize());
+			}
 		}
 	}
 

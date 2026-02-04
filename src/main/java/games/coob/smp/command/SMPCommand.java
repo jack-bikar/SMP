@@ -44,6 +44,31 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&7  &7/track stop &7- Stop all tracking");
 		ColorUtil.sendMessage(sender, "&7  &7/track stop <player> &7- Stop tracking specific player");
 		ColorUtil.sendMessage(sender, "");
+		ColorUtil.sendMessage(sender, "&e/tp &7- Teleport request menu and accept/deny");
+		ColorUtil.sendMessage(sender, "&7  &7/tp &7- Open TP menu (select player to request)");
+		ColorUtil.sendMessage(sender, "&7  &7/tp accept <player> &7- Accept TP request");
+		ColorUtil.sendMessage(sender, "&7  &7/tp deny <player> &7- Deny TP request");
+		ColorUtil.sendMessage(sender, "");
+		ColorUtil.sendMessage(sender, "&e/duel &7- 1v1 duel system (alias: /d)");
+		ColorUtil.sendMessage(sender, "&7  &7/duel <player> &7- Challenge a player to a duel");
+		ColorUtil.sendMessage(sender, "&7  &7/duel accept <player> &7- Accept duel request");
+		ColorUtil.sendMessage(sender, "&7  &7/duel deny <player> &7- Deny duel request");
+		ColorUtil.sendMessage(sender, "&7  &7/duel queue &7- Join random matchmaking");
+		ColorUtil.sendMessage(sender, "&7  &7/duel leave &7- Leave queue or loot phase");
+		ColorUtil.sendMessage(sender, "&7  &7/duel stats [player] &7- View duel statistics");
+		ColorUtil.sendMessage(sender, "");
+		ColorUtil.sendMessage(sender, "&e/arena &7- Arena management (admin)");
+		ColorUtil.sendMessage(sender, "&7  &7/arena create <name> &7- Create a new arena");
+		ColorUtil.sendMessage(sender, "&7  &7/arena edit <name> &7- Enter edit mode for an arena");
+		ColorUtil.sendMessage(sender, "&7  &7/arena setspawn1 &7- Set challenger spawn point");
+		ColorUtil.sendMessage(sender, "&7  &7/arena setspawn2 &7- Set opponent spawn point");
+		ColorUtil.sendMessage(sender, "&7  &7/arena setlobby &7- Set global lobby spawn");
+		ColorUtil.sendMessage(sender, "&7  &7/arena save &7- Save and exit edit mode");
+		ColorUtil.sendMessage(sender, "&7  &7/arena cancel &7- Cancel edit mode without saving");
+		ColorUtil.sendMessage(sender, "&7  &7/arena delete <name> &7- Delete an arena");
+		ColorUtil.sendMessage(sender, "&7  &7/arena list &7- List all arenas");
+		ColorUtil.sendMessage(sender, "&7  &7/arena info [name] &7- Show arena details");
+		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&e/inv <inv|enderchest|armour|clear> <player> &7- Edit player inventories (OP)");
 		ColorUtil.sendMessage(sender, "");
 
@@ -53,7 +78,10 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&7- &eDeath Chest System &7- Items stored in chests on death");
 		ColorUtil.sendMessage(sender, "&7- &eLocator Bar Tracking &7- Track players using the locator bar");
 		ColorUtil.sendMessage(sender, "&7- &eProjectile Effects &7- Particle trails and knockback for projectiles");
-		ColorUtil.sendMessage(sender, "&7- &eCombat System &7- Combat logging prevention");
+		ColorUtil.sendMessage(sender, "&7- &eDeath Effects &7- Custom death particle effects");
+		ColorUtil.sendMessage(sender, "&7- &eCombat System &7- Combat logging prevention (ghost body, lockout, debuff)");
+		ColorUtil.sendMessage(sender, "&7- &eTP Request System &7- Teleport request menu and accept/deny in chat");
+		ColorUtil.sendMessage(sender, "&7- &eDuel System &7- 1v1 duels, queue matchmaking, arenas, shrinking border");
 		ColorUtil.sendMessage(sender, "");
 
 		// Permissions (only restricted commands)
@@ -61,6 +89,9 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.spawn &7- Use /spawn command");
 		ColorUtil.sendMessage(sender, "&7- &esmp.command.inv &7- Use /inv command");
+		ColorUtil.sendMessage(sender, "&7- &esmp.duel &7- Use /duel command");
+		ColorUtil.sendMessage(sender, "&7- &esmp.duel.queue &7- Use duel queue matchmaking");
+		ColorUtil.sendMessage(sender, "&7- &esmp.admin.arena &7- Arena management (create, edit, delete)");
 		ColorUtil.sendMessage(sender, "");
 
 		ColorUtil.sendMessage(sender, "&6&l=== === ===");
