@@ -36,6 +36,9 @@ public final class WaypointPacketSender {
     private static Method updateWaypointMethod;
     private static Method removeWaypointMethod;
     private static Method sendPacketMethod;
+    private static Method getHandleMethod;
+    private static java.lang.reflect.Field connectionField;
+    private static Method connectionSendMethod;
     private static boolean initialized = false;
     private static boolean available = false;
 
@@ -329,28 +332,29 @@ public final class WaypointPacketSender {
             if (sendPacketMethod != null) {
                 sendPacketMethod.invoke(player, packet);
             } else {
-                // Try using CraftPlayer
-                Object craftPlayer = player.getClass().getMethod("getHandle").invoke(player);
-                Object connection = craftPlayer.getClass().getField("connection").get(craftPlayer);
+                // CraftPlayer -> ServerPlayer.connection.send(packet); lookups are cached after the first send
+                if (getHandleMethod == null)
+                    getHandleMethod = player.getClass().getMethod("getHandle");
+                Object handle = getHandleMethod.invoke(player);
+                if (connectionField == null)
+                    connectionField = handle.getClass().getField("connection");
+                Object connection = connectionField.get(handle);
 
-                // Try different send method names
-                Method sendMethod = null;
-                for (String methodName : new String[] { "send", "sendPacket", "a" }) {
-                    try {
+                if (connectionSendMethod == null) {
+                    for (String methodName : new String[] { "send", "sendPacket", "a" }) {
                         for (Method m : connection.getClass().getMethods()) {
                             if (m.getName().equals(methodName) && m.getParameterCount() == 1) {
-                                sendMethod = m;
+                                connectionSendMethod = m;
                                 break;
                             }
                         }
-                        if (sendMethod != null)
+                        if (connectionSendMethod != null)
                             break;
-                    } catch (Exception ignored) {
                     }
                 }
 
-                if (sendMethod != null) {
-                    sendMethod.invoke(connection, packet);
+                if (connectionSendMethod != null) {
+                    connectionSendMethod.invoke(connection, packet);
                 } else {
                     debug("Could not find send method on connection!");
                 }

@@ -10,6 +10,7 @@ import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
+import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Zombie;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -43,7 +44,11 @@ public final class CombatListener implements Listener {
 	public void onPlayerQuit(final PlayerQuitEvent event) {
 		final Player player = event.getPlayer();
 
-		if (CombatTracker.isInCombat(player)) {
+		// Being kicked (by an admin or anti-cheat) isn't combat logging
+		PlayerQuitEvent.QuitReason reason = event.getReason();
+		boolean choseToLeave = reason != PlayerQuitEvent.QuitReason.KICKED
+				&& reason != PlayerQuitEvent.QuitReason.ERRONEOUS_STATE;
+		if (choseToLeave && CombatTracker.isInCombat(player)) {
 			CombatPunishmentManager.applyPunishment(player);
 		}
 		CombatTracker.clear(player);
@@ -53,6 +58,9 @@ public final class CombatListener implements Listener {
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onPlayerDeath(final PlayerDeathEvent event) {
 		CombatTracker.clear(event.getEntity());
+		// The fight is over for the winner too
+		if (event.getEntity().getKiller() != null)
+			CombatTracker.clear(event.getEntity().getKiller());
 	}
 
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -65,7 +73,7 @@ public final class CombatListener implements Listener {
 				|| event.getDamager() instanceof FishHook)
 			return;
 
-		final Player attacker = getAttacker(event.getDamager());
+		final Player attacker = getAttacker(event);
 		if (attacker == null || attacker.equals(victim))
 			return;
 
@@ -86,7 +94,7 @@ public final class CombatListener implements Listener {
 		if (!(event.getEntity() instanceof Player))
 			return;
 
-		final Player attacker = getAttacker(event.getDamager());
+		final Player attacker = getAttacker(event);
 		if (attacker != null && CombatPunishmentManager.isPvpLocked(attacker)) {
 			event.setCancelled(true);
 			long minutesLeft = CombatPunishmentManager.getRemainingLockoutMinutes(attacker);
@@ -103,11 +111,20 @@ public final class CombatListener implements Listener {
 		}
 	}
 
-	private static Player getAttacker(Entity damager) {
+	/**
+	 * The player behind the damage: melee, projectiles, and indirect damage such as
+	 * end crystals, TNT, anchors, potions and tamed wolves.
+	 */
+	private static Player getAttacker(EntityDamageByEntityEvent event) {
+		Entity damager = event.getDamager();
 		if (damager instanceof Player player)
 			return player;
 		if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player shooter)
 			return shooter;
+		if (damager instanceof Tameable pet && pet.getOwner() instanceof Player owner)
+			return owner;
+		if (event.getDamageSource().getCausingEntity() instanceof Player causing)
+			return causing;
 		return null;
 	}
 }

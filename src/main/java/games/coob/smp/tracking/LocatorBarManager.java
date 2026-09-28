@@ -166,14 +166,19 @@ public final class LocatorBarManager {
      * Whether the locator bar is allowed in this world (Allowed_Environements setting).
      */
     public static boolean isAllowedIn(World world) {
-        String allowed = Settings.LocatorSection.ALLOWED_ENVIRONEMENTS.toLowerCase(Locale.ROOT);
-        return switch (allowed) {
-            case "all" -> true;
-            case "normal", "overworld" -> world.getEnvironment() == World.Environment.NORMAL;
-            case "nether" -> world.getEnvironment() == World.Environment.NETHER;
-            case "the end", "the_end", "end" -> world.getEnvironment() == World.Environment.THE_END;
-            default -> false;
-        };
+        // One value or several separated by commas, e.g. "normal, nether"
+        for (String allowed : Settings.LocatorSection.ALLOWED_ENVIRONEMENTS.toLowerCase(Locale.ROOT).split(",")) {
+            boolean match = switch (allowed.trim()) {
+                case "all" -> true;
+                case "normal", "overworld" -> world.getEnvironment() == World.Environment.NORMAL;
+                case "nether" -> world.getEnvironment() == World.Environment.NETHER;
+                case "the end", "the_end", "end" -> world.getEnvironment() == World.Environment.THE_END;
+                default -> false;
+            };
+            if (match)
+                return true;
+        }
+        return false;
     }
 
     /**

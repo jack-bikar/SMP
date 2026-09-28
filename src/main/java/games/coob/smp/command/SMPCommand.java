@@ -1,6 +1,8 @@
 package games.coob.smp.command;
 
 import games.coob.smp.SMPPlugin;
+import games.coob.smp.model.DeathMessages;
+import games.coob.smp.nickname.NicknameManager;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tracking.VanillaLocator;
 import games.coob.smp.util.ColorUtil;
@@ -28,6 +30,7 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 			}
 			boolean locatorBar = Settings.LocatorSection.ENABLE_LOCATOR_BAR;
 			Settings.loadSettings();
+			DeathMessages.getInstance().reload();
 			if (Settings.LocatorSection.ENABLE_LOCATOR_BAR != locatorBar) {
 				// Switching between the vanilla bar and custom tracking needs a clean start for every player
 				Settings.LocatorSection.ENABLE_LOCATOR_BAR = locatorBar;
@@ -35,6 +38,7 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 				ColorUtil.sendMessage(sender, "&eThe locator bar mode (Enable_Locator_Bar) changes after a restart.");
 			}
 			VanillaLocator.getInstance().reapplyToOnlinePlayers();
+			NicknameManager.getInstance().applyToOnlinePlayers();
 			ColorUtil.sendMessage(sender, "&aSMP settings reloaded.");
 			return true;
 		}
@@ -48,10 +52,13 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(sender, "&e/smp &7- Show this help");
 		ColorUtil.sendMessage(sender, "&e/smp reload &7- Reload settings.yml (admin)");
 		ColorUtil.sendMessage(sender, "");
-		ColorUtil.sendMessage(sender, "&e/spawn &7- Teleport to spawn");
-		ColorUtil.sendMessage(sender, "&7  /spawn locate &7- Show spawn coordinates");
-		ColorUtil.sendMessage(sender, "&7  /spawn set &7- Set spawn to your location");
-		ColorUtil.sendMessage(sender, "");
+		if (sender.hasPermission("smp.command.spawn")) {
+			ColorUtil.sendMessage(sender, "&e/spawn &7- Teleport to spawn");
+			ColorUtil.sendMessage(sender, "&7  /spawn locate &7- Show spawn coordinates");
+			if (sender.hasPermission("smp.command.spawn.set"))
+				ColorUtil.sendMessage(sender, "&7  /spawn set &7- Set spawn to your location");
+			ColorUtil.sendMessage(sender, "");
+		}
 		if (Settings.LocatorSection.ENABLE_LOCATOR_BAR) {
 			ColorUtil.sendMessage(sender, "&e/track death &7- Put your death location on the locator bar");
 			ColorUtil.sendMessage(sender, "&7  /track stop &7- Remove it again");
@@ -83,6 +90,13 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 			ColorUtil.sendMessage(sender, "&e/arena &7- Arena management (admin)");
 			ColorUtil.sendMessage(sender, "&7  /arena create|edit|delete|info <name>");
 			ColorUtil.sendMessage(sender, "&7  /arena setspawn1|setspawn2|save|cancel|list");
+			ColorUtil.sendMessage(sender, "");
+		}
+		if (Settings.NicknameSection.ENABLED) {
+			ColorUtil.sendMessage(sender, "&e/nick &7- Colour your name with the nickname menu");
+			ColorUtil.sendMessage(sender, "&7  /nick <name> &7- Set a nickname");
+			ColorUtil.sendMessage(sender, "&7  /nick gradient <colour> <colour> &7- Your own gradient");
+			ColorUtil.sendMessage(sender, "&7  /nick reset &7- Back to your normal name");
 			ColorUtil.sendMessage(sender, "");
 		}
 		ColorUtil.sendMessage(sender, "&e/inv <inv|enderchest|armour|clear> <player> &7- Edit inventories (admin)");

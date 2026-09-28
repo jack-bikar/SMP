@@ -1,0 +1,305 @@
+# !-----------------------------------------------------------------------------------------------!
+#                                  Custom death messages
+# !-----------------------------------------------------------------------------------------------!
+#
+#    One message is picked at random from the list that matches how the player died.
+#    Turn the whole feature on or off in settings.yml (Death_Messages.Enabled).
+#
+#    Placeholders:
+#      {player} - who died
+#      {killer} - the player who killed them (PLAYER list only)
+#      {weapon} - what the killer was holding, e.g. "a Diamond Sword" (PLAYER list only)
+#      {mob}    - the mob that killed them (mob lists only)
+#
+#    Colour codes (&c) and hex colours (&#FF5555) work. Names are coloured automatically.
+#    Remove a whole list (or set it to []) to fall back to the MOB / DEFAULT list for that kind of death.
+#
+# !-----------------------------------------------------------------------------------------------!
+
+# -------------------------------------------------------------------------------------------------
+# Killed by another player
+# -------------------------------------------------------------------------------------------------
+PLAYER:
+  - "{player} got absolutely folded by {killer}"
+  - "{killer} sent {player} back to the lobby with {weapon}"
+  - "{player} tried to 1v1 {killer}. Tried."
+  - "{killer} just deleted {player}. Unsubscribe."
+  - "{player} got cooked by {killer}. Well done, not medium rare."
+  - "{killer} made {player} their new pet rock"
+  - "{player} got ratioed by {killer} and {weapon}"
+  - "{killer} gave {player} a free trip to the respawn screen"
+  - "{player} lost to {killer}. Screenshot taken, group chat notified."
+  - "{killer} diffed {player} so hard it's going in the highlight reel"
+  - "{player} got clapped by {killer}. Skill issue, honestly."
+  - "{killer} introduced {player} to {weapon}. It did not go well."
+  - "{player} called {killer} bad five minutes ago. Look at them now."
+  - "{killer} beat {player} like a rented mule"
+  - "{player} got humbled by {killer}. We love to see it."
+  - "{killer} put {player} in the shadow realm"
+  - "{player} got speedran by {killer}. Any% no respawn."
+  - "{killer} ended {player}'s whole career with {weapon}"
+  - "{player} got dropped by {killer}. Pack it up, it's over."
+  - "{player} would like to formally blame lag for losing to {killer}"
+  - "{killer} took {player}'s lunch money and their life"
+  - "{player} was not the main character. {killer} was."
+  - "{killer} sent {player} home in a body bag"
+  - "{player} got bodied by {killer}. Somebody check on their ego."
+
+# -------------------------------------------------------------------------------------------------
+# Mobs (one list per mob; anything not listed uses MOB)
+# -------------------------------------------------------------------------------------------------
+ZOMBIE:
+  - "{player} lost a fight to a {mob}. The slowest enemy in the game."
+  - "{player} got eaten by a {mob}. Brain not found, so it was a quick meal."
+  - "A {mob} out-thought {player}. Let that sink in."
+  - "{player} got hugged to death by a {mob}"
+  - "{player} was outplayed by something that walks with its arms out"
+  - "A {mob} added {player} to the horde. It's a demotion, honestly."
+
+SKELETON:
+  - "{player} got sniped by a {mob}. It doesn't even have eyes."
+  - "A {mob} out-aimed {player}. It's literally just bones."
+  - "{player} became a pincushion courtesy of a {mob}"
+  - "{player} tried to dodge a {mob}'s arrows. Emphasis on tried."
+  - "A {mob} hit {player} from across the map. Aimbot confirmed."
+  - "{player} got bullied by a calcium deposit"
+
+CREEPER:
+  - "{player} got a hug from a {mob}. It was explosive."
+  - "A {mob} said 'aw man' and took {player} with it"
+  - "{player} heard the hiss and just stood there. Legendary."
+  - "{player} got blown up by a {mob}. Their base is also gone. Sorry."
+  - "{player} tried to pet the {mob}"
+  - "A {mob} redecorated {player} across three chunks"
+  - "{player} got turned into confetti by a {mob}"
+
+ENDERMAN:
+  - "{player} looked an {mob} in the eyes. Bold. Stupid, but bold."
+  - "An {mob} made direct eye contact with {player} and chose violence"
+  - "{player} got deleted by a tall guy they stared at"
+  - "{player} tried to fight an {mob} without a pumpkin. Rookie."
+  - "An {mob} teleported behind {player}. Nothing personnel, kid."
+
+SPIDER:
+  - "{player} got jumped by a {mob}. Eight legs, zero mercy."
+  - "A {mob} climbed the wall and {player}'s dignity"
+  - "{player} screamed. The {mob} did not care."
+  - "{player} got caught in the web of a {mob}. And their own bad decisions."
+
+WITCH:
+  - "{player} got potion-diffed by a {mob}"
+  - "A {mob} brewed something special for {player}. It was death."
+  - "{player} lost to a {mob} who just laughed the whole time"
+  - "{player} got cursed by a {mob}. Very normal SMP behaviour."
+
+PHANTOM:
+  - "{player} should have slept. A {mob} made sure they rest now."
+  - "{player} skipped bedtime and a {mob} took it personally"
+  - "{player} got divebombed by the consequences of their sleep schedule"
+  - "A {mob} reminded {player} that beds exist"
+
+PIGLIN:
+  - "{player} forgot their gold and a {mob} noticed"
+  - "{player} got bartered into the afterlife by a {mob}"
+  - "A {mob} decided {player} wasn't worth the gold ingot"
+  - "{player} went to the Nether without gold armour. Natural selection."
+
+ZOMBIFIED_PIGLIN:
+  - "{player} hit one {mob}. The whole family showed up."
+  - "{player} learnt the hard way that {mob}s have a group chat"
+  - "{player} started a beef with the entire Nether"
+  - "A mob of {mob}s jumped {player}. Should have let it go."
+
+WARDEN:
+  - "{player} woke up the {mob}. Tragic, but deserved."
+  - "The {mob} heard {player} breathing too loud"
+  - "{player} tried to fight the {mob}. Bravery and stupidity are best friends."
+  - "{player} got sonic boomed into another dimension by the {mob}"
+  - "The {mob} did 40 hearts to {player}. They had 10."
+
+WOLF:
+  - "{player} got mauled by a {mob}. Who's a good boy? Not {player}."
+  - "{player} provoked a {mob}. The dog won."
+  - "A {mob} did {player} dirty. Apparently they were not a good boy either."
+
+BEE:
+  - "{player} touched the honey. The {mob} touched back."
+  - "{player} got stung to death by a {mob}. Death by a thousand bee-sized cuts."
+  - "A {mob} gave its life to take {player} out. Worth it."
+
+IRON_GOLEM:
+  - "{player} messed with the village and the {mob} sent them to space"
+  - "{player} got yeeted into orbit by an {mob}"
+  - "The {mob} said 'not in my village' and flattened {player}"
+
+DROWNED:
+  - "{player} got trident'd by a {mob}. Aquaman who?"
+  - "A {mob} dragged {player} down to the depths. Swim lessons, anyone?"
+
+BLAZE:
+  - "{player} got roasted by a {mob}. Literally and figuratively."
+  - "A {mob} turned {player} into a well-done steak"
+
+GHAST:
+  - "{player} got fireballed by a crying marshmallow"
+  - "A {mob} cried and {player} died. Both sad."
+  - "{player} couldn't hit a {mob}'s fireball back. Tennis tryouts cancelled."
+
+WITHER_SKELETON:
+  - "{player} got withered by a {mob}. Should have brought milk."
+  - "A {mob} gave {player} the black screen of shame"
+
+ENDER_DRAGON:
+  - "{player} got one-shot by the {mob}. Final boss, final breath."
+  - "The {mob} yeeted {player} off the island. Classic."
+  - "{player} tried to be the hero. The {mob} said no."
+
+SLIME:
+  - "{player} lost to a {mob}. A bouncy jelly cube. Think about that."
+  - "{player} got bounced to death by a {mob}"
+
+GOAT:
+  - "{player} got rammed off a cliff by a {mob}. It didn't even look sorry."
+  - "A {mob} headbutted {player} into the next life"
+
+VEX:
+  - "{player} got swarmed by {mob}es. Tiny, flying, rude."
+  - "A {mob} gave {player} a thousand tiny stab wounds"
+
+MOB:
+  - "{player} got destroyed by a {mob}. Embarrassing."
+  - "A {mob} farmed {player}. Wrong way round."
+  - "{player} lost to a {mob}. We're not telling anyone. (We're telling everyone.)"
+  - "A {mob} caught {player} lacking"
+  - "{player} got bullied by a {mob} in broad daylight"
+  - "The {mob} won. {player} did not."
+
+# -------------------------------------------------------------------------------------------------
+# Everything else
+# -------------------------------------------------------------------------------------------------
+FALL:
+  - "{player} forgot that gravity exists"
+  - "{player} tried to fly. They cannot fly."
+  - "{player} hit the ground too hard. The ground is fine."
+  - "{player} believed in themselves a little too much"
+  - "{player} took the stairs. Just the fast way."
+  - "{player} did a sick jump. The landing was less sick."
+  - "{player} forgot their water bucket. And their brain."
+  - "{player} left a small crater. RIP."
+  - "{player} fell off. In more ways than one."
+  - "{player} jumped. Instantly regretted it."
+
+VOID:
+  - "{player} fell into the void. It didn't even notice."
+  - "{player} stared into the void and the void said 'yoink'"
+  - "{player} is now floating somewhere beneath the bedrock"
+  - "{player} fell out of the world. Items? Gone. Pride? Gone."
+  - "{player} went looking for the bottom of the map. There isn't one."
+
+LAVA:
+  - "{player} tried to swim in lava. Hot take."
+  - "{player} took a lava bath. Bold skincare choice."
+  - "{player} became a crispy snack"
+  - "{player} touched the orange water"
+  - "{player} got deep fried"
+  - "{player} mined straight down. Everyone warned them."
+  - "{player} found lava the hard way. Go fish your stuff out, champ."
+
+FIRE:
+  - "{player} got flame-grilled"
+  - "{player} became a rotisserie chicken"
+  - "{player} was on fire. Not in the good way."
+  - "{player} tried to fight fire with vibes"
+  - "{player} got roasted harder than this chat roasts them"
+
+DROWNING:
+  - "{player} forgot that humans need air"
+  - "{player} tried to become a fish. It did not work."
+  - "{player} drowned. Hydration, but make it lethal."
+  - "{player} held their breath for a new world record. Posthumously."
+  - "{player} became a very permanent scuba diver"
+
+SUFFOCATION:
+  - "{player} got stuck in a wall. Classic NPC behaviour."
+  - "{player} phased into a block and stayed there"
+  - "{player} became part of the architecture"
+
+STARVATION:
+  - "{player} starved. There were cows everywhere."
+  - "{player} forgot to eat. Main character of forgetting."
+  - "{player} starved to death on a server full of food. Impressive."
+  - "{player} tried intermittent fasting. It became permanent."
+
+EXPLOSION:
+  - "{player} got blown to bits. Sounds about right."
+  - "{player} played with TNT. TNT played back."
+  - "{player} tried to sleep in the Nether. Genius."
+  - "{player} has been evenly distributed across the area"
+
+MAGIC:
+  - "{player} got cursed. Probably deserved it."
+  - "{player} drank something they shouldn't have"
+  - "{player} got hit by bad vibes and potion effects"
+
+WITHER:
+  - "{player} withered away like their hopes and dreams"
+  - "{player} got the black hearts. Game over."
+
+FREEZE:
+  - "{player} turned into a popsicle"
+  - "{player} fell in powder snow and became frozen food"
+  - "{player} chilled a bit too hard"
+
+LIGHTNING:
+  - "{player} got smitten. Not the romantic kind."
+  - "{player} got struck by lightning. The gods were watching."
+  - "{player} became a lightning rod"
+
+CONTACT:
+  - "{player} hugged a cactus. Why?"
+  - "{player} lost a fight to a plant"
+  - "{player} got pricked to death. By a bush."
+
+FALLING_BLOCK:
+  - "{player} got anvil'd. Very cartoon of them."
+  - "{player} got flattened by a falling block. Looney Tunes style."
+
+FLY_INTO_WALL:
+  - "{player} flew into a wall. Elytra licence revoked."
+  - "{player} experienced kinetic energy"
+  - "{player} tried to go through a wall with their elytra. Walls won."
+
+HOT_FLOOR:
+  - "{player} discovered that magma blocks are hot"
+  - "{player} danced on magma. It was their last dance."
+
+CRAMMING:
+  - "{player} got squished in a crowd"
+  - "{player} got compressed into a cube"
+
+DRAGON_BREATH:
+  - "{player} got breathed on by the dragon. Bad breath, lethal breath."
+
+THORNS:
+  - "{player} hit someone with Thorns. The Thorns hit back."
+  - "{player} killed themselves by attacking. Big brain move."
+
+KILL:
+  - "{player} got smitten by an admin. Behave."
+  - "{player} was removed from existence by /kill"
+  - "{player} got yeeted by the console"
+
+WORLD_BORDER:
+  - "{player} tried to leave the world. The world said no."
+
+# -------------------------------------------------------------------------------------------------
+# Anything that doesn't match a list above
+# -------------------------------------------------------------------------------------------------
+DEFAULT:
+  - "{player} died. Somehow."
+  - "{player} found a new and exciting way to die"
+  - "{player} is taking a quick break from being alive"
+  - "{player} has respawned their dignity. Not the items though."
+  - "{player} died and nobody is quite sure how"
+  - "{player} ran out of hearts. Skill issue."
+  - "{player} left the chat (of the living)"

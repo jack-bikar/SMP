@@ -165,6 +165,11 @@ public final class TeamLobbyMenu extends SimpleMenu {
 							&& !DuelManager.getInstance().isInDuel(target),
 					"Click to invite",
 					target -> {
+						// They may have left or been removed while picking
+						if (manager.getLobby(player) != lobby) {
+							player.closeInventory();
+							return;
+						}
 						manager.invite(player, target);
 						new TeamLobbyMenu(player, lobby).displayTo(player);
 					},

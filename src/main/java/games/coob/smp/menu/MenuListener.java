@@ -5,6 +5,7 @@ import lombok.NoArgsConstructor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -21,7 +22,8 @@ public final class MenuListener implements Listener {
 		return instance;
 	}
 
-	@EventHandler(ignoreCancelled = true)
+	// Not ignoreCancelled: the server hands spectator clicks over already cancelled
+	@EventHandler
 	public void onInventoryClick(InventoryClickEvent event) {
 		if (!(event.getInventory().getHolder(false) instanceof SimpleMenu menu)
 				|| !(event.getWhoClicked() instanceof Player player))
@@ -32,6 +34,9 @@ public final class MenuListener implements Listener {
 			// Only react to clicks in the menu itself, not the player's own inventory
 			if (event.getClickedInventory() != menu.getInventory())
 				return;
+			// A double-click also sends single clicks; hotbar keys aren't button presses
+			if (event.getClick() == ClickType.DOUBLE_CLICK || event.getClick() == ClickType.NUMBER_KEY)
+				return;
 		} else if (event.getClickedInventory() == menu.getInventory() && menu.isLockedSlot(event.getSlot())) {
 			event.setCancelled(true);
 			return;
@@ -40,7 +45,7 @@ public final class MenuListener implements Listener {
 		menu.onMenuClick(player, event.getSlot(), event.getCurrentItem(), event.getClick());
 	}
 
-	@EventHandler(ignoreCancelled = true)
+	@EventHandler
 	public void onInventoryDrag(InventoryDragEvent event) {
 		if (!(event.getInventory().getHolder(false) instanceof SimpleMenu menu))
 			return;

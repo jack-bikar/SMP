@@ -4,6 +4,7 @@ import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -42,17 +43,9 @@ public class CombatPunishmentManager {
 			case RANDOM_ITEM_DROP -> {
 				dropRandomItems(player);
 			}
-			case PVP_LOCKOUT -> {
-				long lockoutUntil = System.currentTimeMillis()
-						+ (Settings.CombatSection.PVP_LOCKOUT_DURATION_MINUTES * 60L * 1000L);
-				pvpLockouts.put(player.getUniqueId(), lockoutUntil);
-				cache.setPvpLockoutExpiry(lockoutUntil);
-			}
-			case DEBUFF -> {
-				long debuffUntil = System.currentTimeMillis()
-						+ (Settings.CombatSection.DEBUFF_DURATION_MINUTES * 60L * 1000L);
-				cache.setDebuffExpiry(debuffUntil);
-			}
+			// Negative = a duration that starts when they next join, so staying offline doesn't skip it
+			case PVP_LOCKOUT -> cache.setPvpLockoutExpiry(-(Settings.CombatSection.PVP_LOCKOUT_DURATION_MINUTES * 60L * 1000L));
+			case DEBUFF -> cache.setDebuffExpiry(-(Settings.CombatSection.DEBUFF_DURATION_MINUTES * 60L * 1000L));
 			case NONE -> {
 				// No punishment
 			}
@@ -71,6 +64,25 @@ public class CombatPunishmentManager {
 			// Items were returned by CombatNPC.remove()
 			return;
 		}
+
+		// The server went down while their ghost body was out: give the loot back
+		ItemStack[] ghostLoot = GhostLootStore.getInstance().take(uuid);
+		if (ghostLoot != null) {
+			for (ItemStack item : ghostLoot) {
+				if (item == null || item.isEmpty())
+					continue;
+				for (ItemStack leftover : player.getInventory().addItem(item).values())
+					player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+			}
+			ColorUtil.sendMessage(player, "&aThe server restarted while your ghost body was out. Your items were returned.");
+		}
+
+		// Timers saved at logout start now
+		long now = System.currentTimeMillis();
+		if (cache.getPvpLockoutExpiry() < 0)
+			cache.setPvpLockoutExpiry(now - cache.getPvpLockoutExpiry());
+		if (cache.getDebuffExpiry() < 0)
+			cache.setDebuffExpiry(now - cache.getDebuffExpiry());
 
 		// Check for pending punishment notifications
 		PunishmentData data = pendingPunishments.remove(uuid);

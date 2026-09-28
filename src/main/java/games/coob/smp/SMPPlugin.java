@@ -4,6 +4,7 @@ import games.coob.smp.combat.CombatListener;
 import games.coob.smp.combat.CombatNPC;
 import games.coob.smp.combat.CombatPunishmentManager;
 import games.coob.smp.combat.CombatTracker;
+import games.coob.smp.combat.GhostLootStore;
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
@@ -22,7 +23,11 @@ import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.LocatorListener;
 import games.coob.smp.listener.SMPListener;
 import games.coob.smp.menu.MenuListener;
+import games.coob.smp.menu.SimpleMenu;
 import games.coob.smp.model.DeathChestRegistry;
+import games.coob.smp.model.DeathMessages;
+import games.coob.smp.nickname.NickCommand;
+import games.coob.smp.nickname.NicknameManager;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.task.HologramTask;
@@ -36,6 +41,7 @@ import games.coob.smp.util.SchedulerUtil;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -62,6 +68,10 @@ public final class SMPPlugin extends JavaPlugin {
 
         // Load data files
         DeathChestRegistry.getInstance();
+        DeathMessages.getInstance();
+        GhostLootStore.getInstance();
+        NicknameManager.getInstance();
+        NicknameManager.removeAllNameTags();
         ArenaRegistry.getInstance();
         DuelStatistics.getInstance();
 
@@ -73,6 +83,7 @@ public final class SMPPlugin extends JavaPlugin {
         registerCommand("tp", new TpCommand());
         registerCommand("duel", new DuelCommand());
         registerCommand("arena", new ArenaCommand());
+        registerCommand("nick", new NickCommand());
 
         registerEvents(
                 SMPListener.getInstance(),
@@ -82,6 +93,7 @@ public final class SMPPlugin extends JavaPlugin {
                 DuelListener.getInstance(),
                 MenuListener.getInstance(),
                 VanillaLocator.getInstance(),
+                NicknameManager.getInstance(),
                 invEditCommand);
 
         // Locator updates every 2 seconds, death chest holograms every 2 seconds
@@ -93,32 +105,56 @@ public final class SMPPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Duels first: players are sent back and their data is updated
-        DuelManager.getInstance().cleanup();
-        DuelQueueManager.getInstance().clear();
-        TeamDuelManager.getInstance().clear();
+        // Each step is guarded, so one failure can't skip the saves after it
 
-        // Clean up tracking
-        TrackingRegistry.clear();
-        PortalCache.clear();
-        WaypointPacketSender.clearAll();
-        LocatorTask.cleanupAll();
-        WaypointColorManager.resetAllNameTagColors();
+        // Close plugin menus first, so admin edits of offline inventories are saved
+        safely("closing menus", () -> {
+            for (Player player : getServer().getOnlinePlayers()) {
+                if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof SimpleMenu)
+                    player.closeInventory();
+            }
+        });
 
-        // Clean up combat system
-        CombatNPC.cleanupAll();
-        CombatPunishmentManager.cleanup();
-        CombatTracker.clearAll();
+        // Duels next: players are sent back and their data is updated
+        safely("ending duels", () -> DuelManager.getInstance().cleanup());
+        safely("clearing duel queues", () -> {
+            DuelQueueManager.getInstance().clear();
+            TeamDuelManager.getInstance().clear();
+        });
+        safely("removing name tags", NicknameManager::removeAllNameTags);
 
-        Effects.disable();
+        safely("cleaning up tracking", () -> {
+            TrackingRegistry.clear();
+            PortalCache.clear();
+            WaypointPacketSender.clearAll();
+            LocatorTask.cleanupAll();
+            WaypointColorManager.resetAllNameTagColors();
+        });
+
+        safely("dropping ghost body loot", CombatNPC::cleanupAll);
+        safely("cleaning up combat", () -> {
+            CombatPunishmentManager.cleanup();
+            CombatTracker.clearAll();
+        });
+        safely("stopping effects", Effects::disable);
 
         // Save data: finish queued background writes first, so they can't land after the final saves
-        DeathChestRegistry.getInstance().shutdown();
-        ConfigFile.flushPendingWrites();
-        DeathChestRegistry.getInstance().saveNow();
-        ArenaRegistry.getInstance().saveNow();
-        DuelStatistics.getInstance().saveNow();
-        PlayerCache.saveAllNow();
+        safely("closing death chests", () -> DeathChestRegistry.getInstance().shutdown());
+        safely("finishing file writes", ConfigFile::flushPendingWrites);
+        safely("saving death chests", () -> DeathChestRegistry.getInstance().saveNow());
+        safely("saving arenas", () -> ArenaRegistry.getInstance().saveNow());
+        safely("saving duel stats", () -> DuelStatistics.getInstance().saveNow());
+        safely("saving nicknames", () -> NicknameManager.getInstance().saveNow());
+        safely("saving ghost loot", () -> GhostLootStore.getInstance().saveNow());
+        safely("saving player data", PlayerCache::saveAllNow);
+    }
+
+    private void safely(String step, Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable throwable) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Error while " + step + " on shutdown", throwable);
+        }
     }
 
     private <T extends CommandExecutor & TabCompleter> void registerCommand(String name, T handler) {

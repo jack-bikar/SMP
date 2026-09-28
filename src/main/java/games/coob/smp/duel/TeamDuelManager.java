@@ -213,6 +213,20 @@ public final class TeamDuelManager {
 		leave(player, true);
 	}
 
+	/** The player started another duel: take them out of their lobby. */
+	public void removeSilently(Player player) {
+		TeamLobby lobby = lobbyByMember.get(player.getUniqueId());
+		if (lobby == null)
+			return;
+		lobbyByMember.remove(player.getUniqueId());
+		lobby.remove(player.getUniqueId());
+		closeMenu(player, lobby);
+		if (!lobby.isEmpty() && lobby.isLeader(player.getUniqueId()))
+			lobby.setLeaderId(lobby.getMembers().getFirst());
+		if (!lobby.isEmpty())
+			refresh(lobby);
+	}
+
 	/**
 	 * Moves a player to the other team. Leaders can move anyone; other players can
 	 * only move themselves.

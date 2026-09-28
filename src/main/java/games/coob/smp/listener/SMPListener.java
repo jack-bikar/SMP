@@ -1,6 +1,8 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.duel.DuelManager;
+import games.coob.smp.model.DeathMessages;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.task.LocatorTask;
@@ -13,12 +15,14 @@ import games.coob.smp.util.SchedulerUtil;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Egg;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -26,6 +30,7 @@ import org.bukkit.entity.Snowball;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -99,7 +104,8 @@ public final class SMPListener implements Listener {
 
         if (event.getHitEntity() instanceof final Player player
                 && (projectile instanceof Snowball || projectile instanceof Egg || projectile instanceof FishHook)
-                && player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
+                && player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR
+                && knockbackAllowed(projectile, player)) {
             player.damage(0.05, projectile);
             player.setVelocity(projectile.getVelocity().multiply(Settings.ProjectileSection.KNOCKBACK));
 
@@ -107,6 +113,16 @@ public final class SMPListener implements Listener {
                     && player.getLocation().getY() - projectile.getLocation().getY() <= -1.45)
                 player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 25, 1, true));
         }
+    }
+
+    /** Respects PvP being off and duels (no pushing duelists from outside, or vice versa). */
+    private static boolean knockbackAllowed(Projectile projectile, Player victim) {
+        if (!(projectile.getShooter() instanceof Player shooter) || shooter.equals(victim))
+            return true;
+        if (!victim.getWorld().getPVP())
+            return false;
+        DuelManager duels = DuelManager.getInstance();
+        return duels.getActiveDuel(shooter) == duels.getActiveDuel(victim);
     }
 
     /**
@@ -166,6 +182,29 @@ public final class SMPListener implements Listener {
             Effects.play(Settings.DeathEffectSection.ACTIVE_DEATH_EFFECT, location,
                     Settings.DeathEffectSection.DURATION_SECONDS);
         }
+    }
+
+    /**
+     * Replaces the vanilla death message with a custom one from death-messages.yml.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onDeathMessage(final PlayerDeathEvent event) {
+        // Null or empty means another plugin (vanish, a duel) hid the message; leave it hidden
+        if (!Settings.DeathMessageSection.ENABLED || event.deathMessage() == null
+                || PlainTextComponentSerializer.plainText().serialize(event.deathMessage()).isBlank())
+            return;
+
+        final Player player = event.getEntity();
+        final Entity causing = event.getDamageSource().getCausingEntity();
+        Player killer = player.getKiller();
+        if (killer == null && causing instanceof Player causingPlayer)
+            killer = causingPlayer;
+        final EntityDamageEvent lastDamage = player.getLastDamageCause();
+
+        final Component message = DeathMessages.getInstance().build(player, killer, causing,
+                lastDamage != null ? lastDamage.getCause() : null);
+        if (message != null)
+            event.deathMessage(message);
     }
 
     /**

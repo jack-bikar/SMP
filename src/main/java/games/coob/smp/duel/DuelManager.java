@@ -1,6 +1,7 @@
 package games.coob.smp.duel;
 
 import games.coob.smp.SMPPlugin;
+import games.coob.smp.combat.CombatPunishmentManager;
 import games.coob.smp.combat.CombatTracker;
 import games.coob.smp.duel.model.ArenaData;
 import games.coob.smp.duel.model.ArenaRegistry;
@@ -14,6 +15,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
@@ -196,7 +198,10 @@ public final class DuelManager {
 					: isInDuel(player) ? player.getName() + " is already in a duel."
 							: player.isDead() ? player.getName() + " needs to respawn first."
 									: CombatTracker.isInCombat(player) ? player.getName() + " is in combat right now."
-											: null;
+											: CombatPunishmentManager.isPvpLocked(player) ? player.getName() + " is locked out of PvP."
+													: player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR
+															? player.getName() + " needs to be in survival mode."
+															: null;
 			if (problem != null) {
 				for (Player other : everyone)
 					ColorUtil.sendMessage(other, "&cThe duel couldn't start: " + problem);
@@ -206,6 +211,7 @@ public final class DuelManager {
 
 		for (Player player : everyone) {
 			DuelQueueManager.getInstance().remove(player);
+			TeamDuelManager.getInstance().removeSilently(player);
 			removeRequestsInvolving(player.getUniqueId());
 		}
 
@@ -235,7 +241,14 @@ public final class DuelManager {
 			}
 			// Load the landing area in the background before anyone is moved
 			preloadLandingArea(arena, duel.getLargestTeamSize()).whenComplete((ignored, loadError) ->
-					SchedulerUtil.runTask(() -> duel.begin(arena)));
+					SchedulerUtil.runTask(() -> {
+						// Cancelled while loading (e.g. someone left): free the arena again
+						if (duel.getState() != ActiveDuel.DuelState.PREPARING) {
+							releaseArena(arena);
+							return;
+						}
+						duel.begin(arena);
+					}));
 		}));
 
 		// Safety net: never leave players stuck "in a duel" if preparing hangs
@@ -362,6 +375,17 @@ public final class DuelManager {
 				|| duel.getState() == ActiveDuel.DuelState.COUNTDOWN) {
 			duel.cancel("&c" + player.getName() + " died before the fight started, the duel was cancelled.");
 		}
+	}
+
+	/**
+	 * Admin: ends a player's duel without a winner and sends everyone back.
+	 */
+	public boolean forceEnd(Player player) {
+		ActiveDuel duel = getActiveDuel(player);
+		if (duel == null)
+			return false;
+		duel.cancel("&cAn admin ended the duel.");
+		return true;
 	}
 
 	/**

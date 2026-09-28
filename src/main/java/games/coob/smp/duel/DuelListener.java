@@ -23,6 +23,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
@@ -105,6 +106,10 @@ public final class DuelListener implements Listener {
 
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(victim);
 		if (duel == null)
+			return;
+
+		// While the arena is still being found, damage is normal: accepting a duel is no escape from lava or mobs
+		if (duel.getState() == ActiveDuel.DuelState.PREPARING && duel.getArena() == null)
 			return;
 
 		if (!duel.isFighting() || duel.isEliminated(victim)) {
@@ -238,14 +243,25 @@ public final class DuelListener implements Listener {
 	public void onBlockPlace(final BlockPlaceEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
 		if (duel != null && duel.isInArena())
-			duel.trackPlacedBlock(event.getBlock().getLocation());
+			duel.trackPlacedBlock(event.getBlockReplacedState(), event.getPlayer());
 	}
 
+	/** Runs before the liquid is placed, so the block's current state is the original. */
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onBucketEmpty(final PlayerBucketEmptyEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
 		if (duel != null && duel.isInArena())
-			duel.trackPlacedBlock(event.getBlock().getLocation());
+			duel.trackPlacedBlock(event.getBlock().getState(), event.getPlayer());
+	}
+
+	/** Boats, minecarts, end crystals and armor stands placed in a duel are cleaned up too. */
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onEntityPlace(final EntityPlaceEvent event) {
+		if (event.getPlayer() == null)
+			return;
+		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
+		if (duel != null && duel.isInArena())
+			duel.trackSpawnedEntity(event.getEntity().getUniqueId());
 	}
 
 	/**
@@ -264,10 +280,9 @@ public final class DuelListener implements Listener {
 
 	private static void protectArenas(List<Block> blocks) {
 		for (ActiveDuel duel : DuelManager.getInstance().getActiveDuels()) {
-			DuelBorder border = duel.getBorder();
-			if (duel.getArena() == null || !duel.getArena().created() || border == null)
+			if (duel.getArena() == null || !duel.getArena().created())
 				continue;
-			blocks.removeIf(block -> border.contains(block.getLocation()) && !duel.isPlacedBlock(block.getLocation()));
+			blocks.removeIf(block -> duel.arenaContains(block.getLocation()) && !duel.isPlacedBlock(block.getLocation()));
 		}
 	}
 

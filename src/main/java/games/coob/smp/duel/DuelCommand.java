@@ -91,6 +91,18 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 				TeamDuelManager.getInstance().join(player, args[1]);
 			}
 			case "start" -> TeamDuelManager.getInstance().start(player);
+			case "cancel", "end" -> {
+				if (!player.hasPermission("smp.admin.duel")) {
+					ColorUtil.sendMessage(player, "&cYou don't have permission to end duels.");
+					return true;
+				}
+				Player target = args.length > 1 ? Bukkit.getPlayerExact(args[1]) : player;
+				if (target == null || !DuelManager.getInstance().forceEnd(target)) {
+					ColorUtil.sendMessage(player, "&cThat player isn't in a duel.");
+				} else {
+					ColorUtil.sendMessage(player, "&aEnded " + target.getName() + "'s duel.");
+				}
+			}
 			case "queue", "q" -> {
 				if (!player.hasPermission("smp.duel.queue")) {
 					ColorUtil.sendMessage(player, "&cYou don't have permission to use the duel queue.");

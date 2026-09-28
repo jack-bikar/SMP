@@ -1,29 +1,47 @@
 package games.coob.smp.model;
 
+import com.destroystokyo.paper.profile.ProfileProperty;
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Interaction;
+import org.bukkit.entity.Mannequin;
+import org.bukkit.entity.Pose;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
 
 import java.util.UUID;
 
 /**
- * A chest holding a dead player's items. The chest block in the world stays
- * empty; its contents live in this virtual inventory, which is saved to
- * death-chests.yml.
+ * A dead player's items: either in a chest block, or with the player's body
+ * lying where they died (Storage_Material: BODY). The contents live in this
+ * virtual inventory, which is saved to death-chests.yml; the chest block stays
+ * empty and the body is only a display.
  */
 @Getter
 public final class DeathChest implements InventoryHolder {
+
+	/** Marks the body and its click box, holding the death chest's key. */
+	static final NamespacedKey ENTITY_KEY = new NamespacedKey(SMPPlugin.getInstance(), "death_chest");
+
+	/** The body's click box: lying bodies have a tiny hitbox of their own. */
+	private static final float CLICK_BOX_WIDTH = 2.4f;
+	private static final float CLICK_BOX_HEIGHT = 0.7f;
 
 	private final String worldName;
 	private final int x;
@@ -31,15 +49,27 @@ public final class DeathChest implements InventoryHolder {
 	private final int z;
 	private final UUID ownerId;
 	private final String ownerName;
-	/** The block type this chest was placed as (kept even if the setting changes later). */
+	/** The block type this chest was placed as, or null for a body. Kept even if the setting changes later. */
 	private final Material material;
 	private final Inventory inventory;
 
-	/** Non-persistent hologram entity; respawned whenever the chunk is loaded. */
+	// Body look (only for bodies)
+	private final String skinValue;
+	private final String skinSignature;
+	private final float yaw;
+	private final Pose pose;
+
+	/** Encoded contents from the last save; re-encoded only after the contents change. */
+	private String savedItems;
+	private boolean dirty = true;
+
+	// Non-persistent entities; respawned whenever the chunk is loaded
 	private TextDisplay hologram;
+	private Mannequin body;
+	private Interaction clickBox;
 
 	DeathChest(String worldName, int x, int y, int z, UUID ownerId, String ownerName, Material material,
-			ItemStack[] items) {
+			ItemStack[] items, String skinValue, String skinSignature, float yaw, Pose pose) {
 		this.worldName = worldName;
 		this.x = x;
 		this.y = y;
@@ -47,6 +77,10 @@ public final class DeathChest implements InventoryHolder {
 		this.ownerId = ownerId;
 		this.ownerName = ownerName;
 		this.material = material;
+		this.skinValue = skinValue;
+		this.skinSignature = skinSignature;
+		this.yaw = yaw;
+		this.pose = pose;
 
 		int size = Math.clamp((items.length + 8) / 9 * 9, 9, 54);
 		this.inventory = Bukkit.createInventory(this, size,
@@ -58,6 +92,10 @@ public final class DeathChest implements InventoryHolder {
 	@Override
 	public @NonNull Inventory getInventory() {
 		return inventory;
+	}
+
+	public boolean isBody() {
+		return material == null;
 	}
 
 	public String getKey() {
@@ -94,19 +132,45 @@ public final class DeathChest implements InventoryHolder {
 		return inventory.isEmpty();
 	}
 
-	/** Spawns the hologram if the chunk is loaded and it isn't there yet. */
-	void ensureHologram() {
-		if (hologram != null && hologram.isValid())
-			return;
-		hologram = null;
+	/** Call after the contents changed (claimed, looted). */
+	public void markDirty() {
+		dirty = true;
+	}
 
+	/** The contents for saving; encoding every item is slow, so it is cached until something changes. */
+	String encodedItems() {
+		if (dirty || savedItems == null) {
+			savedItems = games.coob.smp.util.InventorySerialization.toBase64(inventory.getContents());
+			dirty = false;
+		}
+		return savedItems;
+	}
+
+	// -------------------------------------------------------------------------
+	// Entities
+	// -------------------------------------------------------------------------
+
+	/** Spawns the hologram (and body) if the chunk is loaded and they aren't there yet. */
+	void ensureEntities() {
 		World world = getWorld();
 		if (world == null || !isLoaded())
 			return;
 
+		if (hologram == null || !hologram.isValid())
+			spawnHologram(world);
+
+		if (isBody()) {
+			if (body == null || !body.isValid())
+				spawnBody(world);
+			if (clickBox == null || !clickBox.isValid())
+				spawnClickBox(world);
+		}
+	}
+
+	private void spawnHologram(World world) {
 		String text = Settings.DeathStorageSection.HOLOGRAM_TEXT.replace("{player}", ownerName);
-		Location location = new Location(world, x + 0.5, y + 1.3, z + 0.5);
-		hologram = world.spawn(location, TextDisplay.class, display -> {
+		double height = isBody() ? 0.9 : 1.3;
+		hologram = world.spawn(new Location(world, x + 0.5, y + height, z + 0.5), TextDisplay.class, display -> {
 			display.text(ColorUtil.toComponent(text));
 			display.setBillboard(Display.Billboard.CENTER);
 			display.setPersistent(false);
@@ -116,10 +180,86 @@ public final class DeathChest implements InventoryHolder {
 		});
 	}
 
-	void removeHologram() {
-		if (hologram != null) {
-			hologram.remove();
-			hologram = null;
+	private void spawnBody(World world) {
+		// Lying on the back sits slightly above the ground, like a player in bed
+		double lift = pose == Pose.SLEEPING ? 0.12 : 0.0;
+		Location location = new Location(world, x + 0.5, y + lift, z + 0.5, yaw, 0);
+
+		body = world.spawn(location, Mannequin.class, mannequin -> {
+			mannequin.setProfile(buildProfile());
+			mannequin.setPose(pose, true);
+			mannequin.setRotation(yaw, 0);
+			mannequin.setDescription(null);
+			mannequin.setImmovable(true);
+			mannequin.setGravity(false);
+			mannequin.setInvulnerable(true);
+			mannequin.setSilent(true);
+			mannequin.setCollidable(false);
+			mannequin.setCanPickupItems(false);
+			mannequin.setPersistent(false);
+			// Never goes through portals (a body lying in one would otherwise travel and respawn endlessly)
+			mannequin.setPortalCooldown(Integer.MAX_VALUE);
+			mannequin.getPersistentDataContainer().set(ENTITY_KEY, PersistentDataType.STRING, getKey());
+		});
+		updateBodyArmour();
+	}
+
+	private void spawnClickBox(World world) {
+		Location location = new Location(world, x + 0.5, y, z + 0.5);
+		clickBox = world.spawn(location, Interaction.class, interaction -> {
+			interaction.setInteractionWidth(CLICK_BOX_WIDTH);
+			interaction.setInteractionHeight(CLICK_BOX_HEIGHT);
+			interaction.setResponsive(true);
+			interaction.setPersistent(false);
+			interaction.getPersistentDataContainer().set(ENTITY_KEY, PersistentDataType.STRING, getKey());
+		});
+	}
+
+	/** The owner's skin, from the textures saved when they died (no web lookups). */
+	private ResolvableProfile buildProfile() {
+		ResolvableProfile.Builder builder = ResolvableProfile.resolvableProfile().uuid(ownerId).name(ownerName);
+		if (skinValue != null)
+			builder.addProperty(new ProfileProperty("textures", skinValue, skinSignature));
+		return builder.build();
+	}
+
+	/**
+	 * The body wears whatever armour is still in the loot, so it visibly loses
+	 * its gear as people take it. Display only: the body's items can't be taken.
+	 */
+	void updateBodyArmour() {
+		if (body == null || !body.isValid())
+			return;
+
+		ItemStack helmet = null, chestplate = null, leggings = null, boots = null;
+		for (ItemStack item : inventory.getContents()) {
+			if (item == null || item.isEmpty())
+				continue;
+			String name = item.getType().name();
+			if (helmet == null && name.endsWith("_HELMET"))
+				helmet = item.clone();
+			else if (chestplate == null && (name.endsWith("_CHESTPLATE") || item.getType() == Material.ELYTRA))
+				chestplate = item.clone();
+			else if (leggings == null && name.endsWith("_LEGGINGS"))
+				leggings = item.clone();
+			else if (boots == null && name.endsWith("_BOOTS"))
+				boots = item.clone();
 		}
+
+		EntityEquipment equipment = body.getEquipment();
+		equipment.setHelmet(helmet);
+		equipment.setChestplate(chestplate);
+		equipment.setLeggings(leggings);
+		equipment.setBoots(boots);
+	}
+
+	void removeEntities() {
+		for (Entity entity : new Entity[] { hologram, body, clickBox }) {
+			if (entity != null)
+				entity.remove();
+		}
+		hologram = null;
+		body = null;
+		clickBox = null;
 	}
 }

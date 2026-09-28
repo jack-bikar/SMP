@@ -165,6 +165,12 @@ public final class InvEditCommand implements CommandExecutor, TabCompleter, List
 			this.mode = mode;
 
 			ReadWriteNBT data = NBT.readFile(file);
+			// Files from an older Minecraft version are upgraded by the server when the player joins;
+			// rewriting them here first could damage items
+			if (data.hasTag("DataVersion") && data.getInteger("DataVersion") != currentDataVersion())
+				throw new IllegalStateException(target.getName()
+						+ " hasn't joined since the server was updated; they need to join once before their items can be edited offline");
+
 			if (mode == ViewMode.ARMOUR) {
 				ReadWriteNBT equipment = data.getOrCreateCompound("equipment");
 				for (int i = 0; i < ARMOUR_SLOTS.length; i++)
@@ -180,6 +186,26 @@ public final class InvEditCommand implements CommandExecutor, TabCompleter, List
 						inventory.setItem(slot, readItem(entry));
 				}
 			}
+			for (int slot = 0; slot < inventory.getSize(); slot++) {
+				ItemStack item = inventory.getItem(slot);
+				opened[slot] = item == null ? null : item.clone();
+			}
+		}
+
+		/** What the menu held when it opened; nothing is written if it wasn't changed. */
+		private final ItemStack[] opened = new ItemStack[54];
+
+		@SuppressWarnings("deprecation")
+		private static int currentDataVersion() {
+			return Bukkit.getUnsafe().getDataVersion();
+		}
+
+		private boolean changed() {
+			for (int slot = 0; slot < inventory.getSize(); slot++) {
+				if (!java.util.Objects.equals(inventory.getItem(slot), opened[slot]))
+					return true;
+			}
+			return false;
 		}
 
 		private String listKey() {
@@ -208,6 +234,9 @@ public final class InvEditCommand implements CommandExecutor, TabCompleter, List
 				Messenger.error(player, target.getName() + " joined while you were editing; changes were not saved.");
 				return;
 			}
+
+			if (!changed())
+				return;
 
 			try {
 				ReadWriteNBT data = NBT.readFile(file);

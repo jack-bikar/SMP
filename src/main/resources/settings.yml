@@ -11,14 +11,17 @@
 # !-----------------------------------------------------------------------------------------------!
 
 # -------------------------------------------------------------------------------------------------
-# Death chests: when a player dies, their items are stored in a chest where they died
+# Death chests: when a player dies, their items stay where they died.
+# Right-click (or hit) your own to get everything back automatically; other players loot by hand.
 # -------------------------------------------------------------------------------------------------
 Death_Storage:
   # Enable or disable death chests
   Enable_Death_Storage: true
-  # The block used for the death chest (CHEST, BARREL, ...)
-  Storage_Material: CHEST
-  # Text shown above the death chest (placeholders: {player})
+  # BODY  - the player's body (with their skin and armour) lies where they died and holds the items.
+  #         No block is placed.
+  # CHEST, BARREL, ... - a block of that type holds the items instead.
+  Storage_Material: BODY
+  # Text shown above the body or chest (placeholders: {player})
   Hologram_Text: "&6{player}'s loot"
   # Distance (in blocks) from which the hologram can be seen
   Hologram_Visible_Range: 20
@@ -33,7 +36,7 @@ Locator_Toggle:
   # false          - use the custom tracking system instead: the bar is hidden until you track someone,
   #                  and players have to accept a /track request first.
   Enable_Locator_Bar: true
-  # Where the locator bar works: all, normal (overworld), nether, the end
+  # Where the locator bar works: all, or any of normal (overworld), nether, the end - e.g. "normal, nether"
   Allowed_Environements: "all"
 
 # -------------------------------------------------------------------------------------------------
@@ -56,6 +59,25 @@ Death_Effects:
   Active_Death_Effect: "grid"
   # How long the effect plays, in seconds
   Duration_Seconds: 3
+
+# -------------------------------------------------------------------------------------------------
+# Custom death messages (edit them in death-messages.yml)
+# -------------------------------------------------------------------------------------------------
+Death_Messages:
+  Enabled: true
+
+# -------------------------------------------------------------------------------------------------
+# Nicknames: /nick opens a menu to pick colours, gradients and styles, /nick <name> sets the name.
+# Shown in chat, the tab list, join/leave messages, death messages and the locator bar.
+# -------------------------------------------------------------------------------------------------
+Nicknames:
+  Enabled: true
+  # Longest nickname allowed (letters, numbers, underscores and spaces)
+  Max_Length: 16
+  # Also show the nickname in the name tag above the player's head, as "Nickname (AccountName)".
+  # Minecraft always shows the account name there, so the nickname is added in front of it.
+  # Uses scoreboard teams: turn this off if another plugin (tab/rank plugins) puts players in teams.
+  Show_Above_Head: false
 
 # -------------------------------------------------------------------------------------------------
 # Edit your server MOTD (the text shown under your server in the multiplayer list)
@@ -213,4 +235,4 @@ Duel:
 # -------------------------------------------------------------------------------------------------
 # Do not change this value.
 # -------------------------------------------------------------------------------------------------
-Version: 3
+Version: 4

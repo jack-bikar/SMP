@@ -19,6 +19,8 @@ import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Container;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
@@ -85,7 +87,14 @@ public final class ActiveDuel {
 	private final Set<UUID> landed = new HashSet<>();
 
 	// Tracked for cleanup
-	private final Set<Location> placedBlocks = new HashSet<>();
+	/** Block location -> what was there before the duel changed it, and who placed there first. */
+	private final Map<Location, PlacedBlock> placedBlocks = new HashMap<>();
+
+	private record PlacedBlock(BlockState original, UUID placer) {
+	}
+
+	/** Half the arena's width, set when the arena is known. */
+	private int arenaRadius;
 	private final Set<UUID> droppedItems = new HashSet<>();
 	private final Set<UUID> spawnedEntities = new HashSet<>();
 
@@ -117,6 +126,7 @@ public final class ActiveDuel {
 		if (state != DuelState.PREPARING)
 			return;
 		this.arena = arena;
+		this.arenaRadius = arena.borderRadius(Settings.DuelSection.BORDER_RADIUS, getLargestTeamSize());
 
 		for (DuelSide side : DuelSide.values()) {
 			List<Player> team = getTeam(side);
@@ -147,8 +157,7 @@ public final class ActiveDuel {
 		state = DuelState.COUNTDOWN;
 
 		if (Settings.DuelSection.BORDER_ENABLED) {
-			border = new DuelBorder(arena.center(),
-					arena.borderRadius(Settings.DuelSection.BORDER_RADIUS, getLargestTeamSize()));
+			border = new DuelBorder(arena.center(), arenaRadius);
 			border.start(() -> state == DuelState.ACTIVE, activePlayers());
 		}
 
@@ -210,6 +219,8 @@ public final class ActiveDuel {
 		boolean sideOut = getTeam(side).stream().allMatch(p -> eliminated.contains(p.getUniqueId()));
 
 		if (victim.isOnline() && !victim.isDead() && !left.contains(id)) {
+			// Spectators can't pick things up (a Loyalty trident would be lost), so hand them back now
+			returnProjectilesOf(victim);
 			victim.setHealth(maxHealth(victim));
 			victim.setFireTicks(0);
 			victim.setGameMode(GameMode.SPECTATOR);
@@ -404,6 +415,9 @@ public final class ActiveDuel {
 			border.remove(player);
 		// No longer part of the duel: their blocks and commands at home are their own again
 		DuelManager.getInstance().detach(player, duelId);
+		// A pearl still in flight would pull them back to the arena
+		for (Entity pearl : new ArrayList<>(player.getEnderPearls()))
+			pearl.remove();
 
 		// Dead players are sent back when they respawn, using the saved return location
 		if (player.isDead())
@@ -428,13 +442,27 @@ public final class ActiveDuel {
 			player.setFallDistance(0);
 		};
 
+		// If the teleport fails, at least don't leave them in spectator; they are sent back on next join
+		Runnable failed = () -> {
+			if (!player.isOnline())
+				return;
+			player.setGameMode(saved.gameMode());
+			ColorUtil.sendMessage(player, "&cCouldn't send you back right now; you'll be returned when you rejoin.");
+		};
+
 		if (immediately) {
-			if (player.teleport(saved.location()))
+			if (player.teleport(saved.location())) {
 				restore.run();
+			} else {
+				failed.run();
+			}
 		} else {
 			player.teleportAsync(saved.location()).thenAccept(success -> {
-				if (success)
+				if (success) {
 					restore.run();
+				} else {
+					failed.run();
+				}
 			});
 		}
 	}
@@ -495,12 +523,9 @@ public final class ActiveDuel {
 
 	private void performCleanup() {
 		if (Settings.DuelSection.CLEANUP_REMOVE_PLACED_BLOCKS) {
-			for (Location location : placedBlocks) {
-				if (location.isChunkLoaded()) {
-					Block block = location.getBlock();
-					if (!block.getType().isAir())
-						block.setType(Material.AIR);
-				}
+			for (Map.Entry<Location, PlacedBlock> entry : placedBlocks.entrySet()) {
+				if (entry.getKey().isChunkLoaded())
+					restoreBlock(entry.getKey().getBlock(), entry.getValue());
 			}
 		}
 		if (Settings.DuelSection.CLEANUP_REMOVE_DROPPED_ITEMS)
@@ -511,6 +536,44 @@ public final class ActiveDuel {
 		placedBlocks.clear();
 		droppedItems.clear();
 		spawnedEntities.clear();
+	}
+
+	/**
+	 * Puts back what was there before the duel. A container placed during the
+	 * duel (chest, shulker box...) goes back to whoever placed it, with its contents.
+	 */
+	private void restoreBlock(Block block, PlacedBlock placed) {
+		if (block.getType() != placed.original().getType() && block.getState() instanceof Container container) {
+			List<ItemStack> items = new ArrayList<>();
+			for (ItemStack item : container.getInventory().getContents()) {
+				if (item != null && !item.isEmpty())
+					items.add(item.clone());
+			}
+			container.getInventory().clear();
+			items.add(new ItemStack(block.getType()));
+
+			Player placer = Bukkit.getPlayer(placed.placer());
+			for (ItemStack item : items) {
+				if (placer != null) {
+					give(placer, item);
+				} else {
+					block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5), item);
+				}
+			}
+		}
+		placed.original().update(true, false);
+	}
+
+	/** Arrows and tridents a player shot go back to them (and are removed from the world). */
+	private void returnProjectilesOf(Player player) {
+		for (UUID id : spawnedEntities) {
+			if (Bukkit.getEntity(id) instanceof AbstractArrow arrow && arrow.isValid()
+					&& arrow.getPickupStatus() == AbstractArrow.PickupStatus.ALLOWED
+					&& arrow.getShooter() instanceof Player shooter && shooter.equals(player)) {
+				give(player, arrow.getItemStack());
+				arrow.remove();
+			}
+		}
 	}
 
 	/** Items thrown on the ground during the fight go back to whoever threw them. */
@@ -547,14 +610,26 @@ public final class ActiveDuel {
 			player.getWorld().dropItemNaturally(player.getLocation(), leftover);
 	}
 
-	public void trackPlacedBlock(Location location) {
-		// Only blocks inside the arena are cleaned up
-		if (border == null || border.contains(location))
-			placedBlocks.add(location.toBlockLocation());
+	/**
+	 * Remembers what was at a block before a duelist changed it, so cleanup can
+	 * put it back. Only the first change counts, and only inside the arena.
+	 */
+	public void trackPlacedBlock(BlockState original, Player placer) {
+		Location location = original.getLocation().toBlockLocation();
+		if (arenaContains(location))
+			placedBlocks.putIfAbsent(location, new PlacedBlock(original, placer.getUniqueId()));
 	}
 
 	public boolean isPlacedBlock(Location location) {
-		return placedBlocks.contains(location.toBlockLocation());
+		return placedBlocks.containsKey(location.toBlockLocation());
+	}
+
+	/** Whether a location is inside this duel's arena (works with the border turned off too). */
+	public boolean arenaContains(Location location) {
+		if (arena == null || location.getWorld() == null || !location.getWorld().equals(arena.center().getWorld()))
+			return false;
+		return Math.abs(location.getX() - arena.center().getX()) <= arenaRadius
+				&& Math.abs(location.getZ() - arena.center().getZ()) <= arenaRadius;
 	}
 
 	public void trackDroppedItem(UUID itemId) {

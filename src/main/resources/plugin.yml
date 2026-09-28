@@ -32,6 +32,11 @@ commands:
     aliases: [d]
     permission: smp.duel
     permission-message: You don't have permission to use this command.
+  nick:
+    description: Set a coloured nickname (opens a menu)
+    aliases: [nickname]
+    permission: smp.nick
+    permission-message: You don't have permission to use nicknames.
   arena:
     description: Arena management commands
     permission: smp.admin.arena
@@ -45,6 +50,8 @@ permissions:
       smp.use.*: true
       smp.admin.*: true
       smp.duel.*: true
+      smp.nick: true
+      smp.tp.bypass: true
   smp.command.*:
     description: All SMP command permissions
     default: op
@@ -70,8 +77,13 @@ permissions:
     children:
       smp.admin.arena: true
       smp.admin.reload: true
+      smp.admin.duel: true
+      smp.nick.others: true
   smp.admin.arena:
     description: Manage duel arenas
+    default: op
+  smp.admin.duel:
+    description: End any duel with /duel cancel <player>
     default: op
   smp.admin.reload:
     description: Reload the SMP settings with /smp reload
@@ -82,6 +94,12 @@ permissions:
   smp.duel.queue:
     description: Use the duel queue system
     default: true
+  smp.nick:
+    description: Use /nick to set your own nickname
+    default: true
+  smp.nick.others:
+    description: Reset other players' nicknames with /nick reset <player>
+    default: op
   smp.tp.bypass:
     description: Teleport to players without sending a request
     default: op

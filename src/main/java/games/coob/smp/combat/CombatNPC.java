@@ -121,8 +121,9 @@ public class CombatNPC {
 		double health = player.getHealth();
 		Location location = player.getLocation();
 
-		// Clear player inventory so items don't drop twice
+		// Clear player inventory so items don't drop twice, and keep a copy on disk in case of a crash
 		player.getInventory().clear();
+		GhostLootStore.getInstance().store(uuid, inventory);
 
 		// Create NPC
 		new CombatNPC(uuid, player.getName(), location, inventory, armor, health);
@@ -163,6 +164,7 @@ public class CombatNPC {
 
 		// Drop inventory at NPC location
 		combatNPC.dropInventory();
+		GhostLootStore.getInstance().clear(playerUUID);
 
 		// Notify killer
 		if (killer != null) {
@@ -192,6 +194,7 @@ public class CombatNPC {
 	 */
 	private void despawn() {
 		dropInventory();
+		GhostLootStore.getInstance().clear(playerUUID);
 
 		// Remove NPC
 		npc.remove();
@@ -228,14 +231,20 @@ public class CombatNPC {
 	 */
 	private void removeNPC() {
 		despawnTask.cancel();
+		double bodyHealth = npc.isValid() ? npc.getHealth() : -1;
 		npc.remove();
 		releaseChunk();
+		GhostLootStore.getInstance().clear(playerUUID);
 
 		// Return inventory to player when they rejoin
 		Player player = Bukkit.getPlayer(playerUUID);
 		if (player != null && player.isOnline()) {
 			player.getInventory().setContents(inventory);
 			player.getInventory().setArmorContents(armor);
+			// A quick relog doesn't reset the fight: damage the body took counts, and they are still in combat
+			if (Settings.CombatSection.GHOST_BODY_USE_PLAYER_HEALTH && bodyHealth > 0)
+				player.setHealth(Math.min(player.getHealth(), bodyHealth));
+			CombatTracker.tag(player);
 			ColorUtil.sendMessage(player,
 					"&aYou rejoined before your ghost body was killed. Your items have been returned.");
 		}
@@ -250,6 +259,7 @@ public class CombatNPC {
 			// rather than lose it
 			npc.despawnTask.cancel();
 			npc.dropInventory();
+			GhostLootStore.getInstance().clear(npc.playerUUID);
 			npc.npc.remove();
 			npc.releaseChunk();
 		}

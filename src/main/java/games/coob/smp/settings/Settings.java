@@ -60,8 +60,16 @@ public final class Settings extends ConfigFile {
 			changed |= replaceOldDefault(config, "Locator_Toggle.Enable_Locator_Bar", false, true);
 			changed |= replaceOldDefault(config, "Duel.Arena_Mode", "NATURAL", "RANDOM");
 		}
-		if (version < 3) {
-			config.set("Version", 3);
+		if (version < 4) {
+			changed |= replaceOldDefault(config, "Death_Storage.Storage_Material", "CHEST", "BODY");
+			// Options from older versions that no longer do anything
+			for (String dead : DEAD_KEYS) {
+				if (config.contains(dead)) {
+					config.set(dead, null);
+					changed = true;
+				}
+			}
+			config.set("Version", 4);
 			SMPPlugin.getInstance().getLogger().info("Updated settings.yml to the latest defaults.");
 			changed = true;
 		}
@@ -74,6 +82,8 @@ public final class Settings extends ConfigFile {
 		ProjectileSection.load(config);
 		DeathEffectSection.load(config);
 		MotdSection.load(config);
+		DeathMessageSection.load(config);
+		NicknameSection.load(config);
 		CombatSection.load(config);
 		TpSection.load(config);
 		DuelSection.load(config);
@@ -87,20 +97,37 @@ public final class Settings extends ConfigFile {
 		if (current != null && !matches)
 			return false;
 		config.set(path, newDefault);
+		SMPPlugin.getInstance().getLogger().info("settings.yml: " + path + " changed to the new default: " + newDefault);
 		return true;
 	}
+
+	/** Settings from versions 1-3 that were removed. */
+	private static final List<String> DEAD_KEYS = List.of(
+			"Command_Aliases", "Locale", "Prefix", "Log_Lag_Over_Milis", "Debug",
+			"MOTD.MOTD_Text",
+			"Combat_Settings.PvP_Lockout.Can_Take_Damage",
+			"Duel.Border.Start_Radius", "Duel.Border.End_Radius", "Duel.Border.Shrink_Time_Seconds",
+			"Duel.Border.Warning_Distance", "Duel.Border.Knockback_Strength", "Duel.Border.Use_World_Border",
+			"Duel.Border.World_Border",
+			"Duel.Loot.Loot_Phase_Seconds", "Duel.Loot.Winner_Keeps_Inventory",
+			"Duel.Cleanup.Unload_Natural_Chunks",
+			"Duel.Queue");
 
 	// Death Storage Section
 	public static class DeathStorageSection {
 		public static boolean ENABLE_DEATH_STORAGE;
+		/** Storage_Material: BODY - the player's body holds the items instead of a chest block. */
+		public static boolean USE_BODY;
+		/** Block used when not using bodies. */
 		public static Material STORAGE_MATERIAL;
 		public static String HOLOGRAM_TEXT;
 		public static int HOLOGRAM_VISIBLE_RANGE;
 
 		public static void load(FileConfiguration config) {
 			ENABLE_DEATH_STORAGE = config.getBoolean("Death_Storage.Enable_Death_Storage", true);
-			String materialName = config.getString("Death_Storage.Storage_Material", "CHEST");
-			STORAGE_MATERIAL = Material.matchMaterial(materialName);
+			String materialName = config.getString("Death_Storage.Storage_Material", "BODY");
+			USE_BODY = materialName.equalsIgnoreCase("BODY");
+			STORAGE_MATERIAL = USE_BODY ? null : Material.matchMaterial(materialName);
 			if (STORAGE_MATERIAL == null || !STORAGE_MATERIAL.isBlock()) {
 				STORAGE_MATERIAL = Material.CHEST;
 			}
@@ -151,6 +178,28 @@ public final class Settings extends ConfigFile {
 			ENABLE_DEATH_EFFECTS = config.getBoolean("Death_Effects.Enable_Death_Effects", false);
 			ACTIVE_DEATH_EFFECT = config.getString("Death_Effects.Active_Death_Effect", "grid");
 			DURATION_SECONDS = Math.max(1, config.getInt("Death_Effects.Duration_Seconds", 3));
+		}
+	}
+
+	// Death message Section
+	public static class DeathMessageSection {
+		public static boolean ENABLED;
+
+		public static void load(FileConfiguration config) {
+			ENABLED = config.getBoolean("Death_Messages.Enabled", true);
+		}
+	}
+
+	// Nickname Section
+	public static class NicknameSection {
+		public static boolean ENABLED;
+		public static int MAX_LENGTH;
+		public static boolean SHOW_ABOVE_HEAD;
+
+		public static void load(FileConfiguration config) {
+			ENABLED = config.getBoolean("Nicknames.Enabled", true);
+			SHOW_ABOVE_HEAD = config.getBoolean("Nicknames.Show_Above_Head", false);
+			MAX_LENGTH = Math.clamp(config.getInt("Nicknames.Max_Length", 16), 3, 32);
 		}
 	}
 

@@ -166,8 +166,10 @@ public final class PlayerCache extends ConfigFile {
 		}
 		getConfig().set("Tracked_Targets", targetList);
 
-		getConfig().set("PvP_Lockout_Expiry", pvpLockoutExpiry > System.currentTimeMillis() ? pvpLockoutExpiry : null);
-		getConfig().set("Debuff_Expiry", debuffExpiry > System.currentTimeMillis() ? debuffExpiry : null);
+		// Negative values are durations that haven't started yet (they start when the player joins)
+		long now = System.currentTimeMillis();
+		getConfig().set("PvP_Lockout_Expiry", pvpLockoutExpiry < 0 || pvpLockoutExpiry > now ? pvpLockoutExpiry : null);
+		getConfig().set("Debuff_Expiry", debuffExpiry < 0 || debuffExpiry > now ? debuffExpiry : null);
 
 		getConfig().set("Duel_Return", null);
 		if (duelReturnLocation != null) {

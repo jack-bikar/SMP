@@ -10,6 +10,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -23,7 +24,9 @@ public final class PlayerPickerMenu extends SimpleMenu {
 	private static final int SLOT_PREVIOUS = 48;
 	private static final int SLOT_NEXT = 50;
 
-	private final List<Player> players = new ArrayList<>();
+	/** Stored by id and looked up on click, so relogged players are handled correctly. */
+	private final List<UUID> players = new ArrayList<>();
+	private final List<String> names = new ArrayList<>();
 	private final String action;
 	private final Consumer<Player> onPick;
 	private final Runnable onBack;
@@ -42,8 +45,10 @@ public final class PlayerPickerMenu extends SimpleMenu {
 		this.onPick = onPick;
 		this.onBack = onBack;
 		for (Player player : Bukkit.getOnlinePlayers()) {
-			if (!player.equals(viewer) && filter.test(player))
-				players.add(player);
+			if (!player.equals(viewer) && filter.test(player)) {
+				players.add(player.getUniqueId());
+				names.add(player.getName());
+			}
 		}
 		render();
 	}
@@ -52,9 +57,8 @@ public final class PlayerPickerMenu extends SimpleMenu {
 		inventory.clear();
 		int start = page * PER_PAGE;
 		for (int i = start; i < Math.min(start + PER_PAGE, players.size()); i++) {
-			Player player = players.get(i);
-			inventory.setItem(i - start, ItemCreator.of(Material.PLAYER_HEAD, "&b&l" + player.getName(), "",
-					"&e" + action).skullOwner(player).make());
+			inventory.setItem(i - start, ItemCreator.of(Material.PLAYER_HEAD, "&b&l" + names.get(i), "",
+					"&e" + action).skullOwner(Bukkit.getOfflinePlayer(players.get(i))).make());
 		}
 
 		if (players.isEmpty())
@@ -83,9 +87,9 @@ public final class PlayerPickerMenu extends SimpleMenu {
 			int index = page * PER_PAGE + slot;
 			if (index >= players.size())
 				return;
-			Player picked = players.get(index);
-			if (!picked.isOnline()) {
-				ColorUtil.sendMessage(player, "&c" + picked.getName() + " is no longer online.");
+			Player picked = Bukkit.getPlayer(players.get(index));
+			if (picked == null) {
+				ColorUtil.sendMessage(player, "&c" + names.get(index) + " is no longer online.");
 				return;
 			}
 			onPick.accept(picked);
