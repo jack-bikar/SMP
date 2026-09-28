@@ -1,14 +1,27 @@
 package games.coob.smp;
 
+import games.coob.smp.combat.CombatListener;
+import games.coob.smp.combat.CombatNPC;
+import games.coob.smp.combat.CombatPunishmentManager;
+import games.coob.smp.combat.CombatTracker;
 import games.coob.smp.command.InvEditCommand;
 import games.coob.smp.command.SMPCommand;
 import games.coob.smp.command.SpawnCommand;
-import games.coob.smp.command.TrackCommand;
 import games.coob.smp.command.TpCommand;
-import games.coob.smp.hologram.HologramRegistry;
+import games.coob.smp.command.TrackCommand;
+import games.coob.smp.config.ConfigFile;
+import games.coob.smp.duel.ArenaCommand;
+import games.coob.smp.duel.DuelCommand;
+import games.coob.smp.duel.DuelListener;
+import games.coob.smp.duel.DuelManager;
+import games.coob.smp.duel.DuelQueueManager;
+import games.coob.smp.duel.TeamDuelManager;
+import games.coob.smp.duel.model.ArenaRegistry;
+import games.coob.smp.duel.model.DuelStatistics;
 import games.coob.smp.listener.DeathChestListener;
 import games.coob.smp.listener.LocatorListener;
 import games.coob.smp.listener.SMPListener;
+import games.coob.smp.menu.MenuListener;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
@@ -16,10 +29,14 @@ import games.coob.smp.task.HologramTask;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
+import games.coob.smp.tracking.VanillaLocator;
 import games.coob.smp.tracking.WaypointColorManager;
 import games.coob.smp.tracking.WaypointPacketSender;
-import games.coob.smp.util.PluginUtil;
 import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SMPPlugin extends JavaPlugin {
@@ -27,71 +44,59 @@ public final class SMPPlugin extends JavaPlugin {
     private static SMPPlugin instance;
 
     @Override
+    public void onLoad() {
+        instance = this;
+    }
+
+    @Override
     public void onEnable() {
         instance = this;
 
-        // Load settings
         Settings.loadSettings();
 
-        // Initialize waypoint packet sender (uses reflection, logs debug info)
+        // Initialize waypoint packet sender (uses reflection)
         WaypointPacketSender.initialize();
 
         // Reset any leftover name tag colors from previous runs
         WaypointColorManager.resetAllNameTagColors();
 
-        // Initialize registries
-        SchedulerUtil.runLater(1, () -> {
-            DeathChestRegistry.getInstance();
-            HologramRegistry.getInstance().spawnFromDisk();
-        });
+        // Load data files
+        DeathChestRegistry.getInstance();
+        ArenaRegistry.getInstance();
+        DuelStatistics.getInstance();
 
-        // Load EffectLib if available
-        if (PluginUtil.isPluginEnabled("EffectLib")) {
-            Effects.load();
-        }
+        registerCommand("smp", new SMPCommand());
+        InvEditCommand invEditCommand = new InvEditCommand();
+        registerCommand("inv", invEditCommand);
+        registerCommand("spawn", new SpawnCommand());
+        registerCommand("track", new TrackCommand());
+        registerCommand("tp", new TpCommand());
+        registerCommand("duel", new DuelCommand());
+        registerCommand("arena", new ArenaCommand());
 
-        // Register commands
-        getCommand("smp").setExecutor(new SMPCommand());
-        getCommand("inv").setExecutor(new InvEditCommand());
-        getCommand("inventory").setExecutor(new InvEditCommand());
-        getCommand("spawn").setExecutor(new SpawnCommand());
-        getCommand("track").setExecutor(new TrackCommand());
-        getCommand("track").setTabCompleter(new TrackCommand());
-        getCommand("tp").setExecutor(new TpCommand());
-        getCommand("tp").setTabCompleter(new TpCommand());
+        registerEvents(
+                SMPListener.getInstance(),
+                LocatorListener.getInstance(),
+                DeathChestListener.getInstance(),
+                CombatListener.getInstance(),
+                DuelListener.getInstance(),
+                MenuListener.getInstance(),
+                VanillaLocator.getInstance(),
+                invEditCommand);
 
-        // Register duel commands
-        games.coob.smp.duel.DuelCommand duelCommand = new games.coob.smp.duel.DuelCommand();
-        getCommand("duel").setExecutor(duelCommand);
-        getCommand("duel").setTabCompleter(duelCommand);
-
-        games.coob.smp.duel.ArenaCommand arenaCommand = new games.coob.smp.duel.ArenaCommand();
-        getCommand("arena").setExecutor(arenaCommand);
-        getCommand("arena").setTabCompleter(arenaCommand);
-
-        // Register events
-        getServer().getPluginManager().registerEvents(SMPListener.getInstance(), this);
-        getServer().getPluginManager().registerEvents(LocatorListener.getInstance(), this);
-        getServer().getPluginManager().registerEvents(DeathChestListener.getInstance(), this);
-        getServer().getPluginManager().registerEvents(games.coob.smp.combat.CombatListener.getInstance(), this);
-        getServer().getPluginManager().registerEvents(games.coob.smp.duel.DuelListener.getInstance(), this);
-
-        // Initialize duel registries
-        games.coob.smp.duel.model.ArenaRegistry.getInstance();
-        games.coob.smp.duel.model.DuelStatistics.getInstance();
-
-        // Start duel queue system
-        games.coob.smp.duel.DuelQueueManager.getInstance().start();
-
-        // Start tasks (40 ticks = 2 seconds for locator updates)
+        // Locator updates every 2 seconds, death chest holograms every 2 seconds
         SchedulerUtil.runTimer(40, new LocatorTask());
-        SchedulerUtil.runTimer(20, new HologramTask());
+        SchedulerUtil.runTimer(20, 40, new HologramTask());
+        // Vanilla locator bar: name of the player you are facing
+        SchedulerUtil.runTimer(VanillaLocator.PERIOD_TICKS, VanillaLocator.PERIOD_TICKS, VanillaLocator.getInstance());
     }
 
     @Override
     public void onDisable() {
-        // Save data
-        DeathChestRegistry.getInstance().save();
+        // Duels first: players are sent back and their data is updated
+        DuelManager.getInstance().cleanup();
+        DuelQueueManager.getInstance().clear();
+        TeamDuelManager.getInstance().clear();
 
         // Clean up tracking
         TrackingRegistry.clear();
@@ -101,25 +106,34 @@ public final class SMPPlugin extends JavaPlugin {
         WaypointColorManager.resetAllNameTagColors();
 
         // Clean up combat system
-        games.coob.smp.combat.CombatNPC.cleanupAll();
-        games.coob.smp.combat.CombatPunishmentManager.cleanup();
+        CombatNPC.cleanupAll();
+        CombatPunishmentManager.cleanup();
+        CombatTracker.clearAll();
 
-        // Clean up duel system
-        games.coob.smp.duel.DuelManager.getInstance().cleanup();
-        games.coob.smp.duel.DuelQueueManager.getInstance().stop();
-        games.coob.smp.duel.NaturalTeleporter.clearExploredCache();
-        games.coob.smp.duel.model.ArenaRegistry.getInstance().save();
-        games.coob.smp.duel.model.DuelStatistics.getInstance().save();
+        Effects.disable();
 
-        // Disable effects
-        if (PluginUtil.isPluginEnabled("EffectLib")) {
-            Effects.disable();
-        }
+        // Save data: finish queued background writes first, so they can't land after the final saves
+        DeathChestRegistry.getInstance().shutdown();
+        ConfigFile.flushPendingWrites();
+        DeathChestRegistry.getInstance().saveNow();
+        ArenaRegistry.getInstance().saveNow();
+        DuelStatistics.getInstance().saveNow();
+        PlayerCache.saveAllNow();
     }
 
-    @Override
-    public void onLoad() {
-        instance = this;
+    private <T extends CommandExecutor & TabCompleter> void registerCommand(String name, T handler) {
+        PluginCommand command = getCommand(name);
+        if (command == null) {
+            getLogger().warning("Command /" + name + " is missing from plugin.yml");
+            return;
+        }
+        command.setExecutor(handler);
+        command.setTabCompleter(handler);
+    }
+
+    private void registerEvents(Listener... listeners) {
+        for (Listener listener : listeners)
+            getServer().getPluginManager().registerEvents(listener, this);
     }
 
     public static SMPPlugin getInstance() {

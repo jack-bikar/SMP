@@ -1,6 +1,7 @@
 package games.coob.smp.tp;
 
-import games.coob.smp.PlayerCache;
+import games.coob.smp.combat.CombatTracker;
+import games.coob.smp.duel.DuelManager;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
@@ -72,8 +73,8 @@ public final class TpRequestManager {
         ColorUtil.sendMessage(requester, "&eTP request sent to &3" + target.getName() + "&e. Waiting for response...");
 
         SchedulerUtil.runLater(EXPIRATION_SECONDS * 20L, () -> {
-            UUID removed = pendingRequests.remove(requester.getUniqueId());
-            if (removed != null) {
+            // Only expire this request, not a newer one to someone else
+            if (pendingRequests.remove(requester.getUniqueId(), target.getUniqueId())) {
                 Player req = Bukkit.getPlayer(requester.getUniqueId());
                 if (req != null && req.isOnline()) {
                     ColorUtil.sendMessage(req, "&cTP request to &3" + target.getName() + " &cexpired.");
@@ -106,8 +107,13 @@ public final class TpRequestManager {
 
         pendingRequests.remove(requesterUUID);
 
-        PlayerCache requesterCache = PlayerCache.from(requester);
-        if (requesterCache.isInCombat()) {
+        if (DuelManager.getInstance().isInDuel(requester) || DuelManager.getInstance().isInDuel(target)) {
+            ColorUtil.sendMessage(target, "&cYou can't teleport while one of you is in a duel.");
+            ColorUtil.sendMessage(requester, "&cYou can't teleport while one of you is in a duel.");
+            return false;
+        }
+
+        if (CombatTracker.isInCombat(requester)) {
             ColorUtil.sendMessage(target, "&c" + requester.getName() + " is in combat and cannot teleport yet.");
             ColorUtil.sendMessage(requester,
                     "&cYou cannot teleport while in combat. Wait for the combat timer to end.");

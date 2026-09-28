@@ -50,6 +50,16 @@ public final class WaypointPacketSender {
             return;
         initialized = true;
 
+        resolveReflection();
+
+        if (!available) {
+            SMPPlugin.getInstance().getLogger().warning(
+                    "Per-player locator waypoints are unavailable on this server version; "
+                            + "tracking falls back to the vanilla locator bar.");
+        }
+    }
+
+    private static void resolveReflection() {
         try {
             debug("Initializing WaypointPacketSender...");
 
@@ -159,7 +169,6 @@ public final class WaypointPacketSender {
 
         } catch (Exception e) {
             debug("ERROR during initialization: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
@@ -289,6 +298,13 @@ public final class WaypointPacketSender {
     public static boolean hasActiveWaypoint(Player player) {
         Set<UUID> active = ACTIVE_WAYPOINTS.get(player.getUniqueId());
         return active != null && !active.isEmpty();
+    }
+
+    /**
+     * Forget a player's waypoints without sending packets (call on quit).
+     */
+    public static void forget(UUID playerUUID) {
+        ACTIVE_WAYPOINTS.remove(playerUUID);
     }
 
     /**

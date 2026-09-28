@@ -1,51 +1,52 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.util.ColorUtil;
-import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.jspecify.annotations.NonNull;
 
 /**
- * Base class for simple menus
+ * Base class for simple menus. The menu is the inventory's holder, so a single
+ * {@link MenuListener} can route clicks without registering a listener per menu.
  */
-public abstract class SimpleMenu implements Listener {
+public abstract class SimpleMenu implements InventoryHolder {
 
-	@Getter
-    protected Inventory inventory;
-	protected Player viewer;
+	protected final Inventory inventory;
+	protected final Player viewer;
 
 	public SimpleMenu(Player viewer, int size, String title) {
 		this.viewer = viewer;
 		Component titleComponent = ColorUtil.toComponent(title);
-		this.inventory = Bukkit.createInventory(null, size, titleComponent);
-		Bukkit.getPluginManager().registerEvents(this, games.coob.smp.SMPPlugin.getInstance());
+		this.inventory = Bukkit.createInventory(this, size, titleComponent);
+	}
+
+	@Override
+	public @NonNull Inventory getInventory() {
+		return inventory;
 	}
 
 	public void displayTo(Player player) {
 		player.openInventory(inventory);
 	}
 
-	@EventHandler
-	public void onInventoryClick(InventoryClickEvent event) {
-		if (event.getWhoClicked() instanceof Player player && event.getInventory().equals(inventory)) {
-			event.setCancelled(true);
-			onMenuClick(player, event.getSlot(), event.getCurrentItem(), event.getClick());
-		}
+	/**
+	 * Whether players may move items in this menu. Button menus return false,
+	 * so every click is cancelled before {@link #onMenuClick} is called.
+	 */
+	protected boolean isEditable() {
+		return false;
 	}
 
-	@EventHandler
-	public void onInventoryClose(InventoryCloseEvent event) {
-		if (event.getPlayer() instanceof Player player && event.getInventory().equals(inventory)) {
-			onMenuClose(player, inventory);
-		}
+	/**
+	 * For editable menus: slots in the menu that can't be changed (e.g. fillers).
+	 */
+	protected boolean isLockedSlot(int slot) {
+		return false;
 	}
 
 	protected abstract void onMenuClick(Player player, int slot, ItemStack clicked, ClickType clickType);

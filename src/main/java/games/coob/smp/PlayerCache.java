@@ -3,213 +3,157 @@ package games.coob.smp;
 import games.coob.smp.config.ConfigFile;
 import games.coob.smp.tracking.MarkerColor;
 import games.coob.smp.tracking.TrackedTarget;
+import games.coob.smp.util.LocationUtil;
 import lombok.Getter;
-import lombok.Setter;
-import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
+import org.jspecify.annotations.Nullable;
 
-import javax.annotation.Nullable;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Per-player data, stored in players/&lt;uuid&gt;.yml.
+ * Loaded when first accessed and unloaded when the player quits.
+ */
 @Getter
 public final class PlayerCache extends ConfigFile {
 
 	private static final Map<UUID, PlayerCache> cacheMap = new HashMap<>();
 
+	/** Old shared data file; player data is migrated out of it on first load. */
+	private static YamlConfiguration legacyData;
+
+	/** Maximum number of other players a single player can track at once. */
+	public static final int MAX_PLAYERS_TO_TRACK = 10;
+
 	private final UUID uniqueId;
 
 	private final String playerName;
 
-	@Getter
 	private Location deathLocation;
 
-	@Getter
 	private Location portalLocation;
 
 	/** Overworld-side nether portal (when entering from overworld to nether) */
-	@Getter
 	private Location overworldNetherPortalLocation;
 
 	/** Overworld-side end portal in stronghold (when entering overworld to end) */
-	@Getter
 	private Location overworldEndPortalLocation;
-
-	/** Maximum number of other players a single player can track at once. */
-	public static final int MAX_PLAYERS_TO_TRACK = 10;
 
 	/**
 	 * Multi-tracking: list of tracked targets (players and/or death location).
 	 * Players have customizable colors; death location is always dark red.
 	 */
-	@Getter
 	private final List<TrackedTarget> trackedTargets = new ArrayList<>();
 
-	/** Legacy field for backward compatibility - use trackedTargets instead */
-	@Deprecated
-	@Getter
-	private String trackingLocation;
-
-	/** Legacy field for backward compatibility - use trackedTargets instead */
-	@Deprecated
-	@Getter
-	private UUID targetByUUID;
-
-	@Getter
-	@Setter
-	private Inventory deathChestInventory;
-
-	@Getter
-	@Setter
-	private int secondsAfterDamage;
-
-	@Getter
-	@Setter
-	private boolean drawingAxe;
-
-	@Getter
-	@Setter
-	private boolean inCombat;
-
 	// Combat punishment state
-	@Getter
-	@Setter
 	private long pvpLockoutExpiry;
 
-	@Getter
-	@Setter
 	private long debuffExpiry;
 
-	// Duel state (transient - not persisted)
-	@Getter
-	@Setter
-	private boolean inDuel;
-
-	@Getter
-	@Setter
-	private java.util.UUID duelOpponent;
-
-	@Getter
-	@Setter
-	private java.util.UUID activeDuelId;
-
 	/**
-	 * Transient: cached portal location for cross-dimension tracking.
-	 * Not persisted to disk - recalculated on dimension change.
-	 * 
-	 * @deprecated Use TrackedTarget.getCachedPortalTarget() instead
+	 * Where to send the player back to after a duel. Kept on disk so players who
+	 * disconnect (or a server crash) mid-duel are still returned on their next join.
 	 */
-	@Deprecated
-	@Getter
-	@Setter
-	private Location cachedPortalTarget;
+	private Location duelReturnLocation;
 
-	//
-	// Store any custom saveable data here
-	//
+	private GameMode duelReturnGameMode;
 
-	/*
-	 * Creates a new player cache (see the bottom)
-	 */
 	private PlayerCache(final String name, final UUID uniqueId) {
-		super("data.yml");
+		super("players/" + uniqueId + ".yml");
 
 		this.playerName = name;
 		this.uniqueId = uniqueId;
 
-		// Load player-specific data after uniqueId is set
 		loadPlayerData();
 	}
 
-	/**
-	 * Load player-specific data from the config file
-	 */
 	private void loadPlayerData() {
-		if (uniqueId == null)
-			return;
+		ConfigurationSection section = getConfig();
 
-		String path = "Players." + uniqueId.toString() + ".";
-		this.deathLocation = getConfig().getLocation(path + "Death_Location");
-		this.portalLocation = getConfig().getLocation(path + "Portal_Location");
-		this.overworldNetherPortalLocation = getConfig().getLocation(path + "Overworld_Nether_Portal");
-		this.overworldEndPortalLocation = getConfig().getLocation(path + "Overworld_End_Portal");
+		// First load after updating: pull this player's data out of the old data.yml
+		boolean migrated = false;
+		if (!file.exists()) {
+			ConfigurationSection legacy = getLegacySection(uniqueId);
+			if (legacy != null) {
+				section = legacy;
+				migrated = true;
+			}
+		}
 
-		// Load tracked targets (new multi-tracking system)
+		this.deathLocation = readLocation(section, "Death_Location");
+		this.portalLocation = readLocation(section, "Portal_Location");
+		this.overworldNetherPortalLocation = readLocation(section, "Overworld_Nether_Portal");
+		this.overworldEndPortalLocation = readLocation(section, "Overworld_End_Portal");
+
 		trackedTargets.clear();
-		if (getConfig().contains(path + "Tracked_Targets")) {
-			List<?> targetList = getConfig().getList(path + "Tracked_Targets");
-			if (targetList != null) {
-				for (Object obj : targetList) {
-					if (obj instanceof Map) {
-						@SuppressWarnings("unchecked")
-						Map<String, Object> map = (Map<String, Object>) obj;
-						String type = (String) map.get("Type");
-						if ("Death".equals(type)) {
-							trackedTargets.add(TrackedTarget.death());
-						} else if ("Player".equals(type)) {
-							String uuidStr = (String) map.get("UUID");
-							String colorStr = (String) map.get("Color");
-							if (uuidStr != null) {
-								try {
-									UUID targetUUID = UUID.fromString(uuidStr);
-									MarkerColor color = MarkerColor.WHITE;
-									if (colorStr != null) {
-										try {
-											color = MarkerColor.valueOf(colorStr);
-										} catch (IllegalArgumentException ignored) {
-										}
-									}
-									trackedTargets.add(TrackedTarget.player(targetUUID, color));
-								} catch (IllegalArgumentException ignored) {
-								}
-							}
+		for (Map<?, ?> map : section.getMapList("Tracked_Targets")) {
+			Object type = map.get("Type");
+			if ("Death".equals(type)) {
+				trackedTargets.add(TrackedTarget.death());
+			} else if ("Player".equals(type) && map.get("UUID") instanceof String uuidStr) {
+				try {
+					MarkerColor color = MarkerColor.WHITE;
+					if (map.get("Color") instanceof String colorStr) {
+						try {
+							color = MarkerColor.valueOf(colorStr);
+						} catch (IllegalArgumentException ignored) {
 						}
 					}
+					trackedTargets.add(TrackedTarget.player(UUID.fromString(uuidStr), color));
+				} catch (IllegalArgumentException ignored) {
 				}
 			}
 		}
 
-		// Legacy loading (backward compatibility)
-		this.trackingLocation = getConfig().getString(path + "Tracking_Location");
-		String uuidStr = getConfig().getString(path + "Track_Player");
-		if (uuidStr != null) {
+		this.pvpLockoutExpiry = section.getLong("PvP_Lockout_Expiry", 0);
+		this.debuffExpiry = section.getLong("Debuff_Expiry", 0);
+
+		this.duelReturnLocation = readLocation(section, "Duel_Return.Location");
+		String gameMode = section.getString("Duel_Return.GameMode");
+		if (gameMode != null) {
 			try {
-				this.targetByUUID = UUID.fromString(uuidStr);
-			} catch (IllegalArgumentException e) {
-				this.targetByUUID = null;
+				this.duelReturnGameMode = GameMode.valueOf(gameMode);
+			} catch (IllegalArgumentException ignored) {
 			}
 		}
 
-		// Load combat punishment state
-		this.pvpLockoutExpiry = getConfig().getLong(path + "PvP_Lockout_Expiry", 0);
-		this.debuffExpiry = getConfig().getLong(path + "Debuff_Expiry", 0);
+		if (migrated)
+			save();
 	}
 
-	/**
-	 * Automatically called when loading data from disk.
-	 * Note: This is called before uniqueId is set, so we load player data
-	 * separately.
-	 */
+	/** Reads a location written by this class or by the old Bukkit serialization. */
+	private static Location readLocation(ConfigurationSection section, String path) {
+		if (section.isString(path))
+			return LocationUtil.deserialize(section.getString(path));
+		try {
+			return section.getLocation(path);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
 	@Override
 	protected void onLoad() {
-		// Don't load player-specific data here since uniqueId isn't set yet
-		// Player data is loaded in loadPlayerData() after uniqueId is set
+		// Player data is loaded in loadPlayerData() once uniqueId is set
 	}
 
 	@Override
 	protected void onSave() {
-		String path = "Players." + uniqueId.toString() + ".";
-		getConfig().set(path + "Death_Location", deathLocation);
-		getConfig().set(path + "Portal_Location", portalLocation);
-		getConfig().set(path + "Overworld_Nether_Portal", overworldNetherPortalLocation);
-		getConfig().set(path + "Overworld_End_Portal", overworldEndPortalLocation);
+		getConfig().set("Name", playerName);
+		getConfig().set("Death_Location", LocationUtil.serialize(deathLocation));
+		getConfig().set("Portal_Location", LocationUtil.serialize(portalLocation));
+		getConfig().set("Overworld_Nether_Portal", LocationUtil.serialize(overworldNetherPortalLocation));
+		getConfig().set("Overworld_End_Portal", LocationUtil.serialize(overworldEndPortalLocation));
 
-		// Save tracked targets (new multi-tracking system)
 		List<Map<String, Object>> targetList = new ArrayList<>();
 		for (TrackedTarget target : trackedTargets) {
 			Map<String, Object> map = new HashMap<>();
@@ -220,33 +164,15 @@ public final class PlayerCache extends ConfigFile {
 			}
 			targetList.add(map);
 		}
-		getConfig().set(path + "Tracked_Targets", targetList);
+		getConfig().set("Tracked_Targets", targetList);
 
-		// Legacy fields (for backward compatibility, will be removed later)
-		getConfig().set(path + "Tracking_Location", trackingLocation);
-		getConfig().set(path + "Track_Player", targetByUUID != null ? targetByUUID.toString() : null);
+		getConfig().set("PvP_Lockout_Expiry", pvpLockoutExpiry > System.currentTimeMillis() ? pvpLockoutExpiry : null);
+		getConfig().set("Debuff_Expiry", debuffExpiry > System.currentTimeMillis() ? debuffExpiry : null);
 
-		// Save combat punishment state
-		getConfig().set(path + "PvP_Lockout_Expiry", pvpLockoutExpiry);
-		getConfig().set(path + "Debuff_Expiry", debuffExpiry);
-	}
-
-	/**
-	 * Return player from cache if online or null otherwise
-	 *
-	 * @return
-	 */
-	@Nullable
-	public Player toPlayer() {
-		return Bukkit.getPlayer(this.uniqueId);
-	}
-
-	/**
-	 * Remove this cached data from memory if it exists
-	 */
-	public void removeFromMemory() {
-		synchronized (cacheMap) {
-			cacheMap.remove(this.uniqueId);
+		getConfig().set("Duel_Return", null);
+		if (duelReturnLocation != null) {
+			getConfig().set("Duel_Return.Location", LocationUtil.serialize(duelReturnLocation));
+			getConfig().set("Duel_Return.GameMode", duelReturnGameMode != null ? duelReturnGameMode.name() : null);
 		}
 	}
 
@@ -256,8 +182,7 @@ public final class PlayerCache extends ConfigFile {
 	}
 
 	public void setDeathLocation(final Location deathLocation) {
-		this.deathLocation = deathLocation;
-
+		this.deathLocation = deathLocation != null ? deathLocation.clone() : null;
 		save();
 	}
 
@@ -276,16 +201,24 @@ public final class PlayerCache extends ConfigFile {
 		save();
 	}
 
-	@Deprecated
-	public void setTrackingLocation(final String trackingLocation) {
-		this.trackingLocation = trackingLocation;
+	public void setPvpLockoutExpiry(final long pvpLockoutExpiry) {
+		this.pvpLockoutExpiry = pvpLockoutExpiry;
 		save();
 	}
 
-	@Deprecated
-	public void setTargetByUUID(final UUID targetByUUID) {
-		this.targetByUUID = targetByUUID;
+	public void setDebuffExpiry(final long debuffExpiry) {
+		this.debuffExpiry = debuffExpiry;
 		save();
+	}
+
+	public void setDuelReturn(@Nullable final Location location, @Nullable final GameMode gameMode) {
+		this.duelReturnLocation = location != null ? location.clone() : null;
+		this.duelReturnGameMode = location != null ? gameMode : null;
+		save();
+	}
+
+	public boolean hasDuelReturn() {
+		return duelReturnLocation != null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -323,8 +256,7 @@ public final class PlayerCache extends ConfigFile {
 	 * Add a player to track with the next default color.
 	 */
 	public void addTrackedPlayer(UUID playerUUID) {
-		int colorIndex = (int) trackedTargets.stream().filter(TrackedTarget::isPlayer).count();
-		addTrackedPlayer(playerUUID, MarkerColor.getDefault(colorIndex));
+		addTrackedPlayer(playerUUID, MarkerColor.getDefault(getTrackedPlayerCount()));
 	}
 
 	/**
@@ -341,8 +273,8 @@ public final class PlayerCache extends ConfigFile {
 	 * Stop tracking death location.
 	 */
 	public void stopTrackingDeath() {
-		trackedTargets.removeIf(TrackedTarget::isDeath);
-		save();
+		if (trackedTargets.removeIf(TrackedTarget::isDeath))
+			save();
 	}
 
 	/**
@@ -356,8 +288,8 @@ public final class PlayerCache extends ConfigFile {
 	 * Stop tracking a specific player.
 	 */
 	public void removeTrackedPlayer(UUID playerUUID) {
-		trackedTargets.removeIf(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID()));
-		save();
+		if (trackedTargets.removeIf(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID())))
+			save();
 	}
 
 	/**
@@ -373,31 +305,11 @@ public final class PlayerCache extends ConfigFile {
 	 */
 	@Nullable
 	public TrackedTarget getTrackedTarget(UUID playerUUID) {
-		return trackedTargets.stream()
-				.filter(t -> t.isPlayer() && playerUUID.equals(t.getTargetUUID()))
-				.findFirst()
-				.orElse(null);
-	}
-
-	/**
-	 * Get the death tracking target if active.
-	 */
-	@Nullable
-	public TrackedTarget getDeathTarget() {
-		return trackedTargets.stream()
-				.filter(TrackedTarget::isDeath)
-				.findFirst()
-				.orElse(null);
-	}
-
-	/**
-	 * Get all tracked player UUIDs.
-	 */
-	public List<UUID> getTrackedPlayerUUIDs() {
-		return trackedTargets.stream()
-				.filter(TrackedTarget::isPlayer)
-				.map(TrackedTarget::getTargetUUID)
-				.toList();
+		for (TrackedTarget target : trackedTargets) {
+			if (target.isPlayer() && playerUUID.equals(target.getTargetUUID()))
+				return target;
+		}
+		return null;
 	}
 
 	/**
@@ -407,56 +319,40 @@ public final class PlayerCache extends ConfigFile {
 		return !trackedTargets.isEmpty();
 	}
 
-	/**
-	 * Change the color for a tracked player.
-	 */
-	public void setTrackedPlayerColor(UUID playerUUID, MarkerColor color) {
-		TrackedTarget target = getTrackedTarget(playerUUID);
-		if (target != null) {
-			target.setColor(color);
-			save();
-		}
-	}
-
-	/*
-	 * -----------------------------------------------------------------------------
-	 * --
-	 */
-	/* Static access */
-	/*
-	 * -----------------------------------------------------------------------------
-	 * --
-	 */
+	// -------------------------------------------------------------------------
+	// Static access
+	// -------------------------------------------------------------------------
 
 	/**
-	 * Return or create new player cache for the given player
-	 *
-	 * @param player
-	 * @return
+	 * Return or create the player cache for the given player
 	 */
 	public static PlayerCache from(final Player player) {
-		synchronized (cacheMap) {
-			final UUID uniqueId = player.getUniqueId();
-			final String playerName = player.getName();
-
-			PlayerCache cache = cacheMap.get(uniqueId);
-
-			if (cache == null) {
-				cache = new PlayerCache(playerName, uniqueId);
-
-				cacheMap.put(uniqueId, cache);
-			}
-
-			return cache;
-		}
+		return cacheMap.computeIfAbsent(player.getUniqueId(), id -> new PlayerCache(player.getName(), id));
 	}
 
 	/**
-	 * Clear the entire cache map
+	 * Save and forget a player's cache (call when they quit).
 	 */
-	public static void clearCache() {
-		synchronized (cacheMap) {
-			cacheMap.clear();
+	public static void unload(final UUID uniqueId) {
+		PlayerCache cache = cacheMap.remove(uniqueId);
+		if (cache != null)
+			cache.save();
+	}
+
+	/**
+	 * Save every loaded cache immediately (call on plugin disable).
+	 */
+	public static void saveAllNow() {
+		for (PlayerCache cache : cacheMap.values())
+			cache.saveNow();
+		cacheMap.clear();
+	}
+
+	private static ConfigurationSection getLegacySection(UUID uniqueId) {
+		if (legacyData == null) {
+			File legacyFile = new File(SMPPlugin.getInstance().getDataFolder(), "data.yml");
+			legacyData = legacyFile.exists() ? YamlConfiguration.loadConfiguration(legacyFile) : new YamlConfiguration();
 		}
+		return legacyData.getConfigurationSection("Players." + uniqueId);
 	}
 }

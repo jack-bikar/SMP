@@ -2,66 +2,48 @@
 #                       Welcome to the main configuration of ${project.name}
 # !-----------------------------------------------------------------------------------------------!
 #
-#    For support and documentation, please visit:
-#    - https://github.com/${author}/${project.name}/wiki
-#
-# !-----------------------------------------------------------------------------------------------!
-#
-#    1) COLOR CODES are supported with the '&' character.
-#       - For usage, see http://minecraftwiki.net/wiki/Formatting_codes
-#       - When you use them, place quotes around the message like this: "Hello &cworld."
-#       - To use HEX colors, use #123456 syntax: "Hello #123456world."
-#
-#    2) TO HIDE any message, set it to 'none'.
-#
-#    3) For UNICODE CHARACTERS (smileys, symbols, ..), save the file in UTF-8 encoding. See
-#       - https://github.com/${author}/${project.name}/wiki/Use-Right-Encoding
-#
-#    4) JSON is supported.
-#       - For usage, see https://github.com/${author}/${project.name}/wiki/JSON
-#
-#    5) WHITELISTS can be turned into blacklists, by putting "@blacklist" on the first line.
-#       - Doing such, filters will only apply for messages in those lists.
-#
-#    PS: Everything above applies for all files in ${project.name}/ folder.
+#    - COLOR CODES are supported with the '&' character, e.g. "Hello &cworld."
+#      Hex colours use &#RRGGBB, e.g. "Hello &#55FF55world."
+#    - Save this file in UTF-8 if you use symbols or other special characters.
+#    - Apply changes with /smp reload (or restart the server).
+#    - New options added by plugin updates are appended to this file automatically.
 #
 # !-----------------------------------------------------------------------------------------------!
 
 # -------------------------------------------------------------------------------------------------
-# Edit your death storage system
+# Death chests: when a player dies, their items are stored in a chest where they died
 # -------------------------------------------------------------------------------------------------
 Death_Storage:
-  # Enable or disable the death storage system
+  # Enable or disable death chests
   Enable_Death_Storage: true
-  # Change the death storage material
+  # The block used for the death chest (CHEST, BARREL, ...)
   Storage_Material: CHEST
-  # Display a hologram above the death chest (placeholders: {player})
+  # Text shown above the death chest (placeholders: {player})
   Hologram_Text: "&6{player}'s loot"
-  # The range in which holograms are visible
+  # Distance (in blocks) from which the hologram can be seen
   Hologram_Visible_Range: 20
 
 # -------------------------------------------------------------------------------------------------
-# Edit your locator bar toggle
+# Locator bar
 # -------------------------------------------------------------------------------------------------
 Locator_Toggle:
-  # Enable or disable the default Minecraft locator bar
-  # If enabled, the default locator bar will be used and custom tracking commands will be disabled
-  # If disabled (default), custom tracking system will be used and locator bar will be hidden by default
-  Enable_Locator_Bar: false
-  # normal - locator bar only in overworld
-  # nether - locator bar only in nether
-  # the end - locator bar only in the end
-  # all - locator bar in all dimensions
+  # true (default) - use the vanilla locator bar: everyone sees nearby players on their bar, and the
+  #                  name of the player you are facing is shown above your hotbar in their waypoint colour.
+  #                  /track death still works.
+  # false          - use the custom tracking system instead: the bar is hidden until you track someone,
+  #                  and players have to accept a /track request first.
+  Enable_Locator_Bar: true
+  # Where the locator bar works: all, normal (overworld), nether, the end
   Allowed_Environements: "all"
 
 # -------------------------------------------------------------------------------------------------
 # Edit your particle trails
 # -------------------------------------------------------------------------------------------------
 Projectile_Settings:
-  Enable_Trails: true
-  # Choices - soul_fire_flame, water_bubble, nautilus, flame, smoke, electrik_spark, honey, glow, music, flash, heart
+  Enable_Trails: false
+  # Choices - soul_fire_flame, water_bubble, nautilus, flame, smoke, electrik_spark, enchantment, honey, glow, music, flash, heart
   Active_Trail: "soul_fire_flame"
-  # How far the player will get knocked back when he gets hit (default: 0.4)
+  # How far the player will get knocked back when hit by a snowball, egg or fishing hook (default: 0.4)
   Knockback: 0.4
   Enable_Headshot: true
 
@@ -69,17 +51,22 @@ Projectile_Settings:
 # Edit your death effects
 # -------------------------------------------------------------------------------------------------
 Death_Effects:
-  Enable_Death_Effects: true
+  Enable_Death_Effects: false
   # Choices - grid, sky_rocket, big_bang, tornado, disco_ball, bleed, vortex, star, cloud, fountain, dragon
   Active_Death_Effect: "grid"
+  # How long the effect plays, in seconds
+  Duration_Seconds: 3
 
 # -------------------------------------------------------------------------------------------------
-# Edit your server MOTD
+# Edit your server MOTD (the text shown under your server in the multiplayer list)
 # -------------------------------------------------------------------------------------------------
 MOTD:
   Enable_MOTD: true
-  # Edit your severs message of the day
-  MOTD_Text: "&aA Minecraft server"
+  # Up to two lines. Supports & colour codes and &#RRGGBB hex colours.
+  # Placeholders: {online}, {max}
+  Lines:
+    - "&a&lA Minecraft SMP"
+    - "&7{online}/{max} players online"
 
 # -------------------------------------------------------------------------------------------------
 # Edit your combat settings
@@ -114,8 +101,6 @@ Combat_Settings:
   PvP_Lockout:
     # How long (in minutes) the player cannot deal damage after combat-logging
     Duration_Minutes: 15
-    # Should they still be able to take damage?
-    Can_Take_Damage: true
 
   # Debuff settings (only used if Punishment_Type is DEBUFF)
   Debuff:
@@ -140,11 +125,11 @@ Combat_Settings:
     Include_Hotbar: true
 
 # -------------------------------------------------------------------------------------------------
-# Edit your TP request feature (teleport request menu and accept/deny in chat)
+# Edit your TP request feature (/tp opens a request menu, accept/deny in chat)
+# When disabled, /tp behaves exactly like the vanilla command.
 # -------------------------------------------------------------------------------------------------
 TP:
-  # Enable or disable the TP request command and menu
-  Enable_TP: true
+  Enable_TP: false
 
 # -------------------------------------------------------------------------------------------------
 # Edit your duel system settings
@@ -157,126 +142,75 @@ Duel:
   Request_Timeout_Seconds: 60
   Countdown_Seconds: 5
 
-  # Arena mode: NATURAL (random teleport to unexplored areas), CREATED (admin-created arenas), RANDOM (pick either)
-  Arena_Mode: "NATURAL"
+  # Arena mode: NATURAL (random spot in the overworld), CREATED (admin-created arenas), RANDOM (pick either)
+  # Busy arenas are never shared: when every created arena is in use, a natural spot is used instead.
+  Arena_Mode: "RANDOM"
 
-  # Border settings (shrinking zone that forces action)
+  # Team duels (2v2, 3v3, ...). Open the setup menu with /duel team, or /duel and click Team Duel.
+  Teams:
+    Enabled: true
+    # Largest team allowed (4 means up to 4v4)
+    Max_Team_Size: 4
+    # How long an invitation to a team duel stays valid
+    Invite_Timeout_Seconds: 60
+    # Allow starting with uneven teams, e.g. 2v1
+    Allow_Uneven_Teams: false
+
+  # Arena border: a fixed square vanilla world border that only the duelists see.
+  # Players who get outside are pushed back in and take damage.
   Border:
-    # Starting radius in blocks (keep smaller for tighter arenas)
-    Start_Radius: 30
-    # Final radius in blocks
-    End_Radius: 5
-    # Time in seconds for border to fully shrink
-    Shrink_Time_Seconds: 180
-    # Distance from border edge where warnings start
-    Warning_Distance: 5
-    # Knockback strength when outside border
-    Knockback_Strength: 1.5
-    # Damage per second when outside border
+    Enabled: true
+    # Distance from the arena centre to each wall, in blocks (the arena is twice this wide).
+    # Team duels get 4 extra blocks per extra player on a team.
+    Radius: 30
+    # Damage per second while outside the border
     Damage_Per_Second: 2.0
-    # Use per-player world borders for duel visuals (recommended, supports multiple duels)
-    Use_World_Border: true
-    # World border visual settings (per-player)
-    World_Border:
-      # Smoothly animate the border shrink on clients
-      Smooth_Shrink: true
-      # Client warning distance (red vignette)
-      Warning_Distance: 5
-      # Additional damage from the world border itself (set 0 to avoid double damage)
-      Damage_Amount: 0.0
-      # Distance from border before damage starts (kept for completeness)
-      Damage_Buffer: 0.0
 
-  # Natural teleport settings (for NATURAL arena mode)
-  # Location is purely random within radius (no unexplored check) for scalability on large SMPs
+  # Natural arena settings (for NATURAL arena mode)
   Natural_Arena:
-    # Search radius from world spawn for random location (can be large)
+    # Random spots are picked within this many blocks of the overworld spawn.
+    # Spots are usually in unexplored land, so each natural duel generates some new terrain
+    # (in the background). Lower this, or use Arena_Mode CREATED, to keep the world smaller.
     Search_Radius: 5000
-    # Minimum distance between the two players when teleported
+    # Distance between the two players when they land
     Min_Player_Distance: 30
-    # Maximum attempts to find a valid location (purely random within radius, no unexplored check)
-    Max_Search_Attempts: 80
+    # How many random spots to try before giving up (chunks are loaded in the background)
+    Max_Search_Attempts: 10
     # Biomes that cannot be used for duels
     Banned_Biomes:
       - "OCEAN"
-      - "DEEP_OCEAN"
-      - "FROZEN_OCEAN"
-      - "COLD_OCEAN"
-      - "LUKEWARM_OCEAN"
-      - "WARM_OCEAN"
       - "RIVER"
-    # Blocks that cannot be at spawn location
+    # Blocks that players cannot land on
     Banned_Blocks:
       - "LAVA"
       - "CACTUS"
       - "SWEET_BERRY_BUSH"
       - "FIRE"
       - "MAGMA_BLOCK"
+      - "POWDER_SNOW"
 
-  # Loot settings (what happens to items when duel ends)
+  # What happens to the loser's items
+  # KEEP_INVENTORY - the loser keeps their items
+  # DROP_ITEMS - the loser's items drop where they lost, the winner can grab them before returning
   Loot:
-    # Mode: DROP_ITEMS (normal death drops), KEEP_INVENTORY (loser keeps items), LOOT_PHASE (winner has time to collect)
     Mode: "KEEP_INVENTORY"
-    # Duration of loot phase in seconds (only for LOOT_PHASE mode)
-    Loot_Phase_Seconds: 30
-    # Should the winner keep their inventory regardless of mode?
-    Winner_Keeps_Inventory: true
 
-  # End-of-duel return settings (after someone wins)
+  # Seconds after the duel ends before both players are sent back (or type /duel return)
   End_Return_Countdown_Seconds: 15
+
+  # A fight that lasts longer than this ends in a draw, so nobody can stall forever (0 = no limit)
+  Max_Fight_Minutes: 10
 
   # Cleanup settings (what happens after duel ends)
   Cleanup:
     # Remove blocks placed during the duel
     Remove_Placed_Blocks: true
-    # Remove items dropped during the duel (after loot phase if applicable)
+    # Give items thrown on the ground during the fight back to whoever threw them
     Remove_Dropped_Items: true
-    # Remove entities spawned during the duel (arrows, potions, etc.)
+    # Remove leftover projectiles; arrows and tridents that can be picked up go back to the shooter
     Remove_Entities: true
-    # Unload chunks used for natural arenas after duel
-    Unload_Natural_Chunks: true
-
-  # Queue settings (random matchmaking)
-  Queue:
-    # Minimum players required in queue to start a match
-    Min_Players_To_Match: 2
-    # How often to check for matches (in seconds)
-    Match_Check_Interval_Seconds: 10
 
 # -------------------------------------------------------------------------------------------------
-# What commands should trigger the main plugin command group?
-#
-# * THE FIRST ALIAS IS THE MAIN LABEL, PLEASE DO NOT REMOVE IT. *
+# Do not change this value.
 # -------------------------------------------------------------------------------------------------
-Command_Aliases: [smp]
-
-# -------------------------------------------------------------------------------------------------
-# What language should we use for messages? If it exists, the language file will be copied
-# to your messages/ folder where you can edit it.
-# -------------------------------------------------------------------------------------------------
-Locale: en
-
-# -------------------------------------------------------------------------------------------------
-# The prefix used in front of most chat or console messages. You can manually use it with
-# {plugin_prefix} variable anywhere.
-# -------------------------------------------------------------------------------------------------
-Prefix: "&8[&c${SMP}&8]&7 "
-
-# -------------------------------------------------------------------------------------------------
-# Time of some plugin's operations is measured. You can also use the LagCatcher class to invoke
-# this feature. We log a console message if an operation takes over the time below (milliseconds).
-# Set to -1 to disable.
-# -------------------------------------------------------------------------------------------------
-Log_Lag_Over_Milis: 100
-
-# -------------------------------------------------------------------------------------------------
-# List of section names that will print informative messages about their features.
-# The Debugger class utilizes this key and will only print messages for sections enabled below.
-# -------------------------------------------------------------------------------------------------
-Debug: []
-
-# -------------------------------------------------------------------------------------------------
-# Do not change this value, otherwise it will corrupt your plugin installation!
-# NB: Don't forget to keep this up-to-date with the getConfigVersion method in your Settings class.
-# -------------------------------------------------------------------------------------------------
-Version: 1
+Version: 3

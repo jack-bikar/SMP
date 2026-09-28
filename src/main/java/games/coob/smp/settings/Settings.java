@@ -1,8 +1,13 @@
 package games.coob.smp.settings;
 
+import games.coob.smp.SMPPlugin;
 import games.coob.smp.config.ConfigFile;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Settings configuration file
@@ -35,13 +40,54 @@ public final class Settings extends ConfigFile {
 	protected void onLoad() {
 		super.onLoad();
 		FileConfiguration config = getConfig();
+
+		// Older configs had a single MOTD_Text; keep it as the first line instead of the new default
+		boolean changed = false;
+		if (config.isString("MOTD.MOTD_Text") && !config.contains("MOTD.Lines")) {
+			config.set("MOTD.Lines", List.of(config.getString("MOTD.MOTD_Text")));
+			changed = true;
+		}
+		changed |= addMissingDefaults();
+
+		// New defaults only replace values that were still on the old default
+		int version = config.getInt("Version", 1);
+		if (version < 2) {
+			changed |= replaceOldDefault(config, "Projectile_Settings.Enable_Trails", true, false);
+			changed |= replaceOldDefault(config, "Death_Effects.Enable_Death_Effects", true, false);
+			changed |= replaceOldDefault(config, "TP.Enable_TP", true, false);
+		}
+		if (version < 3) {
+			changed |= replaceOldDefault(config, "Locator_Toggle.Enable_Locator_Bar", false, true);
+			changed |= replaceOldDefault(config, "Duel.Arena_Mode", "NATURAL", "RANDOM");
+		}
+		if (version < 3) {
+			config.set("Version", 3);
+			SMPPlugin.getInstance().getLogger().info("Updated settings.yml to the latest defaults.");
+			changed = true;
+		}
+		if (changed) {
+			save();
+		}
+
 		DeathStorageSection.load(config);
 		LocatorSection.load(config);
 		ProjectileSection.load(config);
 		DeathEffectSection.load(config);
+		MotdSection.load(config);
 		CombatSection.load(config);
 		TpSection.load(config);
 		DuelSection.load(config);
+	}
+
+	private static boolean replaceOldDefault(FileConfiguration config, String path, Object oldDefault, Object newDefault) {
+		Object current = config.get(path);
+		boolean matches = current instanceof String text && oldDefault instanceof String old
+				? text.equalsIgnoreCase(old)
+				: oldDefault.equals(current);
+		if (current != null && !matches)
+			return false;
+		config.set(path, newDefault);
+		return true;
 	}
 
 	// Death Storage Section
@@ -55,11 +101,11 @@ public final class Settings extends ConfigFile {
 			ENABLE_DEATH_STORAGE = config.getBoolean("Death_Storage.Enable_Death_Storage", true);
 			String materialName = config.getString("Death_Storage.Storage_Material", "CHEST");
 			STORAGE_MATERIAL = Material.matchMaterial(materialName);
-			if (STORAGE_MATERIAL == null) {
+			if (STORAGE_MATERIAL == null || !STORAGE_MATERIAL.isBlock()) {
 				STORAGE_MATERIAL = Material.CHEST;
 			}
 			HOLOGRAM_TEXT = config.getString("Death_Storage.Hologram_Text", "&6{player}'s loot");
-			HOLOGRAM_VISIBLE_RANGE = config.getInt("Death_Storage.Hologram_Visible_Range", 20);
+			HOLOGRAM_VISIBLE_RANGE = Math.max(1, config.getInt("Death_Storage.Hologram_Visible_Range", 20));
 		}
 	}
 
@@ -72,7 +118,7 @@ public final class Settings extends ConfigFile {
 		public static boolean ENABLE_TRACKING;
 
 		public static void load(FileConfiguration config) {
-			ENABLE_LOCATOR_BAR = config.getBoolean("Locator_Toggle.Enable_Locator_Bar", false);
+			ENABLE_LOCATOR_BAR = config.getBoolean("Locator_Toggle.Enable_Locator_Bar", true);
 			ALLOWED_ENVIRONEMENTS = config.getString("Locator_Toggle.Allowed_Environements", "all");
 			// ENABLE_TRACKING is the inverse - if locator bar is enabled, custom tracking
 			// is disabled
@@ -88,7 +134,7 @@ public final class Settings extends ConfigFile {
 		public static boolean ENABLE_HEADSHOT;
 
 		public static void load(FileConfiguration config) {
-			ENABLE_TRAILS = config.getBoolean("Projectile_Settings.Enable_Trails", true);
+			ENABLE_TRAILS = config.getBoolean("Projectile_Settings.Enable_Trails", false);
 			ACTIVE_TRAIL = config.getString("Projectile_Settings.Active_Trail", "soul_fire_flame");
 			KNOCKBACK = config.getDouble("Projectile_Settings.Knockback", 0.4);
 			ENABLE_HEADSHOT = config.getBoolean("Projectile_Settings.Enable_Headshot", true);
@@ -99,10 +145,28 @@ public final class Settings extends ConfigFile {
 	public static class DeathEffectSection {
 		public static boolean ENABLE_DEATH_EFFECTS;
 		public static String ACTIVE_DEATH_EFFECT;
+		public static int DURATION_SECONDS;
 
 		public static void load(FileConfiguration config) {
-			ENABLE_DEATH_EFFECTS = config.getBoolean("Death_Effects.Enable_Death_Effects", true);
+			ENABLE_DEATH_EFFECTS = config.getBoolean("Death_Effects.Enable_Death_Effects", false);
 			ACTIVE_DEATH_EFFECT = config.getString("Death_Effects.Active_Death_Effect", "grid");
+			DURATION_SECONDS = Math.max(1, config.getInt("Death_Effects.Duration_Seconds", 3));
+		}
+	}
+
+	// MOTD Section
+	public static class MotdSection {
+		public static boolean ENABLE_MOTD;
+		public static List<String> LINES;
+
+		public static void load(FileConfiguration config) {
+			ENABLE_MOTD = config.getBoolean("MOTD.Enable_MOTD", true);
+			List<String> lines = new ArrayList<>(config.getStringList("MOTD.Lines"));
+			// Older configs used a single MOTD_Text value
+			if (lines.isEmpty() && config.isString("MOTD.MOTD_Text")) {
+				lines.add(config.getString("MOTD.MOTD_Text"));
+			}
+			LINES = lines.size() > 2 ? lines.subList(0, 2) : lines;
 		}
 	}
 
@@ -120,7 +184,6 @@ public final class Settings extends ConfigFile {
 
 		// PvP lockout settings
 		public static int PVP_LOCKOUT_DURATION_MINUTES;
-		public static boolean PVP_LOCKOUT_CAN_TAKE_DAMAGE;
 
 		// Debuff settings
 		public static int DEBUFF_DURATION_MINUTES;
@@ -139,7 +202,7 @@ public final class Settings extends ConfigFile {
 
 			String punishmentTypeStr = config.getString("Combat_Settings.Punishment_Type", "GHOST_BODY");
 			try {
-				PUNISHMENT_TYPE = PunishmentType.valueOf(punishmentTypeStr.toUpperCase());
+				PUNISHMENT_TYPE = PunishmentType.valueOf(punishmentTypeStr.toUpperCase(Locale.ROOT));
 			} catch (IllegalArgumentException e) {
 				PUNISHMENT_TYPE = PunishmentType.GHOST_BODY;
 			}
@@ -152,7 +215,6 @@ public final class Settings extends ConfigFile {
 
 			// PvP lockout
 			PVP_LOCKOUT_DURATION_MINUTES = config.getInt("Combat_Settings.PvP_Lockout.Duration_Minutes", 15);
-			PVP_LOCKOUT_CAN_TAKE_DAMAGE = config.getBoolean("Combat_Settings.PvP_Lockout.Can_Take_Damage", true);
 
 			// Debuff
 			DEBUFF_DURATION_MINUTES = config.getInt("Combat_Settings.Debuff.Duration_Minutes", 10);
@@ -182,7 +244,7 @@ public final class Settings extends ConfigFile {
 		public static boolean ENABLE_TP;
 
 		public static void load(FileConfiguration config) {
-			ENABLE_TP = config.getBoolean("TP.Enable_TP", true);
+			ENABLE_TP = config.getBoolean("TP.Enable_TP", false);
 		}
 	}
 
@@ -193,99 +255,90 @@ public final class Settings extends ConfigFile {
 		public static int COUNTDOWN_SECONDS;
 		public static ArenaMode ARENA_MODE;
 
+		// Team duels
+		public static boolean TEAMS_ENABLED;
+		public static int MAX_TEAM_SIZE;
+		public static int TEAM_INVITE_TIMEOUT_SECONDS;
+		public static boolean ALLOW_UNEVEN_TEAMS;
+
 		// Border settings
-		public static int BORDER_START_RADIUS;
-		public static int BORDER_END_RADIUS;
-		public static int BORDER_SHRINK_TIME_SECONDS;
-		public static int BORDER_WARNING_DISTANCE;
-		public static double BORDER_KNOCKBACK_STRENGTH;
+		public static boolean BORDER_ENABLED;
+		public static int BORDER_RADIUS;
 		public static double BORDER_DAMAGE_PER_SECOND;
-		public static boolean BORDER_USE_WORLD_BORDER;
-		public static boolean BORDER_WORLD_BORDER_SMOOTH_SHRINK;
-		public static int BORDER_WORLD_BORDER_WARNING_DISTANCE;
-		public static double BORDER_WORLD_BORDER_DAMAGE_AMOUNT;
-		public static double BORDER_WORLD_BORDER_DAMAGE_BUFFER;
 
 		// Natural arena settings
 		public static int NATURAL_SEARCH_RADIUS;
 		public static int NATURAL_MIN_PLAYER_DISTANCE;
 		public static int NATURAL_MAX_SEARCH_ATTEMPTS;
-		public static java.util.List<String> NATURAL_BANNED_BIOMES;
-		public static java.util.List<String> NATURAL_BANNED_BLOCKS;
+		public static List<String> NATURAL_BANNED_BIOMES;
+		public static List<String> NATURAL_BANNED_BLOCKS;
 
 		// Loot settings
 		public static LootMode LOOT_MODE;
-		public static int LOOT_PHASE_SECONDS;
-		public static boolean WINNER_KEEPS_INVENTORY;
 
 		// End-of-duel return countdown (seconds before auto-teleport)
 		public static int END_RETURN_COUNTDOWN_SECONDS;
+
+		// Fights longer than this end in a draw (0 = no limit)
+		public static int MAX_FIGHT_MINUTES;
 
 		// Cleanup settings
 		public static boolean CLEANUP_REMOVE_PLACED_BLOCKS;
 		public static boolean CLEANUP_REMOVE_DROPPED_ITEMS;
 		public static boolean CLEANUP_REMOVE_ENTITIES;
-		public static boolean CLEANUP_UNLOAD_NATURAL_CHUNKS;
-
-		// Queue settings
-		public static int QUEUE_MIN_PLAYERS;
-		public static int QUEUE_MATCH_CHECK_INTERVAL;
 
 		public static void load(FileConfiguration config) {
 			ENABLE_DUELS = config.getBoolean("Duel.Enable_Duels", true);
 			REQUEST_TIMEOUT_SECONDS = config.getInt("Duel.Request_Timeout_Seconds", 60);
 			COUNTDOWN_SECONDS = config.getInt("Duel.Countdown_Seconds", 5);
 
-			String arenaModeStr = config.getString("Duel.Arena_Mode", "NATURAL");
+			String arenaModeStr = config.getString("Duel.Arena_Mode", "RANDOM");
 			try {
-				ARENA_MODE = ArenaMode.valueOf(arenaModeStr.toUpperCase());
+				ARENA_MODE = ArenaMode.valueOf(arenaModeStr.toUpperCase(Locale.ROOT));
 			} catch (IllegalArgumentException e) {
-				ARENA_MODE = ArenaMode.NATURAL;
+				ARENA_MODE = ArenaMode.RANDOM;
 			}
+
+			// Teams
+			TEAMS_ENABLED = config.getBoolean("Duel.Teams.Enabled", true);
+			MAX_TEAM_SIZE = Math.clamp(config.getInt("Duel.Teams.Max_Team_Size", 4), 1, 10);
+			TEAM_INVITE_TIMEOUT_SECONDS = Math.max(5, config.getInt("Duel.Teams.Invite_Timeout_Seconds", 60));
+			ALLOW_UNEVEN_TEAMS = config.getBoolean("Duel.Teams.Allow_Uneven_Teams", false);
 
 			// Border
-			BORDER_START_RADIUS = config.getInt("Duel.Border.Start_Radius", 30);
-			BORDER_END_RADIUS = config.getInt("Duel.Border.End_Radius", 5);
-			BORDER_SHRINK_TIME_SECONDS = config.getInt("Duel.Border.Shrink_Time_Seconds", 180);
-			BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.Warning_Distance", 5);
-			BORDER_KNOCKBACK_STRENGTH = config.getDouble("Duel.Border.Knockback_Strength", 1.5);
+			BORDER_ENABLED = config.getBoolean("Duel.Border.Enabled", true);
+			BORDER_RADIUS = Math.max(5, config.getInt("Duel.Border.Radius", 30));
 			BORDER_DAMAGE_PER_SECOND = config.getDouble("Duel.Border.Damage_Per_Second", 2.0);
-			BORDER_USE_WORLD_BORDER = config.getBoolean("Duel.Border.Use_World_Border", true);
-			BORDER_WORLD_BORDER_SMOOTH_SHRINK = config.getBoolean("Duel.Border.World_Border.Smooth_Shrink", true);
-			BORDER_WORLD_BORDER_WARNING_DISTANCE = config.getInt("Duel.Border.World_Border.Warning_Distance",
-					BORDER_WARNING_DISTANCE);
-			BORDER_WORLD_BORDER_DAMAGE_AMOUNT = config.getDouble("Duel.Border.World_Border.Damage_Amount", 0.0);
-			BORDER_WORLD_BORDER_DAMAGE_BUFFER = config.getDouble("Duel.Border.World_Border.Damage_Buffer", 0.0);
 
 			// Natural arena
-			NATURAL_SEARCH_RADIUS = config.getInt("Duel.Natural_Arena.Search_Radius", 5000);
-			NATURAL_MIN_PLAYER_DISTANCE = config.getInt("Duel.Natural_Arena.Min_Player_Distance", 30);
-			NATURAL_MAX_SEARCH_ATTEMPTS = config.getInt("Duel.Natural_Arena.Max_Search_Attempts", 80);
-			NATURAL_BANNED_BIOMES = config.getStringList("Duel.Natural_Arena.Banned_Biomes");
-			NATURAL_BANNED_BLOCKS = config.getStringList("Duel.Natural_Arena.Banned_Blocks");
+			NATURAL_SEARCH_RADIUS = Math.max(100, config.getInt("Duel.Natural_Arena.Search_Radius", 5000));
+			NATURAL_MIN_PLAYER_DISTANCE = Math.max(4, config.getInt("Duel.Natural_Arena.Min_Player_Distance", 30));
+			NATURAL_MAX_SEARCH_ATTEMPTS = Math.max(1, config.getInt("Duel.Natural_Arena.Max_Search_Attempts", 10));
+			NATURAL_BANNED_BIOMES = upperCase(config.getStringList("Duel.Natural_Arena.Banned_Biomes"));
+			NATURAL_BANNED_BLOCKS = upperCase(config.getStringList("Duel.Natural_Arena.Banned_Blocks"));
 
-			// Loot
-			String lootModeStr = config.getString("Duel.Loot.Mode", "KEEP_INVENTORY");
-			try {
-				LOOT_MODE = LootMode.valueOf(lootModeStr.toUpperCase());
-			} catch (IllegalArgumentException e) {
-				LOOT_MODE = LootMode.KEEP_INVENTORY;
-			}
-			LOOT_PHASE_SECONDS = config.getInt("Duel.Loot.Loot_Phase_Seconds", 30);
-			WINNER_KEEPS_INVENTORY = config.getBoolean("Duel.Loot.Winner_Keeps_Inventory", true);
+			// Loot (LOOT_PHASE from older configs behaves like DROP_ITEMS)
+			String lootModeStr = config.getString("Duel.Loot.Mode", "KEEP_INVENTORY").toUpperCase(Locale.ROOT);
+			LOOT_MODE = lootModeStr.equals("DROP_ITEMS") || lootModeStr.equals("LOOT_PHASE")
+					? LootMode.DROP_ITEMS
+					: LootMode.KEEP_INVENTORY;
 
 			// End return countdown
-			END_RETURN_COUNTDOWN_SECONDS = config.getInt("Duel.End_Return_Countdown_Seconds", 15);
+			END_RETURN_COUNTDOWN_SECONDS = Math.max(1, config.getInt("Duel.End_Return_Countdown_Seconds", 15));
+			MAX_FIGHT_MINUTES = Math.max(0, config.getInt("Duel.Max_Fight_Minutes", 10));
 
 			// Cleanup
 			CLEANUP_REMOVE_PLACED_BLOCKS = config.getBoolean("Duel.Cleanup.Remove_Placed_Blocks", true);
 			CLEANUP_REMOVE_DROPPED_ITEMS = config.getBoolean("Duel.Cleanup.Remove_Dropped_Items", true);
 			CLEANUP_REMOVE_ENTITIES = config.getBoolean("Duel.Cleanup.Remove_Entities", true);
-			CLEANUP_UNLOAD_NATURAL_CHUNKS = config.getBoolean("Duel.Cleanup.Unload_Natural_Chunks", true);
+		}
 
-			// Queue
-			QUEUE_MIN_PLAYERS = config.getInt("Duel.Queue.Min_Players_To_Match", 2);
-			QUEUE_MATCH_CHECK_INTERVAL = config.getInt("Duel.Queue.Match_Check_Interval_Seconds", 10);
+		private static List<String> upperCase(List<String> values) {
+			List<String> result = new ArrayList<>(values.size());
+			for (String value : values) {
+				result.add(value.toUpperCase(Locale.ROOT));
+			}
+			return result;
 		}
 
 		public enum ArenaMode {
@@ -296,8 +349,7 @@ public final class Settings extends ConfigFile {
 
 		public enum LootMode {
 			DROP_ITEMS,
-			KEEP_INVENTORY,
-			LOOT_PHASE
+			KEEP_INVENTORY
 		}
 	}
 }

@@ -2,10 +2,12 @@ package games.coob.smp.command;
 
 import games.coob.smp.PlayerCache;
 import games.coob.smp.menu.LocatorMenu;
+import games.coob.smp.settings.Settings;
 import games.coob.smp.task.LocatorTask;
 import games.coob.smp.tracking.LocatorBarManager;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.TrackingRequestManager;
+import games.coob.smp.tracking.VanillaLocator;
 import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.Messenger;
@@ -41,13 +43,24 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        String subCommand = args.length == 0 ? "" : args[0].toLowerCase();
+
+        // Vanilla locator bar: everyone is already on the bar, only the death spot can be added
+        if (Settings.LocatorSection.ENABLE_LOCATOR_BAR) {
+            switch (subCommand) {
+                case "death" -> handleVanillaDeathTracking(player);
+                case "stop" -> handleVanillaStop(player);
+                default -> ColorUtil.sendMessage(sender, "&eEveryone near you is already on your locator bar. "
+                        + "Use &6/track death &eto add your death location, &6/track stop &eto remove it.");
+            }
+            return true;
+        }
+
         // No args = open menu
         if (args.length == 0) {
             LocatorMenu.openMenu(player);
             return true;
         }
-
-        String subCommand = args[0].toLowerCase();
 
         switch (subCommand) {
             case "death" -> handleDeathTracking(player);
@@ -78,6 +91,45 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
         }
 
         return true;
+    }
+
+    private void handleVanillaDeathTracking(Player player) {
+        PlayerCache cache = PlayerCache.from(player);
+        Location deathLocation = cache.getDeathLocation();
+
+        if (deathLocation == null || deathLocation.getWorld() == null) {
+            Messenger.info(player, "No death location was found.");
+            return;
+        }
+        if (cache.isTrackingDeath()) {
+            Messenger.info(player, "Your death location is already on your locator bar.");
+            return;
+        }
+        if (!WaypointPacketSender.isAvailable()) {
+            Messenger.info(player, "You died at " + deathLocation.getBlockX() + ", " + deathLocation.getBlockY() + ", "
+                    + deathLocation.getBlockZ() + " in " + deathLocation.getWorld().getName() + ".");
+            return;
+        }
+
+        cache.startTrackingDeath();
+        String where = deathLocation.getBlockX() + ", " + deathLocation.getBlockY() + ", " + deathLocation.getBlockZ();
+        if (deathLocation.getWorld().equals(player.getWorld())) {
+            Messenger.success(player, "Your death location (" + where + ") is now on your locator bar.");
+        } else {
+            Messenger.success(player, "Your death location (" + where + ") will show on your locator bar once you are in "
+                    + deathLocation.getWorld().getName() + ".");
+        }
+    }
+
+    private void handleVanillaStop(Player player) {
+        PlayerCache cache = PlayerCache.from(player);
+        if (!cache.isTrackingDeath()) {
+            Messenger.info(player, "You are not tracking anything.");
+            return;
+        }
+        cache.stopTrackingDeath();
+        VanillaLocator.getInstance().refreshDeathWaypoint(player);
+        Messenger.success(player, "Removed your death location from the locator bar.");
     }
 
     private void handleDeathTracking(Player player) {
@@ -155,6 +207,8 @@ public class TrackCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
+            if (Settings.LocatorSection.ENABLE_LOCATOR_BAR)
+                return Arrays.asList("death", "stop");
             return Arrays.asList("death", "accept", "deny", "stop");
         }
         if (args.length == 2) {

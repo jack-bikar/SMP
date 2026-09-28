@@ -1,186 +1,144 @@
 package games.coob.smp.listener;
 
-import games.coob.smp.PlayerCache;
-import games.coob.smp.hologram.BukkitHologram;
-import games.coob.smp.hologram.HologramProvider;
+import games.coob.smp.model.DeathChest;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.settings.Settings;
+import games.coob.smp.util.ColorUtil;
+import games.coob.smp.util.SchedulerUtil;
 import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.stream.Stream;
+import java.util.ArrayList;
+import java.util.List;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DeathChestListener implements Listener {
 
 	private static final DeathChestListener instance = new DeathChestListener();
 
+	/** How far up from the death spot we look for room to place the chest. */
+	private static final int MAX_SEARCH_UP = 8;
+
 	public static DeathChestListener getInstance() {
 		return instance;
 	}
 
-	@EventHandler
-	public void onPlayerInteract(final PlayerInteractEvent event) {
-		final Player player = event.getPlayer();
-
-		if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-			final Block block = event.getClickedBlock();
-			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-
-			if (block != null && block.getType() == Settings.DeathStorageSection.STORAGE_MATERIAL
-					&& registry.isRegistered(block)) {
-				event.setCancelled(true);
-				player.openInventory(registry.getInventory(block));
-				// Chest open sound is handled automatically by Bukkit
-			}
-		}
-	}
-
-	@EventHandler
+	/**
+	 * Runs last so other plugins (and keepInventory) have already decided what drops.
+	 */
+	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onPlayerDeath(final PlayerDeathEvent event) {
-		if (!Settings.DeathStorageSection.ENABLE_DEATH_STORAGE) {
+		if (!Settings.DeathStorageSection.ENABLE_DEATH_STORAGE || event.getKeepInventory())
 			return;
+
+		final List<ItemStack> items = new ArrayList<>();
+		for (ItemStack item : event.getDrops()) {
+			if (item != null && !item.getType().isAir())
+				items.add(item);
 		}
+		if (items.isEmpty())
+			return;
+
 		final Player player = event.getEntity();
-		// Don't spawn death chest when inventory is empty
-		if (player.getInventory().isEmpty()) {
-			return;
-		}
-		final ItemStack[] drops = Stream.of(player.getInventory().getContents())
-				.filter(Objects::nonNull)
-				.filter(item -> item.getType() != Material.AIR)
-				.toArray(ItemStack[]::new);
-		if (drops.length == 0) {
-			return;
-		}
-		{
-			final Location location = player.getLocation();
-			final Block block = location.getBlock();
-			final PlayerCache cache = PlayerCache.from(player);
-			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-			final BukkitHologram hologram = HologramProvider.createHologram();
+		final Block block = findChestSpot(player.getLocation());
+		if (block == null)
+			return; // No room for a chest, items drop normally
 
-			if (player.getWorld().getEnvironment() == World.Environment.NORMAL)
-				cache.setDeathLocation(location);
-			else {
-				location.setY(1);
-				cache.setDeathLocation(location);
-			}
+		// A chest holds at most 54 stacks; anything beyond that drops normally
+		final int stored = Math.min(items.size(), 54);
+		final DeathChest chest = DeathChestRegistry.getInstance().create(block, player.getUniqueId(), player.getName(),
+				items.subList(0, stored).toArray(new ItemStack[0]));
 
-			for (final ItemStack itemStack : Arrays.stream(drops).toList())
-				event.getDrops().remove(itemStack);
+		event.getDrops().clear();
+		event.getDrops().addAll(items.subList(stored, items.size()));
 
-			Inventory inventory = null;
-
-			if (drops.length <= 9)
-				inventory = Bukkit.createInventory(player, 9);
-			else if (drops.length <= 18)
-				inventory = Bukkit.createInventory(player, 18);
-			else if (drops.length <= 27)
-				inventory = Bukkit.createInventory(player, 27);
-			else if (drops.length <= 36)
-				inventory = Bukkit.createInventory(player, 36);
-			else if (drops.length <= 45)
-				inventory = Bukkit.createInventory(player, 45);
-
-			assert inventory != null;
-			block.setType(Settings.DeathStorageSection.STORAGE_MATERIAL);
-
-			// Non-persistent hologram: appears only within HOLOGRAM_VISIBLE_RANGE
-			Location hologramLocation = block.getLocation().clone().add(0.5, 1.0, 0.5);
-			String hologramLine = chestOwnerMessage(Settings.DeathStorageSection.HOLOGRAM_TEXT, player);
-			hologram.ensureCreated(hologramLocation, hologramLine);
-
-			for (final Player closePlayer : Bukkit.getOnlinePlayers()) {
-				if (closePlayer.getWorld().equals(block.getWorld())
-						&& closePlayer.getLocation()
-								.distance(hologramLocation) <= Settings.DeathStorageSection.HOLOGRAM_VISIBLE_RANGE) {
-					hologram.show(hologramLocation, closePlayer, hologramLine);
-				}
-			}
-
-			inventory.setContents(drops);
-			cache.setDeathChestInventory(inventory);
-
-			if (!registry.isRegistered(block)) {
-				registry.register(block, player, hologram);
-			}
-		}
+		ColorUtil.sendMessage(player, "&7Your items are in a chest at &e" + chest.getX() + ", " + chest.getY() + ", "
+				+ chest.getZ() + "&7. Use &e/track death &7to find it.");
 	}
 
-	private String chestOwnerMessage(final String message, final Player player) {
-		if (message.contains("{player}"))
-			return message.replace("{player}", player.getName());
+	/**
+	 * Finds an air, liquid or replaceable block (grass, snow...) at or just above the
+	 * death location. Solid blocks are never replaced.
+	 */
+	private Block findChestSpot(final Location location) {
+		final World world = location.getWorld();
+		final int minY = world.getMinHeight();
+		final int maxY = world.getMaxHeight() - 1;
+		final int startY = Math.clamp(location.getBlockY(), minY, maxY);
+		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
 
-		return message;
+		for (int y = startY; y <= Math.min(startY + MAX_SEARCH_UP, maxY); y++) {
+			final Block block = world.getBlockAt(location.getBlockX(), y, location.getBlockZ());
+			if ((block.getType().isAir() || block.isLiquid() || block.isReplaceable()) && !registry.isDeathChest(block))
+				return block;
+		}
+		return null;
+	}
+
+	@EventHandler(priority = EventPriority.HIGH)
+	public void onPlayerInteract(final PlayerInteractEvent event) {
+		if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null)
+			return;
+
+		final DeathChest chest = DeathChestRegistry.getInstance().get(event.getClickedBlock());
+		if (chest != null) {
+			event.setCancelled(true);
+			event.getPlayer().openInventory(chest.getInventory());
+		}
 	}
 
 	@EventHandler
 	public void onInventoryClose(final InventoryCloseEvent event) {
-		final HumanEntity human = event.getPlayer();
+		if (!(event.getInventory().getHolder(false) instanceof DeathChest chest))
+			return;
 
-		if (human instanceof Player) {
+		// Next tick: removing closes the chest for all viewers, which must not happen inside this close event
+		SchedulerUtil.runTask(() -> {
 			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-
-			for (final Location location : registry.getLocations()) {
-				final Block block = registry.getBlock(location);
-
-				if (registry.getInventory(block).isEmpty()) {
-					block.setType(Material.AIR);
-
-					final BukkitHologram hologram = registry.getHologram(block);
-					if (hologram != null) {
-						// Hide from all players and remove armor stands
-						hologram.removeAll();
-					}
-
-					registry.unregister(block);
-				}
-
+			if (chest.isEmpty()) {
+				registry.remove(chest, false);
+			} else {
+				registry.save();
 			}
+		});
+	}
+
+	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+	public void onBlockBreak(final BlockBreakEvent event) {
+		final DeathChest chest = DeathChestRegistry.getInstance().get(event.getBlock());
+		if (chest != null) {
+			// The block is removed by the registry; don't drop a free chest item
+			event.setCancelled(true);
+			DeathChestRegistry.getInstance().remove(chest, true);
 		}
 	}
 
-	@EventHandler
-	public void onBlockBreak(final BlockBreakEvent event) {
-		if (Settings.DeathStorageSection.ENABLE_DEATH_STORAGE) {
-			final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-			final Block block = event.getBlock();
+	@EventHandler(ignoreCancelled = true)
+	public void onEntityExplode(final EntityExplodeEvent event) {
+		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
+		if (!registry.isEmpty())
+			event.blockList().removeIf(registry::isDeathChest);
+	}
 
-			if (registry.isRegistered(block)) {
-				final ItemStack[] items = Stream.of(registry.getInventory(block).getContents()) // Create a stream of
-																								// ItemStack
-						.filter(Objects::nonNull) // Filter all non null values (removing empty slot)
-						.toArray(ItemStack[]::new); // Convert the result to ItemStack array
-
-				for (final ItemStack item : items) {
-					// Don't drop the storage material itself
-					if (item.getType() != Settings.DeathStorageSection.STORAGE_MATERIAL) {
-						block.getWorld().dropItem(block.getLocation(), item);
-					}
-				}
-
-				registry.unregister(block);
-			}
-		}
+	@EventHandler(ignoreCancelled = true)
+	public void onBlockExplode(final BlockExplodeEvent event) {
+		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
+		if (!registry.isEmpty())
+			event.blockList().removeIf(registry::isDeathChest);
 	}
 }

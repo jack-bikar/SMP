@@ -75,7 +75,7 @@ public class TpPlayersMenu extends SimpleMenu {
 				"",
 				"&eClick to send TP request",
 				"&7You will teleport to them if they accept.")
-				.skullOwner(player.getName()).make();
+				.skullOwner(player).make();
 	}
 
 	@Override
@@ -101,6 +101,10 @@ public class TpPlayersMenu extends SimpleMenu {
 			int playerIndex = currentPage * ITEMS_PER_PAGE + (slot - PLAYER_SLOT_START);
 			if (playerIndex < players.size()) {
 				Player target = players.get(playerIndex);
+				if (!target.isOnline()) {
+					ColorUtil.sendMessage(viewer, "&c" + target.getName() + " is no longer online.");
+					return;
+				}
 				if (viewer.equals(target)) {
 					ColorUtil.sendMessage(viewer, "&cYou cannot teleport to yourself.");
 					return;

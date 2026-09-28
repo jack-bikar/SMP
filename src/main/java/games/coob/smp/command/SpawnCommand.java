@@ -1,5 +1,7 @@
 package games.coob.smp.command;
 
+import games.coob.smp.combat.CombatTracker;
+import games.coob.smp.duel.DuelManager;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.MathUtil;
 import games.coob.smp.util.Messenger;
@@ -32,7 +34,15 @@ public class SpawnCommand implements CommandExecutor, TabCompleter {
 		final World world = player.getWorld();
 
 		if (args.length == 0) {
-			player.teleport(world.getSpawnLocation());
+			if (DuelManager.getInstance().isInDuel(player)) {
+				Messenger.error(player, "You cannot teleport during a duel.");
+				return true;
+			}
+			if (CombatTracker.isInCombat(player)) {
+				Messenger.error(player, "You cannot teleport while in combat.");
+				return true;
+			}
+			player.teleportAsync(world.getSpawnLocation());
 			Messenger.success(player, "Teleported to spawn.");
 		} else {
 			final String param = args[0];
@@ -43,6 +53,10 @@ public class SpawnCommand implements CommandExecutor, TabCompleter {
 								+ "&a, &e" + MathUtil.formatTwoDigits(world.getSpawnLocation().getY()) + "&a, &e"
 								+ MathUtil.formatTwoDigits(world.getSpawnLocation().getZ()) + "&a.");
 			} else if (param.equals("set")) {
+				if (!player.hasPermission("smp.command.spawn.set")) {
+					Messenger.error(player, "You don't have permission to move the spawn.");
+					return true;
+				}
 				world.setSpawnLocation(player.getLocation());
 				Messenger.success(player,
 						"Set the spawn location at &3" + MathUtil.formatTwoDigits(player.getLocation().getX())

@@ -9,8 +9,12 @@ import org.bukkit.command.CommandSender;
  */
 public final class ColorUtil {
 
-	// Use legacyAmpersand() to handle & color codes (not § codes)
-	private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacyAmpersand();
+	// Handles & color codes and &#RRGGBB hex colors
+	private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.builder()
+			.character('&')
+			.hexCharacter('#')
+			.hexColors()
+			.build();
 
 	private ColorUtil() {
 	}
@@ -37,7 +41,6 @@ public final class ColorUtil {
 	 */
 	public static Component toComponent(String text) {
 		if (text == null) return Component.empty();
-		// Use legacyAmpersand() to handle & codes (not legacySection() which handles § codes)
 		return LEGACY_SERIALIZER.deserialize(text);
 	}
 

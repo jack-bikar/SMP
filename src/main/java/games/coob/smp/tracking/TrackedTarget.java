@@ -13,6 +13,8 @@ public class TrackedTarget {
     private final String type; // "Player" or "Death"
     private MarkerColor color;
     private Location cachedPortalTarget;
+    /** When the portal target was last looked up (millis), so lookups are throttled. */
+    private long portalLookupTime;
 
     private TrackedTarget(UUID targetUUID, String type, MarkerColor color) {
         this.targetUUID = targetUUID;
@@ -67,6 +69,15 @@ public class TrackedTarget {
 
     public void setCachedPortalTarget(Location cachedPortalTarget) {
         this.cachedPortalTarget = cachedPortalTarget;
+        this.portalLookupTime = cachedPortalTarget == null ? 0 : System.currentTimeMillis();
+    }
+
+    public long getPortalLookupTime() {
+        return portalLookupTime;
+    }
+
+    public void setPortalLookupTime(long portalLookupTime) {
+        this.portalLookupTime = portalLookupTime;
     }
 
     @Override

@@ -20,9 +20,6 @@ public class ArenaRegistry extends ConfigFile {
 	// Initialized in onLoad() because super() calls load() before our instance initializers run
 	private Map<String, ArenaData> arenas;
 
-	@Getter
-	private Location lobbySpawn;
-
 	private ArenaRegistry() {
 		super("arenas.yml");
 		// Ensure arenas is initialized (onLoad is called from super() before we get here)
@@ -38,9 +35,6 @@ public class ArenaRegistry extends ConfigFile {
 		} else {
 			arenas.clear();
 		}
-
-		// Load lobby spawn
-		lobbySpawn = getConfig().getLocation("Lobby_Spawn");
 
 		// Load arenas
 		ConfigurationSection section = getConfig().getConfigurationSection("Arenas");
@@ -59,8 +53,8 @@ public class ArenaRegistry extends ConfigFile {
 
 	@Override
 	protected void onSave() {
-		// Save lobby spawn
-		getConfig().set("Lobby_Spawn", lobbySpawn);
+		// Lobby spawns are no longer used
+		getConfig().set("Lobby_Spawn", null);
 
 		// Save arenas
 		getConfig().set("Arenas", null); // Clear existing
@@ -136,22 +130,15 @@ public class ArenaRegistry extends ConfigFile {
 	}
 
 	/**
-	 * Get a random ready arena.
+	 * Get a random ready arena that isn't in the excluded set (lower-case names).
 	 */
-	public ArenaData getRandomArena() {
+	public ArenaData getRandomArena(Set<String> excluded) {
 		List<ArenaData> ready = getReadyArenas();
+		ready.removeIf(arena -> excluded.contains(arena.getName().toLowerCase()));
 		if (ready.isEmpty()) {
 			return null;
 		}
 		return ready.get(new Random().nextInt(ready.size()));
-	}
-
-	/**
-	 * Set the lobby spawn location.
-	 */
-	public void setLobbySpawn(Location location) {
-		this.lobbySpawn = location;
-		save();
 	}
 
 	/**

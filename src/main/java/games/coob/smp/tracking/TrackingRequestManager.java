@@ -71,8 +71,8 @@ public final class TrackingRequestManager {
                 "&eTracking request sent to &3" + target.getName() + "&e. Waiting for response...");
 
         SchedulerUtil.runLater(EXPIRATION_SECONDS * 20L, () -> {
-            TrackingRequest req = pendingRequests.remove(tracker.getUniqueId());
-            if (req != null) {
+            // Only expire this request, not a newer one sent to someone else meanwhile
+            if (pendingRequests.remove(tracker.getUniqueId(), request)) {
                 Player trackerPlayer = Bukkit.getPlayer(tracker.getUniqueId());
                 if (trackerPlayer != null && trackerPlayer.isOnline()) {
                     ColorUtil.sendMessage(trackerPlayer, "&cTracking request to &3" + target.getName() + " &cexpired.");
@@ -160,6 +160,10 @@ public final class TrackingRequestManager {
      * "Who's tracking me" menu).
      */
     public void revokeTracker(Player target, Player tracker) {
+        if (!tracker.isOnline()) {
+            ColorUtil.sendMessage(target, "&c" + tracker.getName() + " is no longer online.");
+            return;
+        }
         PlayerCache cache = PlayerCache.from(tracker);
         cache.removeTrackedPlayer(target.getUniqueId());
         WaypointPacketSender.removeWaypoint(tracker,

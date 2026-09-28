@@ -1,126 +1,66 @@
 package games.coob.smp.duel;
 
 import games.coob.smp.util.SchedulerUtil;
-import org.bukkit.*;
+import org.bukkit.Effect;
+import org.bukkit.Location;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * Teleports a player from the sky down to a ground location with a cosmic-style
- * descent animation (based on CosmicTeleportTask). Player is invulnerable and
- * flies down in steps with effects and sounds.
+ * Brings a player into the arena from the sky in a few quick steps, with
+ * effects and sounds. The player's own state (speed, gravity, flight) is never
+ * changed, so nothing needs restoring if the descent is interrupted; the duel
+ * cancels all damage while players are arriving.
  */
 public final class DuelFlyDownTeleporter {
 
 	private static final int HEIGHT_DECREASE_PER_STEP = 50;
-	private static final int INITIAL_DELAY_TICKS = 40;  // 2 seconds before first drop
-	private static final int PERIOD_TICKS = 15;         // ~0.75 seconds between steps
+	private static final int INITIAL_DELAY_TICKS = 20;
+	private static final int PERIOD_TICKS = 12;
 
 	private DuelFlyDownTeleporter() {
 	}
 
 	/**
-	 * Teleports a player from max height down to the ground location with a
-	 * step-by-step descent animation. Calls onComplete when the player has landed.
+	 * Starts the descent. {@code onLanded} runs on the main thread once the player
+	 * stands on {@code landing}; it is not called if the player goes offline.
 	 *
-	 * @param player         The player to teleport
-	 * @param groundLocation The destination on the ground (will use block center + 1 block up for standing)
-	 * @param onComplete     Called when the player has landed (on main thread)
+	 * @return the task, so the duel can cancel it
 	 */
-	public static void teleportToGround(Player player, Location groundLocation, Runnable onComplete) {
-		if (player == null || !player.isOnline() || groundLocation == null) {
-			if (onComplete != null) {
-				SchedulerUtil.runTask(onComplete);
-			}
-			return;
-		}
+	public static BukkitTask descend(Player player, Location landing, Runnable onLanded) {
+		final int[] height = { landing.getWorld().getMaxHeight() - landing.getBlockY() };
+		final BukkitTask[] task = new BukkitTask[1];
 
-		World world = groundLocation.getWorld();
-		if (world == null) {
-			if (onComplete != null) {
-				SchedulerUtil.runTask(onComplete);
-			}
-			return;
-		}
-
-		// Ground location with center offset and standing position
-		Location landLocation = groundLocation.clone().add(0.5, 0, 0.5);
-		landLocation.setPitch(0);
-
-		final int maxHeight = world.getMaxHeight();
-		final int[] currentHeight = { maxHeight };
-		final boolean[] firstRun = { true };
-		final float[] previousWalkSpeed = { 0.2f };
-		final float[] previousFlySpeed = { 0.1f };
-
-		BukkitTask[] taskHolder = new BukkitTask[1];
-
-		taskHolder[0] = SchedulerUtil.runTimer(INITIAL_DELAY_TICKS, PERIOD_TICKS, () -> {
+		task[0] = SchedulerUtil.runTimer(INITIAL_DELAY_TICKS, PERIOD_TICKS, () -> {
 			if (!player.isOnline()) {
-				if (taskHolder[0] != null) {
-					taskHolder[0].cancel();
-				}
+				task[0].cancel();
 				return;
 			}
 
-			// First run: prepare player for descent
-			if (firstRun[0]) {
-				firstRun[0] = false;
-				previousWalkSpeed[0] = player.getWalkSpeed();
-				previousFlySpeed[0] = player.getFlySpeed();
-
-				player.setWalkSpeed(0f);
-				player.setFlySpeed(0f);
-				player.setAllowFlight(true);
-				player.setFlying(true);
-				player.setGravity(false);
-				player.setNoDamageTicks(Integer.MAX_VALUE);
-			}
-
-			// Reached ground: land and restore
-			if (currentHeight[0] <= HEIGHT_DECREASE_PER_STEP) {
-				if (taskHolder[0] != null) {
-					taskHolder[0].cancel();
-					taskHolder[0] = null;
-				}
-
-				// Final position at ground
-				Location finalPos = landLocation.clone();
-				player.teleport(finalPos);
-
-				player.setWalkSpeed(previousWalkSpeed[0]);
-				player.setFlySpeed(previousFlySpeed[0]);
-				player.setGravity(true);
-				player.setNoDamageTicks(0);
-
-				if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
-					player.setAllowFlight(true);
-				} else {
-					player.setAllowFlight(false);
-				}
-				player.setFlying(false);
-
-				player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.5f, 1f);
-
-				if (onComplete != null) {
-					onComplete.run();
-				}
+			if (height[0] <= HEIGHT_DECREASE_PER_STEP) {
+				task[0].cancel();
+				player.teleportAsync(landing).thenAccept(success -> {
+					if (!player.isOnline())
+						return;
+					player.setFallDistance(0);
+					player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.5f, 1f);
+					onLanded.run();
+				});
 				return;
 			}
 
-			// Next step down
-			currentHeight[0] -= HEIGHT_DECREASE_PER_STEP;
-			Location highPos = landLocation.clone().add(0, currentHeight[0], 0);
-			highPos.setPitch(90);
-			player.teleport(highPos);
-
-			// Effect and sound for this step
-			SchedulerUtil.runLater(2, () -> {
-				if (player.isOnline()) {
-					player.getWorld().playEffect(player.getLocation(), Effect.ENDER_SIGNAL, null);
-					player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_FLAP, 0.3f, 1f);
-				}
+			height[0] -= HEIGHT_DECREASE_PER_STEP;
+			Location step = landing.clone().add(0, height[0], 0);
+			step.setPitch(90);
+			player.teleportAsync(step).thenAccept(success -> {
+				if (!player.isOnline())
+					return;
+				player.setFallDistance(0);
+				player.getWorld().playEffect(player.getLocation(), Effect.ENDER_SIGNAL, null);
+				player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_FLAP, 0.3f, 1f);
 			});
 		});
+		return task[0];
 	}
 }

@@ -1,5 +1,6 @@
 package games.coob.smp.command;
 
+import games.coob.smp.duel.DuelManager;
 import games.coob.smp.menu.TpPlayersMenu;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.tp.TpRequestManager;
@@ -17,22 +18,15 @@ import java.util.List;
 /**
  * TP command: /tp opens paginated menu; /tp accept &lt;player&gt; and /tp deny
  * &lt;player&gt; used by chat [ACCEPT]/[DENY]. No permission required.
+ * When the feature is disabled, /tp is passed straight to the vanilla command.
  */
 public class TpCommand implements CommandExecutor, TabCompleter {
 
 	@Override
 	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-		if (!(sender instanceof Player player)) {
-			ColorUtil.sendMessage(sender, "&cThis command can only be used by players.");
-			return true;
-		}
-
-		if (!Settings.TpSection.ENABLE_TP) {
-			if (sender.isOp() && args.length > 0) {
-				Bukkit.dispatchCommand(sender, "minecraft:tp " + String.join(" ", args));
-				return true;
-			}
-			ColorUtil.sendMessage(sender, "&cTP requests are disabled.");
+		// Disabled, console/command blocks, or vanilla syntax (/tp a b, /tp x y z): use the vanilla command
+		if (!Settings.TpSection.ENABLE_TP || !(sender instanceof Player player) || isVanillaUsage(args)) {
+			Bukkit.dispatchCommand(sender, "minecraft:tp " + String.join(" ", args));
 			return true;
 		}
 
@@ -67,7 +61,11 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 					ColorUtil.sendMessage(sender, "&cYou cannot teleport to yourself.");
 					return true;
 				}
-				if (player.hasPermission("smp.tp.bypass") || player.isOp()) {
+				if (DuelManager.getInstance().isInDuel(player)) {
+					ColorUtil.sendMessage(sender, "&cYou cannot teleport during a duel.");
+					return true;
+				}
+				if (player.hasPermission("smp.tp.bypass")) {
 					player.teleport(target.getLocation());
 					ColorUtil.sendMessage(sender, "&aTeleported to &3" + target.getName() + "&a.");
 				} else {
@@ -78,20 +76,29 @@ public class TpCommand implements CommandExecutor, TabCompleter {
 		return true;
 	}
 
+	/**
+	 * Anything other than "/tp", "/tp &lt;player&gt;" and "/tp accept|deny &lt;player&gt;"
+	 * is vanilla syntax.
+	 */
+	private static boolean isVanillaUsage(String[] args) {
+		if (args.length == 0)
+			return false;
+		if (args.length == 1)
+			return !args[0].matches("\\w{1,16}");
+		return !(args.length == 2 && (args[0].equalsIgnoreCase("accept") || args[0].equalsIgnoreCase("deny")));
+	}
+
 	@Override
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
 		List<String> out = new ArrayList<>();
-		if (!Settings.TpSection.ENABLE_TP && sender.isOp()) {
-			// Forward tab completion for vanilla /tp (player names)
+		if (!Settings.TpSection.ENABLE_TP) {
+			// Vanilla-like completion: player names
 			String prefix = args.length > 0 ? args[args.length - 1].toLowerCase() : "";
 			for (Player p : Bukkit.getOnlinePlayers()) {
 				if (p.getName().toLowerCase().startsWith(prefix)) {
 					out.add(p.getName());
 				}
 			}
-			return out;
-		}
-		if (!Settings.TpSection.ENABLE_TP) {
 			return out;
 		}
 		if (args.length == 1) {

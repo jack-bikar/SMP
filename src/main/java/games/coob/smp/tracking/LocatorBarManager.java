@@ -1,14 +1,16 @@
 package games.coob.smp.tracking;
 
 import games.coob.smp.SMPPlugin;
+import games.coob.smp.settings.Settings;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.entity.Player;
 
-import java.lang.reflect.Field;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,7 +18,7 @@ import java.util.logging.Level;
 
 /**
  * Manages the Player Locator Bar visibility and targeting.
- * Uses waypoint attributes (1.21.5+) to control visibility.
+ * Uses the waypoint range attributes to control visibility.
  * 
  * Strategy: Set base values ONCE on player join (initializePlayer), then only
  * toggle visibility via AttributeModifiers. This avoids repeated base value
@@ -27,8 +29,8 @@ public final class LocatorBarManager {
     private static final boolean DEBUG = false;
     private static final double WORLD_MAX = 6.0e7;
 
-    private static final Attribute WAYPOINT_RECEIVE_RANGE;
-    private static final Attribute WAYPOINT_TRANSMIT_RANGE;
+    private static final Attribute WAYPOINT_RECEIVE_RANGE = Attribute.WAYPOINT_RECEIVE_RANGE;
+    private static final Attribute WAYPOINT_TRANSMIT_RANGE = Attribute.WAYPOINT_TRANSMIT_RANGE;
 
     // Modifier keys for disabling receive/transmit (lazy-initialized)
     private static NamespacedKey disableReceiveKey;
@@ -39,11 +41,6 @@ public final class LocatorBarManager {
     // Skip redundant enable/disable calls (LocatorTask runs every ~2s)
     private static final Set<UUID> receiveEnabled = ConcurrentHashMap.newKeySet();
     private static final Set<UUID> transmitEnabled = ConcurrentHashMap.newKeySet();
-
-    static {
-        WAYPOINT_RECEIVE_RANGE = resolveAttribute("WAYPOINT_RECEIVE_RANGE");
-        WAYPOINT_TRANSMIT_RANGE = resolveAttribute("WAYPOINT_TRANSMIT_RANGE");
-    }
 
     private static NamespacedKey getDisableReceiveKey() {
         if (disableReceiveKey == null) {
@@ -57,21 +54,6 @@ public final class LocatorBarManager {
             disableTransmitKey = new NamespacedKey(SMPPlugin.getInstance(), "disable_transmit");
         }
         return disableTransmitKey;
-    }
-
-    private static Attribute resolveAttribute(String name) {
-        try {
-            Field field = Attribute.class.getField(name);
-            return (Attribute) field.get(null);
-        } catch (NoSuchFieldException e) {
-            try {
-                return Attribute.valueOf(name);
-            } catch (IllegalArgumentException ignored) {
-                return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private LocatorBarManager() {
@@ -165,6 +147,49 @@ public final class LocatorBarManager {
     }
 
     /**
+     * Vanilla locator bar mode: removes the modifiers the custom tracking mode may
+     * have left on the player (attribute modifiers are saved with player data),
+     * then shows or hides the bar depending on the allowed dimensions.
+     */
+    public static void applyVanillaMode(Player player, boolean barAllowedHere) {
+        if (player == null)
+            return;
+        removeDisableModifier(player, WAYPOINT_TRANSMIT_RANGE, getDisableTransmitKey());
+        if (barAllowedHere) {
+            removeDisableModifier(player, WAYPOINT_RECEIVE_RANGE, getDisableReceiveKey());
+        } else {
+            addDisableModifier(player, WAYPOINT_RECEIVE_RANGE, getDisableReceiveKey());
+        }
+    }
+
+    /**
+     * Whether the locator bar is allowed in this world (Allowed_Environements setting).
+     */
+    public static boolean isAllowedIn(World world) {
+        String allowed = Settings.LocatorSection.ALLOWED_ENVIRONEMENTS.toLowerCase(Locale.ROOT);
+        return switch (allowed) {
+            case "all" -> true;
+            case "normal", "overworld" -> world.getEnvironment() == World.Environment.NORMAL;
+            case "nether" -> world.getEnvironment() == World.Environment.NETHER;
+            case "the end", "the_end", "end" -> world.getEnvironment() == World.Environment.THE_END;
+            default -> false;
+        };
+    }
+
+    /**
+     * Current waypoint range of a player's attribute (0 when disabled).
+     */
+    public static double getReceiveRange(Player player) {
+        AttributeInstance instance = player.getAttribute(WAYPOINT_RECEIVE_RANGE);
+        return instance != null ? instance.getValue() : 0;
+    }
+
+    public static double getTransmitRange(Player player) {
+        AttributeInstance instance = player.getAttribute(WAYPOINT_TRANSMIT_RANGE);
+        return instance != null ? instance.getValue() : 0;
+    }
+
+    /**
      * Clean up tracking state for a player (call on quit).
      */
     public static void cleanupPlayer(UUID playerUUID) {
@@ -227,7 +252,7 @@ public final class LocatorBarManager {
             return;
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance == null) {
-            debug("addDisableModifier: No attribute instance for " + attribute.name());
+            debug("addDisableModifier: No attribute instance for " + attribute.getKey());
             return;
         }
 
@@ -239,7 +264,8 @@ public final class LocatorBarManager {
                 key,
                 -1.0, // amount: -1 means multiply by (1 + -1) = 0
                 AttributeModifier.Operation.MULTIPLY_SCALAR_1);
-        instance.addModifier(modifier);
+        // Transient: never saved with the player, so it can't outlive the plugin or this session
+        instance.addTransientModifier(modifier);
         debug("addDisableModifier: Added for " + player.getName() + ", effective value now: " + instance.getValue());
     }
 
@@ -251,7 +277,7 @@ public final class LocatorBarManager {
             return;
         AttributeInstance instance = player.getAttribute(attribute);
         if (instance == null) {
-            debug("removeDisableModifier: No attribute instance for " + attribute.name());
+            debug("removeDisableModifier: No attribute instance for " + attribute.getKey());
             return;
         }
 

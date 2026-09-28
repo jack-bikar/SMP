@@ -6,13 +6,14 @@ import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Zombie;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +26,7 @@ import java.util.UUID;
 public class CombatNPC {
 
 	private static final Map<UUID, CombatNPC> activeNPCs = new HashMap<>();
-	private static final String METADATA_KEY = "combat_npc";
+	private static final NamespacedKey OWNER_KEY = new NamespacedKey(SMPPlugin.getInstance(), "combat_npc");
 
 	private final UUID playerUUID;
 	private final String playerName;
@@ -34,6 +35,8 @@ public class CombatNPC {
 	private final ItemStack[] armor;
 	private final double health;
 	private final org.bukkit.scheduler.BukkitTask despawnTask;
+	private int chunkX;
+	private int chunkZ;
 
 	private CombatNPC(UUID playerUUID, String playerName, Location location, ItemStack[] inventory,
 			ItemStack[] armor, double health) {
@@ -50,13 +53,16 @@ public class CombatNPC {
 		this.npc.setRemoveWhenFarAway(false);
 		this.npc.setCanPickupItems(false);
 		this.npc.setAdult();
+		this.npc.setShouldBurnInDay(false);
+		// Never saved with the chunk: loot is handled in memory and dropped on shutdown
+		this.npc.setPersistent(false);
 
 		// Set metadata to identify this as a combat NPC
-		this.npc.setMetadata(METADATA_KEY, new FixedMetadataValue(SMPPlugin.getInstance(), playerUUID.toString()));
+		this.npc.getPersistentDataContainer().set(OWNER_KEY, PersistentDataType.STRING, playerUUID.toString());
 
 		// Apply health
-		if (Settings.CombatSection.GHOST_BODY_USE_PLAYER_HEALTH) {
-			this.npc.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
+		if (Settings.CombatSection.GHOST_BODY_USE_PLAYER_HEALTH && health > 0) {
+			this.npc.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).setBaseValue(health);
 			this.npc.setHealth(health);
 		}
 
@@ -90,6 +96,11 @@ public class CombatNPC {
 		// Schedule despawn
 		this.despawnTask = SchedulerUtil.runLater(20L * Settings.CombatSection.GHOST_BODY_DURATION, this::despawn);
 
+		// Keep the chunk loaded so the body stays killable even if everyone walks away
+		this.chunkX = location.getBlockX() >> 4;
+		this.chunkZ = location.getBlockZ() >> 4;
+		location.getWorld().addPluginChunkTicket(chunkX, chunkZ, SMPPlugin.getInstance());
+
 		activeNPCs.put(playerUUID, this);
 	}
 
@@ -121,7 +132,7 @@ public class CombatNPC {
 	 * Checks if an entity is a combat NPC.
 	 */
 	public static boolean isCombatNPC(Entity entity) {
-		return entity.hasMetadata(METADATA_KEY);
+		return entity.getPersistentDataContainer().has(OWNER_KEY, PersistentDataType.STRING);
 	}
 
 	/**
@@ -130,7 +141,7 @@ public class CombatNPC {
 	public static UUID getPlayerUUID(Entity entity) {
 		if (!isCombatNPC(entity))
 			return null;
-		String uuidStr = entity.getMetadata(METADATA_KEY).get(0).asString();
+		String uuidStr = entity.getPersistentDataContainer().get(OWNER_KEY, PersistentDataType.STRING);
 		return UUID.fromString(uuidStr);
 	}
 
@@ -148,16 +159,10 @@ public class CombatNPC {
 
 		// Cancel despawn task
 		combatNPC.despawnTask.cancel();
+		combatNPC.releaseChunk();
 
 		// Drop inventory at NPC location
-		Location dropLocation = npc.getLocation();
-		if (combatNPC.inventory != null) {
-			for (ItemStack item : combatNPC.inventory) {
-				if (item != null && item.getType() != org.bukkit.Material.AIR) {
-					dropLocation.getWorld().dropItemNaturally(dropLocation, item);
-				}
-			}
-		}
+		combatNPC.dropInventory();
 
 		// Notify killer
 		if (killer != null) {
@@ -186,22 +191,36 @@ public class CombatNPC {
 	 * Despawns this NPC (called when timer expires).
 	 */
 	private void despawn() {
-		// Drop inventory at NPC location
-		Location dropLocation = npc.getLocation();
-		if (inventory != null) {
-			for (ItemStack item : inventory) {
-				if (item != null && item.getType() != org.bukkit.Material.AIR) {
-					dropLocation.getWorld().dropItemNaturally(dropLocation, item);
-				}
-			}
-		}
+		dropInventory();
 
 		// Remove NPC
 		npc.remove();
+		releaseChunk();
 		activeNPCs.remove(playerUUID);
 
 		// Notify player when they rejoin that their ghost body despawned
 		CombatPunishmentManager.markPlayerGhostBodyDespawned(playerUUID);
+	}
+
+	private void releaseChunk() {
+		// Tickets are per plugin and chunk, so keep it while another body is in the same chunk
+		for (CombatNPC other : activeNPCs.values()) {
+			if (other != this && other.chunkX == chunkX && other.chunkZ == chunkZ
+					&& other.npc.getWorld().equals(npc.getWorld()))
+				return;
+		}
+		npc.getWorld().removePluginChunkTicket(chunkX, chunkZ, SMPPlugin.getInstance());
+	}
+
+	private void dropInventory() {
+		Location dropLocation = npc.getLocation();
+		if (inventory != null && dropLocation.getWorld() != null) {
+			for (ItemStack item : inventory) {
+				if (item != null && !item.getType().isAir()) {
+					dropLocation.getWorld().dropItemNaturally(dropLocation, item);
+				}
+			}
+		}
 	}
 
 	/**
@@ -210,6 +229,7 @@ public class CombatNPC {
 	private void removeNPC() {
 		despawnTask.cancel();
 		npc.remove();
+		releaseChunk();
 
 		// Return inventory to player when they rejoin
 		Player player = Bukkit.getPlayer(playerUUID);
@@ -226,7 +246,12 @@ public class CombatNPC {
 	 */
 	public static void cleanupAll() {
 		for (CombatNPC npc : activeNPCs.values()) {
+			// The owner is offline and their inventory was cleared, so drop the loot
+			// rather than lose it
+			npc.despawnTask.cancel();
+			npc.dropInventory();
 			npc.npc.remove();
+			npc.releaseChunk();
 		}
 		activeNPCs.clear();
 	}

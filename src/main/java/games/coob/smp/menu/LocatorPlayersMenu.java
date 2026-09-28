@@ -97,7 +97,7 @@ public class LocatorPlayersMenu extends SimpleMenu {
 					"&cRight-click to stop tracking",
 					"",
 					"&eLeft-click to request (already tracking)")
-					.skullOwner(player.getName()).make();
+					.skullOwner(player).make();
 		} else {
 			return ItemCreator.of(
 					Material.PLAYER_HEAD,
@@ -107,7 +107,7 @@ public class LocatorPlayersMenu extends SimpleMenu {
 					"&eLeft-click to request tracking",
 					"",
 					"&eClick to track")
-					.skullOwner(player.getName()).make();
+					.skullOwner(player).make();
 		}
 	}
 
@@ -142,6 +142,10 @@ public class LocatorPlayersMenu extends SimpleMenu {
 			int playerIndex = currentPage * ITEMS_PER_PAGE + (slot - PLAYER_SLOT_START);
 			if (playerIndex < players.size()) {
 				Player clickedPlayer = players.get(playerIndex);
+				if (!clickedPlayer.isOnline()) {
+					ColorUtil.sendMessage(viewer, "&c" + clickedPlayer.getName() + " is no longer online.");
+					return;
+				}
 				PlayerCache cache = PlayerCache.from(viewer);
 				boolean isTracking = cache.getTrackedTarget(clickedPlayer.getUniqueId()) != null;
 

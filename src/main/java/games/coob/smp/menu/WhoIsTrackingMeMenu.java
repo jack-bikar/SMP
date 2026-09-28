@@ -59,7 +59,7 @@ public final class WhoIsTrackingMeMenu extends SimpleMenu {
                         Material.PLAYER_HEAD,
                         "&c" + tracker.getName() + " &7is tracking you",
                         "",
-                        "&eClick to revoke").skullOwner(tracker.getName()).make());
+                        "&eClick to revoke").skullOwner(tracker).make());
             }
         }
 

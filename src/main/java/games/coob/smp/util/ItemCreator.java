@@ -1,14 +1,13 @@
 package games.coob.smp.util;
 
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -19,7 +18,7 @@ public final class ItemCreator {
 	private final Material material;
 	private Component name;
 	private List<Component> lore = new ArrayList<>();
-	private String skullOwner;
+	private OfflinePlayer skullOwner;
 
 	private ItemCreator(Material material) {
 		this.material = material;
@@ -40,7 +39,7 @@ public final class ItemCreator {
 		return creator;
 	}
 
-	public ItemCreator skullOwner(String owner) {
+	public ItemCreator skullOwner(OfflinePlayer owner) {
 		this.skullOwner = owner;
 		return this;
 	}
@@ -57,12 +56,9 @@ public final class ItemCreator {
 			}
 			item.setItemMeta(meta);
 
-			// Handle skull owner using modern API
+			// Uses the player's own profile, so no web lookup is needed for online players
 			if (material == Material.PLAYER_HEAD && skullOwner != null && meta instanceof SkullMeta skullMeta) {
-				// Use the modern API - get player profile
-				@SuppressWarnings("deprecation")
-				org.bukkit.OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(skullOwner);
-				skullMeta.setOwningPlayer(offlinePlayer);
+				skullMeta.setOwningPlayer(skullOwner);
 				item.setItemMeta(skullMeta);
 			}
 		}

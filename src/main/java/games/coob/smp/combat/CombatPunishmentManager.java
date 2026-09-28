@@ -3,7 +3,6 @@ package games.coob.smp.combat;
 import games.coob.smp.PlayerCache;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
-import games.coob.smp.util.SchedulerUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -30,7 +29,6 @@ public class CombatPunishmentManager {
 		}
 
 		PlayerCache cache = PlayerCache.from(player);
-		cache.setInCombat(false);
 
 		switch (Settings.CombatSection.PUNISHMENT_TYPE) {
 			case INSTANT_DEATH -> {
@@ -127,11 +125,7 @@ public class CombatPunishmentManager {
 							Settings.CombatSection.DEBUFF_MINING_FATIGUE_LEVEL - 1, false, true));
 		}
 
-		// Schedule cleanup
-		SchedulerUtil.runLater(durationTicks, () -> {
-			PlayerCache cache = PlayerCache.from(player);
-			cache.setDebuffExpiry(0);
-		});
+		// The expiry is kept in the player's file; it is ignored once it has passed
 	}
 
 	/**

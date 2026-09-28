@@ -1,274 +1,147 @@
 package games.coob.smp.duel;
 
 import games.coob.smp.settings.Settings;
-import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.function.BooleanSupplier;
 
 /**
- * Soft border system for duels with shrinking mechanics.
- * Each ActiveDuel has its own DuelBorder instance for concurrent duel support.
+ * A fixed square border around a duel. Each duel has its own border object, so
+ * any number of duels can run at the same time without affecting each other.
+ * <ul>
+ * <li>Each duelist gets a client-side world border (the vanilla wall). It is
+ * only sent to that duel's players, blocks walking out and tints the screen red
+ * near the edge.</li>
+ * <li>Players who still get outside (knockback, pearls) are pushed back in and
+ * take damage.</li>
+ * </ul>
  */
-public class DuelBorder {
+public final class DuelBorder {
+
+	private static final int CHECK_PERIOD_TICKS = 10;
+	/** Players further out than this are teleported back inside. */
+	private static final double TELEPORT_BACK_DISTANCE = 4;
 
 	private final Location center;
-	private final double startRadius;
-	private final double endRadius;
-	private final int shrinkTimeSeconds;
-	private final double warningDistance;
-	private final double knockbackStrength;
-	private final double damagePerSecond;
-	private final boolean useWorldBorder;
-	private final boolean smoothWorldBorderShrink;
-	private final int worldBorderWarningDistance;
-	private final double worldBorderDamageAmount;
-	private final double worldBorderDamageBuffer;
+	private final double radius;
+	private final List<Player> players = new ArrayList<>();
+	private BukkitTask task;
+	private int ticks;
 
-	private double currentRadius;
-	private long startTime;
-	private boolean active;
-	private boolean shrinking;
-
-	private BukkitTask borderTask;
-	private WorldBorder worldBorder;
-
-	private final Set<Player> playersInDuel = new HashSet<>();
-	private final Set<Player> warnedPlayers = new HashSet<>();
-	private final Map<UUID, WorldBorder> previousWorldBorders = new HashMap<>();
-
-	public DuelBorder(Location center) {
+	public DuelBorder(Location center, int radius) {
 		this.center = center.clone();
-		this.startRadius = Settings.DuelSection.BORDER_START_RADIUS;
-		this.endRadius = Settings.DuelSection.BORDER_END_RADIUS;
-		this.shrinkTimeSeconds = Settings.DuelSection.BORDER_SHRINK_TIME_SECONDS;
-		this.warningDistance = Settings.DuelSection.BORDER_WARNING_DISTANCE;
-		this.knockbackStrength = Settings.DuelSection.BORDER_KNOCKBACK_STRENGTH;
-		this.damagePerSecond = Settings.DuelSection.BORDER_DAMAGE_PER_SECOND;
-		this.useWorldBorder = Settings.DuelSection.BORDER_USE_WORLD_BORDER;
-		this.smoothWorldBorderShrink = Settings.DuelSection.BORDER_WORLD_BORDER_SMOOTH_SHRINK;
-		this.worldBorderWarningDistance = Settings.DuelSection.BORDER_WORLD_BORDER_WARNING_DISTANCE;
-		this.worldBorderDamageAmount = Settings.DuelSection.BORDER_WORLD_BORDER_DAMAGE_AMOUNT;
-		this.worldBorderDamageBuffer = Settings.DuelSection.BORDER_WORLD_BORDER_DAMAGE_BUFFER;
-
-		this.currentRadius = startRadius;
-		this.active = false;
-		this.shrinking = false;
+		this.radius = radius;
 	}
 
 	/**
-	 * Starts the border system.
+	 * Shows the border to the players and starts enforcing it.
 	 *
-	 * @param players The players participating in the duel
+	 * @param damageEnabled whether players outside currently take damage
 	 */
-	public void start(Player... players) {
-		this.active = true;
-		this.startTime = System.currentTimeMillis();
+	public void start(BooleanSupplier damageEnabled, Collection<Player> duelists) {
+		WorldBorder border = Bukkit.createWorldBorder();
+		border.setCenter(center.getX(), center.getZ());
+		border.setSize(radius * 2);
+		// Screen turns red within this many blocks of the wall
+		border.setWarningDistance(5);
 
-		for (Player player : players) {
-			playersInDuel.add(player);
+		for (Player player : duelists) {
+			players.add(player);
+			player.setWorldBorder(border);
 		}
 
-		if (useWorldBorder) {
-			worldBorder = Bukkit.createWorldBorder();
-			worldBorder.setCenter(center.getX(), center.getZ());
-			worldBorder.setSize(startRadius * 2);
-			worldBorder.setWarningDistance(worldBorderWarningDistance);
-			worldBorder.setDamageAmount(worldBorderDamageAmount);
-			worldBorder.setDamageBuffer(worldBorderDamageBuffer);
-
-			for (Player player : playersInDuel) {
-				if (player.isOnline()) {
-					previousWorldBorders.put(player.getUniqueId(), player.getWorldBorder());
-					player.setWorldBorder(worldBorder);
-				}
+		task = SchedulerUtil.runTimer(CHECK_PERIOD_TICKS, CHECK_PERIOD_TICKS, () -> {
+			ticks += CHECK_PERIOD_TICKS;
+			boolean damageTick = ticks % 20 == 0 && damageEnabled.getAsBoolean();
+			// Copy: border damage can eliminate a player, which removes them from the list
+			for (Player player : new ArrayList<>(players)) {
+				if (player.isOnline() && player.getWorld().equals(center.getWorld()))
+					enforce(player, damageTick);
 			}
-		}
-
-		// Start the main border task (runs every second)
-		borderTask = SchedulerUtil.runTimer(20, 20, this::tick);
+		});
 	}
 
-	/**
-	 * Starts the border shrinking.
-	 */
-	public void startShrinking() {
-		this.shrinking = true;
-		this.startTime = System.currentTimeMillis();
-
-		if (useWorldBorder && smoothWorldBorderShrink && worldBorder != null) {
-			worldBorder.setSize(endRadius * 2, shrinkTimeSeconds);
-		}
-
-		for (Player player : playersInDuel) {
-			ColorUtil.sendMessage(player, "&c&lBorder is now shrinking! Stay inside!");
-		}
-	}
-
-	/**
-	 * Main tick - handles shrinking, warnings, knockback, and damage.
-	 */
-	private void tick() {
-		if (!active)
+	private void enforce(Player player, boolean damageTick) {
+		Location location = player.getLocation();
+		double dx = location.getX() - center.getX();
+		double dz = location.getZ() - center.getZ();
+		double outside = Math.max(Math.abs(dx), Math.abs(dz)) - radius;
+		if (outside <= 0)
 			return;
 
-		// Update radius if shrinking
-		if (shrinking) {
-			long elapsed = System.currentTimeMillis() - startTime;
-			double progress = Math.min(1.0, elapsed / (shrinkTimeSeconds * 1000.0));
-			currentRadius = startRadius - (progress * (startRadius - endRadius));
-
-			// Clamp to end radius
-			if (currentRadius <= endRadius) {
-				currentRadius = endRadius;
-				shrinking = false;
-			}
+		// Knocked-out players spectate from inside the arena; they fly through walls, so just bring them back
+		if (player.getGameMode() == GameMode.SPECTATOR) {
+			double limit = radius - 1;
+			Location back = location.clone();
+			back.setX(center.getX() + Math.clamp(dx, -limit, limit));
+			back.setZ(center.getZ() + Math.clamp(dz, -limit, limit));
+			player.teleportAsync(back);
+			return;
 		}
 
-		if (useWorldBorder && !smoothWorldBorderShrink && worldBorder != null) {
-			worldBorder.setSize(currentRadius * 2);
+		if (outside > TELEPORT_BACK_DISTANCE) {
+			player.teleportAsync(clampInside(location));
+		} else {
+			Vector push = new Vector(-dx, 0, -dz).normalize().multiply(0.6).setY(0.3);
+			player.setVelocity(push);
 		}
 
-		// Check each player
-		for (Player player : new HashSet<>(playersInDuel)) {
-			if (!player.isOnline())
-				continue;
+		player.sendActionBar(Component.text("Stay inside the arena!", NamedTextColor.RED));
+		if (damageTick && Settings.DuelSection.BORDER_DAMAGE_PER_SECOND > 0)
+			player.damage(Settings.DuelSection.BORDER_DAMAGE_PER_SECOND);
+	}
 
-			double distance = getHorizontalDistance(player.getLocation(), center);
-			double distanceFromBorder = currentRadius - distance;
+	/** A safe spot just inside the border, on the ground. */
+	private Location clampInside(Location location) {
+		double limit = radius - 2;
+		double x = center.getX() + Math.clamp(location.getX() - center.getX(), -limit, limit);
+		double z = center.getZ() + Math.clamp(location.getZ() - center.getZ(), -limit, limit);
+		World world = center.getWorld();
+		int y = world.getHighestBlockYAt((int) Math.floor(x), (int) Math.floor(z), HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1;
+		return new Location(world, x, y, z, location.getYaw(), location.getPitch());
+	}
 
-			if (distanceFromBorder < 0) {
-				// Outside border - apply knockback and damage
-				applyKnockback(player);
-				applyDamage(player);
-				warnedPlayers.add(player);
-			} else if (distanceFromBorder < warningDistance) {
-				// In warning zone
-				if (!warnedPlayers.contains(player)) {
-					ColorUtil.sendMessage(player, "&e&lWarning: &eYou are near the border!");
-					warnedPlayers.add(player);
-				}
-			} else {
-				// Safe zone
-				warnedPlayers.remove(player);
-			}
-		}
+	/** Whether a location is inside the border (used to block ender pearls out). */
+	public boolean contains(Location location) {
+		return location.getWorld() != null && location.getWorld().equals(center.getWorld())
+				&& Math.abs(location.getX() - center.getX()) <= radius
+				&& Math.abs(location.getZ() - center.getZ()) <= radius;
 	}
 
 	/**
-	 * Applies knockback toward the center.
+	 * Removes the border for a single player (e.g. when they lose).
 	 */
-	private void applyKnockback(Player player) {
-		Location playerLoc = player.getLocation();
-		Vector direction = center.toVector().subtract(playerLoc.toVector()).normalize();
-		direction.setY(0.2); // Slight upward component
-		direction.multiply(knockbackStrength);
-
-		player.setVelocity(direction);
+	public void remove(Player player) {
+		if (players.remove(player) && player.isOnline())
+			player.setWorldBorder(null);
 	}
 
 	/**
-	 * Applies damage for being outside the border.
-	 */
-	private void applyDamage(Player player) {
-		player.damage(damagePerSecond);
-		ColorUtil.sendMessage(player, "&c&lYou are outside the border! Return immediately!");
-	}
-
-	/**
-	 * Gets horizontal distance between two locations (ignoring Y).
-	 */
-	private double getHorizontalDistance(Location loc1, Location loc2) {
-		double dx = loc1.getX() - loc2.getX();
-		double dz = loc1.getZ() - loc2.getZ();
-		return Math.sqrt(dx * dx + dz * dz);
-	}
-
-	/**
-	 * Checks if a player is inside the border.
-	 */
-	public boolean isInsideBorder(Player player) {
-		return getHorizontalDistance(player.getLocation(), center) <= currentRadius;
-	}
-
-	/**
-	 * Gets current border radius.
-	 */
-	public double getCurrentRadius() {
-		return currentRadius;
-	}
-
-	/**
-	 * Gets the center location.
-	 */
-	public Location getCenter() {
-		return center.clone();
-	}
-
-	/**
-	 * Removes a player from the border tracking.
-	 */
-	public void removePlayer(Player player) {
-		playersInDuel.remove(player);
-		warnedPlayers.remove(player);
-
-		if (useWorldBorder) {
-			WorldBorder previous = previousWorldBorders.remove(player.getUniqueId());
-			if (player.isOnline()) {
-				player.setWorldBorder(previous != null ? previous : player.getWorld().getWorldBorder());
-			}
-		}
-	}
-
-	/**
-	 * Stops the border system.
+	 * Removes the border for everyone and stops enforcing it.
 	 */
 	public void stop() {
-		this.active = false;
-		this.shrinking = false;
-
-		if (borderTask != null) {
-			borderTask.cancel();
-			borderTask = null;
+		if (task != null) {
+			task.cancel();
+			task = null;
 		}
-
-		if (useWorldBorder) {
-			for (Map.Entry<UUID, WorldBorder> entry : previousWorldBorders.entrySet()) {
-				Player player = Bukkit.getPlayer(entry.getKey());
-				if (player != null && player.isOnline()) {
-					WorldBorder previous = entry.getValue();
-					player.setWorldBorder(previous != null ? previous : player.getWorld().getWorldBorder());
-				}
-			}
-			previousWorldBorders.clear();
-			worldBorder = null;
+		for (Player player : players) {
+			if (player.isOnline())
+				player.setWorldBorder(null);
 		}
-
-		playersInDuel.clear();
-		warnedPlayers.clear();
-	}
-
-	/**
-	 * Checks if the border is active.
-	 */
-	public boolean isActive() {
-		return active;
-	}
-
-	/**
-	 * Checks if the border is currently shrinking.
-	 */
-	public boolean isShrinking() {
-		return shrinking;
+		players.clear();
 	}
 }

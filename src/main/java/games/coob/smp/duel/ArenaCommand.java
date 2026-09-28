@@ -19,7 +19,6 @@ import java.util.Set;
  * /arena edit <name> - Enter edit mode for an arena
  * /arena setspawn1 - Set challenger spawn
  * /arena setspawn2 - Set opponent spawn
- * /arena setlobby - Set global lobby spawn
  * /arena save - Save and exit edit mode
  * /arena delete <name> - Delete an arena
  * /arena list - List all arenas
@@ -78,9 +77,6 @@ public class ArenaCommand implements CommandExecutor, TabCompleter {
 			case "setspawn2", "spawn2" -> {
 				ArenaManager.getInstance().setSpawn2(player);
 			}
-			case "setlobby", "lobby" -> {
-				ArenaManager.getInstance().setLobbySpawn(player);
-			}
 			case "save" -> {
 				ArenaManager.getInstance().saveArena(player);
 			}
@@ -124,9 +120,8 @@ public class ArenaCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(player, "&e/arena edit <name> &7- Enter edit mode for an arena");
 		ColorUtil.sendMessage(player, "&e/arena setspawn1 &7- Set challenger spawn point");
 		ColorUtil.sendMessage(player, "&e/arena setspawn2 &7- Set opponent spawn point");
-		ColorUtil.sendMessage(player, "&e/arena setlobby &7- Set global lobby spawn");
 		ColorUtil.sendMessage(player, "&e/arena save &7- Save and exit edit mode");
-		ColorUtil.sendMessage(player, "&e/arena cancel &7- Cancel edit mode without saving");
+		ColorUtil.sendMessage(player, "&e/arena cancel &7- Exit edit mode");
 		ColorUtil.sendMessage(player, "&e/arena delete <name> &7- Delete an arena");
 		ColorUtil.sendMessage(player, "&e/arena list &7- List all arenas");
 		ColorUtil.sendMessage(player, "&e/arena info [name] &7- Show arena details");
@@ -181,8 +176,8 @@ public class ArenaCommand implements CommandExecutor, TabCompleter {
 
 		if (args.length == 1) {
 			String input = args[0].toLowerCase();
-			String[] subcommands = { "create", "edit", "setspawn1", "setspawn2", "setlobby", "save", "cancel", "delete",
-					"list", "info" };
+			String[] subcommands = { "create", "edit", "setspawn1", "setspawn2", "save", "cancel", "delete", "list",
+					"info" };
 			for (String sub : subcommands) {
 				if (sub.startsWith(input)) {
 					completions.add(sub);

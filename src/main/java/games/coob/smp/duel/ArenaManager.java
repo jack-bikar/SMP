@@ -193,18 +193,6 @@ public class ArenaManager {
 	}
 
 	/**
-	 * Sets the global lobby spawn.
-	 *
-	 * @param player The player
-	 * @return true if set
-	 */
-	public boolean setLobbySpawn(Player player) {
-		ArenaRegistry.getInstance().setLobbySpawn(player.getLocation());
-		ColorUtil.sendMessage(player, "&aLobby spawn set at your location.");
-		return true;
-	}
-
-	/**
 	 * Lists all arenas.
 	 *
 	 * @param player The player to send the list to

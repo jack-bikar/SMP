@@ -26,14 +26,14 @@
         <!-- Change main.class to the full path where the class extending JavaPlugin is located -->
         <main.class>games.coob.smp.SMPPlugin</main.class>
 
-        <!-- Java 21 required for Minecraft 1.21+ -->
-        <java.version>21</java.version>
+        <!-- Java 25 required for Minecraft 26.x -->
+        <java.version>25</java.version>
 
-        <!-- Paper API version for 1.21.10 and 1.21.11 -->
-        <paper.version>1.21.1-R0.1-SNAPSHOT</paper.version>
-        <effectlib.version>10.2</effectlib.version>
-        <nbtapi.version>2.12.2</nbtapi.version>
-        <lombok.version>1.18.30</lombok.version>
+        <!-- Paper API for Minecraft 26.3 -->
+        <paper.version>26.3.build.49-alpha</paper.version>
+        <effectlib.version>10.10</effectlib.version>
+        <nbtapi.version>2.16.1</nbtapi.version>
+        <lombok.version>1.18.48</lombok.version>
 
         <!-- DO NOT EDIT -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -63,7 +63,7 @@
     </repositories>
 
     <dependencies>
-        <!-- Paper API for 1.21.10 and 1.21.11 -->
+        <!-- Paper API -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
@@ -101,14 +101,14 @@
 
                 <!-- Change version to the latest one from
                      https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jar-plugin -->
-                <version>3.2.2</version>
+                <version>3.4.2</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>3.14.1</version>
                 <configuration>
-                    <release>21</release>
+                    <release>${java.version}</release>
                     <encoding>UTF-8</encoding>
                     <compilerArgs>
                         <arg>-parameters</arg>
@@ -127,8 +127,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <!-- Updated to support Java 21 (class file major version 65) -->
-                <version>3.5.1</version>
+                <!-- 3.6.x bundles an ASM version that understands Java 25 class files -->
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

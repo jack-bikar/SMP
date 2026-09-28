@@ -147,7 +147,8 @@ public final class PortalCache {
 
     /**
      * Scan a small area for a portal and cache it if found.
-     * This is only called when we have no cached portals.
+     * This is only called when we have no cached portals, and only looks at
+     * chunks that are already loaded.
      */
     private static Location scanAndCache(World world, Location from, Material type) {
         int cx = from.getBlockX();
@@ -160,8 +161,11 @@ public final class PortalCache {
         double bestDistSq = Double.MAX_VALUE;
 
         for (int dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx += SEARCH_STEP) {
-            for (int y = minY; y <= maxY; y += SEARCH_STEP) {
-                for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz += SEARCH_STEP) {
+            for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz += SEARCH_STEP) {
+                // Never load chunks just to look for a portal
+                if (!world.isChunkLoaded((cx + dx) >> 4, (cz + dz) >> 4))
+                    continue;
+                for (int y = minY; y <= maxY; y += SEARCH_STEP) {
                     Block block = world.getBlockAt(cx + dx, y, cz + dz);
                     if (block.getType() == type) {
                         Location loc = block.getLocation().add(0.5, 0.5, 0.5);

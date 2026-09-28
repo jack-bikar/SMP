@@ -31,6 +31,8 @@ public final class LocatorTask extends BukkitRunnable {
 
     private static final boolean DEBUG = false;
 
+    private static final long PORTAL_RETRY_MILLIS = 10_000;
+
     private static final UUID DEATH_WAYPOINT_TARGET = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     // Boss bars per player
@@ -67,8 +69,8 @@ public final class LocatorTask extends BukkitRunnable {
         // Find the target the player is currently looking at (closest to center of view)
         TrackedTarget focusedTarget = getFocusedTarget(tracker, cache);
 
-        // Update all tracked targets
-        for (TrackedTarget target : cache.getTrackedTargets()) {
+        // Update all tracked targets (copy: offline targets are removed while looping)
+        for (TrackedTarget target : new java.util.ArrayList<>(cache.getTrackedTargets())) {
             if (target.isPlayer()) {
                 updatePlayerTarget(tracker, cache, target);
             } else if (target.isDeath()) {
@@ -292,8 +294,15 @@ public final class LocatorTask extends BukkitRunnable {
             return cached;
         }
 
+        // A lookup that found nothing is only retried every few seconds
+        long now = System.currentTimeMillis();
+        if (cached == null && now - target.getPortalLookupTime() < PORTAL_RETRY_MILLIS) {
+            return null;
+        }
+
         Location portalTarget = findPortalToDimension(tracker, targetDimension);
         target.setCachedPortalTarget(portalTarget);
+        target.setPortalLookupTime(now);
         return portalTarget;
     }
 
@@ -371,14 +380,7 @@ public final class LocatorTask extends BukkitRunnable {
     }
 
     private boolean isEnvironmentAllowed(Player player) {
-        String allowed = Settings.LocatorSection.ALLOWED_ENVIRONEMENTS.toLowerCase();
-        return switch (allowed) {
-            case "all" -> true;
-            case "normal" -> player.getWorld().getEnvironment() == World.Environment.NORMAL;
-            case "nether" -> player.getWorld().getEnvironment() == World.Environment.NETHER;
-            case "the end" -> player.getWorld().getEnvironment() == World.Environment.THE_END;
-            default -> false;
-        };
+        return LocatorBarManager.isAllowedIn(player.getWorld());
     }
 
     /**
