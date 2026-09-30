@@ -105,14 +105,32 @@ public final class DeathChestListener implements Listener {
 		event.getDrops().clear();
 		event.getDrops().addAll(items.subList(stored, items.size()));
 
+		long expiry = Settings.DeathStorageSection.EXPIRE_AFTER_MILLIS;
 		ColorUtil.sendMessage(player, "&7Your items are " + (useBody ? "with your body" : "in a chest") + " at &e"
-				+ chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + "&7. Use &e/track death &7to find it.");
+				+ chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + "&7. Use &e/track death &7to find it."
+				+ (expiry > 0 ? " &7It disappears after &e" + describe(expiry) + "&7." : ""));
 
 		// Save the (now empty) inventory right away, so a crash can't bring the items back as well
 		SchedulerUtil.runLater(1, () -> {
 			if (player.isOnline())
 				player.saveData();
 		});
+	}
+
+	/** e.g. "7 days", "1 day and 12 hours", "30 minutes". */
+	static String describe(long millis) {
+		long minutes = Math.max(1, Math.round(millis / 60_000.0));
+		long days = minutes / (24 * 60);
+		long hours = minutes / 60 % 24;
+		long rest = minutes % 60;
+		java.util.List<String> parts = new java.util.ArrayList<>();
+		if (days > 0)
+			parts.add(days + (days == 1 ? " day" : " days"));
+		if (hours > 0)
+			parts.add(hours + (hours == 1 ? " hour" : " hours"));
+		if (rest > 0 && days == 0)
+			parts.add(rest + (rest == 1 ? " minute" : " minutes"));
+		return String.join(" and ", parts);
 	}
 
 	/**

@@ -63,6 +63,8 @@ public final class DeathChest implements InventoryHolder {
 	private final Pose pose;
 	/** Exactly where and how the body lies; null for chests and bodies saved before placements existed. */
 	private final BodyPlacement placement;
+	/** When it was made (epoch millis): it disappears once it is older than Expire_After_Hours. */
+	private final long createdAt;
 
 	/** Encoded contents from the last save; re-encoded only after the contents change. */
 	private String savedItems;
@@ -80,7 +82,8 @@ public final class DeathChest implements InventoryHolder {
 	private Interaction clickBox;
 
 	DeathChest(String worldName, int x, int y, int z, UUID ownerId, String ownerName, Material material,
-			ItemStack[] items, String skinValue, String skinSignature, float yaw, Pose pose, BodyPlacement placement) {
+			ItemStack[] items, String skinValue, String skinSignature, float yaw, Pose pose, BodyPlacement placement,
+			long createdAt) {
 		this.worldName = worldName;
 		this.x = x;
 		this.y = y;
@@ -93,6 +96,7 @@ public final class DeathChest implements InventoryHolder {
 		this.yaw = yaw;
 		this.pose = pose;
 		this.placement = placement != null || material != null ? placement : legacyPlacement(x, y, z, yaw, pose);
+		this.createdAt = createdAt;
 
 		int size = Math.clamp((items.length + 8) / 9 * 9, 9, 54);
 		this.inventory = Bukkit.createInventory(this, size,
@@ -158,6 +162,12 @@ public final class DeathChest implements InventoryHolder {
 
 	public boolean isEmpty() {
 		return inventory.isEmpty();
+	}
+
+	/** Whether it has been around longer than Expire_After_Hours. */
+	public boolean isExpired(long now) {
+		long expiry = Settings.DeathStorageSection.EXPIRE_AFTER_MILLIS;
+		return expiry > 0 && now - createdAt >= expiry;
 	}
 
 	/** Call after the contents changed (claimed, looted). */

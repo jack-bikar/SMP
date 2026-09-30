@@ -4,6 +4,7 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 import games.coob.smp.SMPPlugin;
 import games.coob.smp.config.ConfigFile;
 import games.coob.smp.settings.Settings;
+import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.InventorySerialization;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -55,6 +56,8 @@ public final class DeathChestRegistry extends ConfigFile {
 	protected void onLoad() {
 		chests = new HashMap<>();
 		chestBlocks = 0;
+		long now = System.currentTimeMillis();
+		boolean missingCreated = false;
 
 		ConfigurationSection section = getConfig().getConfigurationSection("Chests");
 		if (section != null) {
@@ -64,6 +67,7 @@ public final class DeathChestRegistry extends ConfigFile {
 					continue;
 				try {
 					String items = data.getString("Items");
+					missingCreated |= !data.isSet("Created");
 					DeathChest chest = new DeathChest(
 							data.getString("World"),
 							data.getInt("X"), data.getInt("Y"), data.getInt("Z"),
@@ -72,7 +76,9 @@ public final class DeathChestRegistry extends ConfigFile {
 							materialOr(data.getString("Material")),
 							InventorySerialization.fromBase64(items),
 							data.getString("Skin.Value"), data.getString("Skin.Signature"),
-							(float) data.getDouble("Yaw"), poseOr(data.getString("Pose")), placementOf(data));
+							(float) data.getDouble("Yaw"), poseOr(data.getString("Pose")), placementOf(data),
+							// Saved before expiry existed: counts from now, so nothing disappears right after an update
+							data.getLong("Created", now));
 					chest.primeSavedItems(items);
 					chests.put(chest.getKey(), chest);
 					if (!chest.isBody())
@@ -84,6 +90,9 @@ public final class DeathChestRegistry extends ConfigFile {
 		} else if (!file.exists()) {
 			migrateLegacyChests();
 		}
+		// Entries from before expiry existed: store their start time now, so a restart doesn't reset it
+		if (missingCreated)
+			save();
 	}
 
 	@Override
@@ -98,6 +107,7 @@ public final class DeathChestRegistry extends ConfigFile {
 			getConfig().set(path + "Z", chest.getZ());
 			getConfig().set(path + "Owner", chest.getOwnerId().toString());
 			getConfig().set(path + "Owner_Name", chest.getOwnerName());
+			getConfig().set(path + "Created", chest.getCreatedAt());
 			getConfig().set(path + "Material", chest.isBody() ? BODY : chest.getMaterial().name());
 			if (chest.isBody()) {
 				getConfig().set(path + "Skin.Value", chest.getSkinValue());
@@ -128,7 +138,7 @@ public final class DeathChestRegistry extends ConfigFile {
 		}
 
 		return register(new DeathChest(block.getWorld().getName(), block.getX(), block.getY(), block.getZ(),
-				ownerId, ownerName, material, items, null, null, 0, Pose.STANDING, null));
+				ownerId, ownerName, material, items, null, null, 0, Pose.STANDING, null, System.currentTimeMillis()));
 	}
 
 	/**
@@ -152,7 +162,7 @@ public final class DeathChestRegistry extends ConfigFile {
 		int y = (int) Math.floor(center.getY() + 0.01);
 		int z = (int) Math.floor(center.getZ());
 		return register(new DeathChest(world.getName(), x, y, z, owner.getUniqueId(), owner.getName(), null, items,
-				skinValue, skinSignature, placement.bodyYaw(), placement.pose(), placement));
+				skinValue, skinSignature, placement.bodyYaw(), placement.pose(), placement, System.currentTimeMillis()));
 	}
 
 	/**
@@ -297,11 +307,23 @@ public final class DeathChestRegistry extends ConfigFile {
 	 */
 	public void tick() {
 		boolean removed = false;
+		long now = System.currentTimeMillis();
 		for (DeathChest chest : getChests()) {
 			// One bad entry mustn't stop the others from showing
 			try {
+				boolean expired = chest.isExpired(now);
 				if (!chest.isLoaded()) {
+					// A body is only entities, gone with the chunk: it can expire anywhere.
+					// A chest block has to be loaded to be taken away, so it waits.
+					if (expired && chest.isBody()) {
+						removed |= expire(chest);
+						continue;
+					}
 					chest.forgetUnloadedEntities();
+					continue;
+				}
+				if (expired) {
+					removed |= expire(chest);
 					continue;
 				}
 
@@ -316,6 +338,17 @@ public final class DeathChestRegistry extends ConfigFile {
 		}
 		if (removed)
 			save();
+	}
+
+	/** Removes an expired body or chest with what is left in it, and tells the owner if they are online. */
+	private boolean expire(DeathChest chest) {
+		if (!removeWithoutSaving(chest, false))
+			return false;
+		Player owner = Bukkit.getPlayer(chest.getOwnerId());
+		if (owner != null)
+			ColorUtil.sendMessage(owner, "&7Your " + (chest.isBody() ? "body" : "death chest") + " at &e" + chest.getX() + ", "
+					+ chest.getY() + ", " + chest.getZ() + " &7(" + chest.getWorldName() + ") has disappeared, with the items left in it.");
+		return true;
 	}
 
 	/** Chests (not bodies) that are real blocks: explosions only need checking when there are some. */
@@ -378,7 +411,7 @@ public final class DeathChestRegistry extends ConfigFile {
 
 				DeathChest chest = new DeathChest(location.getWorld().getName(), location.getBlockX(),
 						location.getBlockY(), location.getBlockZ(), owner, ownerName != null ? ownerName : "Unknown",
-						Material.CHEST, items, null, null, 0, Pose.STANDING, null);
+						Material.CHEST, items, null, null, 0, Pose.STANDING, null, System.currentTimeMillis());
 				if (!chest.isEmpty()) {
 					chests.put(chest.getKey(), chest);
 					chestBlocks++;

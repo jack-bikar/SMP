@@ -124,6 +124,8 @@ public final class Settings extends ConfigFile {
 		public static Material STORAGE_MATERIAL;
 		public static String HOLOGRAM_TEXT;
 		public static int HOLOGRAM_VISIBLE_RANGE;
+		/** How long a body or chest stays, in milliseconds; 0 = forever. */
+		public static long EXPIRE_AFTER_MILLIS;
 
 		public static void load(FileConfiguration config) {
 			ENABLE_DEATH_STORAGE = config.getBoolean("Death_Storage.Enable_Death_Storage", true);
@@ -135,6 +137,8 @@ public final class Settings extends ConfigFile {
 			}
 			HOLOGRAM_TEXT = config.getString("Death_Storage.Hologram_Text", "&6{player}'s loot");
 			HOLOGRAM_VISIBLE_RANGE = Math.max(1, config.getInt("Death_Storage.Hologram_Visible_Range", 20));
+			double hours = config.getDouble("Death_Storage.Expire_After_Hours", 168);
+			EXPIRE_AFTER_MILLIS = hours > 0 ? (long) (hours * 3_600_000L) : 0;
 		}
 	}
 

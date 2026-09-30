@@ -25,6 +25,10 @@ Death_Storage:
   Hologram_Text: "&6{player}'s loot"
   # Distance (in blocks) from which the hologram can be seen
   Hologram_Visible_Range: 20
+  # How long a body or death chest stays, in hours. After that it disappears, together with any items
+  # still in it. 168 = one week, 24 = one day, 0 = never. Decimals work too (0.5 = 30 minutes).
+  # A chest block in an area nobody is in disappears the next time that area is loaded.
+  Expire_After_Hours: 168
 
 # -------------------------------------------------------------------------------------------------
 # Locator bar
