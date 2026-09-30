@@ -37,7 +37,7 @@ public final class DuelMenu extends SimpleMenu {
 		if (pendingInvite != null) {
 			Player leader = Bukkit.getPlayer(pendingInvite.getLeaderId());
 			inventory.setItem(SLOT_INVITE, ItemCreator.of(Material.PAPER, "&6&lTeam duel invite",
-					"", "&7From &f" + (leader != null ? leader.getName() : "?") + " &7(" + pendingInvite.getFormat() + ")",
+					"", "&7From &f" + (leader != null ? leader.getName() : "?") + " &7(" + pendingInvite.getTargetFormat() + ")",
 					"", "&eClick to join").make());
 		}
 
@@ -47,9 +47,10 @@ public final class DuelMenu extends SimpleMenu {
 		if (Settings.DuelSection.TEAMS_ENABLED) {
 			boolean inLobby = TeamDuelManager.getInstance().getLobby(viewer) != null;
 			inventory.setItem(SLOT_TEAM, ItemCreator.of(Material.RED_BANNER, "&9&lTeam Duel",
-					"", "&72v2, 3v3 and up to " + Settings.DuelSection.MAX_TEAM_SIZE + "v"
+					"", "&72v2, 3v3 or a custom format like 1v3,", "&7up to " + Settings.DuelSection.MAX_TEAM_SIZE + "v"
 							+ Settings.DuelSection.MAX_TEAM_SIZE + ".",
 					"&7Invite players from a list,", "&7teams fill up automatically.",
+					Settings.DuelSection.MOBS_ENABLED ? "&7Add mobs to fight for either team." : null,
 					"", inLobby ? "&eClick to open your lobby" : "&eClick to create a lobby").make());
 		}
 

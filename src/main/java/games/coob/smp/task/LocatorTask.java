@@ -19,6 +19,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -37,6 +39,8 @@ public final class LocatorTask extends BukkitRunnable {
 
     // Boss bars per player
     private static final Map<UUID, BossBar> playerBossBars = new HashMap<>();
+    /** Trackers whose bar is already hidden (not allowed in their dimension). */
+    private static final Set<UUID> hiddenBars = new HashSet<>();
 
     @Override
     public void run() {
@@ -54,6 +58,7 @@ public final class LocatorTask extends BukkitRunnable {
             hideBossBar(tracker);
             return;
         }
+        hiddenBars.remove(tracker.getUniqueId());
 
         PlayerCache cache = PlayerCache.from(tracker);
 
@@ -278,13 +283,15 @@ public final class LocatorTask extends BukkitRunnable {
     }
 
     private void hideBossBar(Player player) {
+        // Runs every 2 seconds while the bar isn't allowed here: only hide it once
+        if (!hiddenBars.add(player.getUniqueId()))
+            return;
         BossBar bossBar = playerBossBars.remove(player.getUniqueId());
         if (bossBar != null) {
             player.hideBossBar(bossBar);
         }
         WaypointPacketSender.clearWaypoint(player);
         LocatorBarManager.disableReceive(player);
-        LocatorBarManager.clearTarget(player);
     }
 
     private Location getOrCalculatePortalTarget(Player tracker, TrackedTarget target, World.Environment targetDimension) {
@@ -387,6 +394,7 @@ public final class LocatorTask extends BukkitRunnable {
      * Clean up boss bar for a player (call on quit).
      */
     public static void cleanupPlayer(UUID playerUUID) {
+        hiddenBars.remove(playerUUID);
         BossBar bossBar = playerBossBars.remove(playerUUID);
         if (bossBar != null) {
             Player player = Bukkit.getPlayer(playerUUID);
@@ -400,6 +408,7 @@ public final class LocatorTask extends BukkitRunnable {
      * Clean up all boss bars (call on plugin disable).
      */
     public static void cleanupAll() {
+        hiddenBars.clear();
         for (Map.Entry<UUID, BossBar> entry : playerBossBars.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player != null) {

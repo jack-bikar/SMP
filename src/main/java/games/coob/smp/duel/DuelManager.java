@@ -17,6 +17,9 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -53,6 +56,12 @@ public final class DuelManager {
 
 	// Admin-built arenas currently in use (lower-case names)
 	private final Set<String> busyArenas = new HashSet<>();
+
+	// Duels whose arena is protected from griefing: from the moment the arena is
+	// picked until every change to it is undone (a little after the duel ends)
+	private final Set<ActiveDuel> protectedArenas = ConcurrentHashMap.newKeySet();
+	/** Team mobs of every duel -> their duel. */
+	private final Map<UUID, ActiveDuel> duelMobs = new ConcurrentHashMap<>();
 
 	private DuelManager() {
 	}
@@ -190,6 +199,16 @@ public final class DuelManager {
 	 * @return false if the duel couldn't start (players were told why)
 	 */
 	public boolean startDuel(List<Player> red, List<Player> blue) {
+		return startDuel(red, blue, Map.of());
+	}
+
+	/**
+	 * Starts a duel between two teams, with mobs fighting for either side.
+	 *
+	 * @param mobs side -> mob type -> how many
+	 * @return false if the duel couldn't start (players were told why)
+	 */
+	public boolean startDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs) {
 		List<Player> everyone = new ArrayList<>(red);
 		everyone.addAll(blue);
 
@@ -215,7 +234,7 @@ public final class DuelManager {
 			removeRequestsInvolving(player.getUniqueId());
 		}
 
-		ActiveDuel duel = new ActiveDuel(red, blue);
+		ActiveDuel duel = new ActiveDuel(red, blue, mobs);
 		activeDuels.put(duel.getDuelId(), duel);
 		for (Player player : everyone) {
 			playerToDuel.put(player.getUniqueId(), duel.getDuelId());
@@ -240,7 +259,7 @@ public final class DuelManager {
 				return;
 			}
 			// Load the landing area in the background before anyone is moved
-			preloadLandingArea(arena, duel.getLargestTeamSize()).whenComplete((ignored, loadError) ->
+			preloadLandingArea(arena, duel.getLargestTeamSize(), duel.hasMobs()).whenComplete((ignored, loadError) ->
 					SchedulerUtil.runTask(() -> {
 						// Cancelled while loading (e.g. someone left): free the arena again
 						if (duel.getState() != ActiveDuel.DuelState.PREPARING) {
@@ -264,8 +283,9 @@ public final class DuelManager {
 	 * uses them, so two duels never share one; when none is free, a natural spot
 	 * is used instead.
 	 */
-	private CompletableFuture<Void> preloadLandingArea(DuelArena arena, int teamSize) {
-		int spread = teamSize > 1 ? 9 : 0;
+	private CompletableFuture<Void> preloadLandingArea(DuelArena arena, int teamSize, boolean mobs) {
+		// Mobs line up a few blocks behind their team
+		int spread = mobs ? 12 : teamSize > 1 ? 9 : 0;
 		List<CompletableFuture<?>> loads = new ArrayList<>();
 		for (Location spawn : new Location[] { arena.spawn1(), arena.spawn2() }) {
 			Set<Long> seen = new HashSet<>();
@@ -362,9 +382,9 @@ public final class DuelManager {
 	/**
 	 * Called when a duelist would die (lethal damage was cancelled) or actually died.
 	 *
-	 * @param killer the player who dealt the final hit, if any
+	 * @param killer the player or duel mob that dealt the final hit, if any
 	 */
-	public void handlePlayerDeath(Player player, Player killer) {
+	public void handlePlayerDeath(Player player, Entity killer) {
 		ActiveDuel duel = getActiveDuel(player);
 		if (duel == null)
 			return;
@@ -396,6 +416,53 @@ public final class DuelManager {
 		return duel != null && duel.returnNow(player);
 	}
 
+	void protect(ActiveDuel duel) {
+		protectedArenas.add(duel);
+	}
+
+	void unprotect(ActiveDuel duel) {
+		protectedArenas.remove(duel);
+	}
+
+	/** Duels whose arena is still protected (including ones waiting for cleanup). */
+	public Collection<ActiveDuel> getProtectedDuels() {
+		return Collections.unmodifiableCollection(protectedArenas);
+	}
+
+	/** Whether any arena is protected right now (most events can stop here). */
+	public boolean hasProtectedArenas() {
+		return !protectedArenas.isEmpty();
+	}
+
+	/** The duel whose arena contains this location, or null. */
+	public ActiveDuel getDuelAt(Location location) {
+		return getDuelAt(location.getWorld(), location.getX(), location.getZ());
+	}
+
+	/** The duel whose arena contains this point, or null. No objects are made, for the busy block events. */
+	public ActiveDuel getDuelAt(World world, double x, double z) {
+		if (protectedArenas.isEmpty())
+			return null;
+		for (ActiveDuel duel : protectedArenas) {
+			if (duel.arenaContains(world, x, z))
+				return duel;
+		}
+		return null;
+	}
+
+	/** The duel this entity fights in as a team mob, or null. */
+	public ActiveDuel getDuelOfMob(Entity entity) {
+		return duelMobs.isEmpty() ? null : duelMobs.get(entity.getUniqueId());
+	}
+
+	void registerMob(UUID mobId, ActiveDuel duel) {
+		duelMobs.put(mobId, duel);
+	}
+
+	void unregisterMob(UUID mobId) {
+		duelMobs.remove(mobId);
+	}
+
 	public Collection<ActiveDuel> getActiveDuels() {
 		return Collections.unmodifiableCollection(activeDuels.values());
 	}
@@ -406,9 +473,14 @@ public final class DuelManager {
 	public void cleanup() {
 		for (ActiveDuel duel : new ArrayList<>(activeDuels.values()))
 			duel.end();
+		// Duels that ended but are still putting their arena back
+		for (ActiveDuel duel : new ArrayList<>(protectedArenas))
+			duel.finishRestore();
 		activeDuels.clear();
 		playerToDuel.clear();
 		pendingRequests.clear();
 		busyArenas.clear();
+		protectedArenas.clear();
+		duelMobs.clear();
 	}
 }

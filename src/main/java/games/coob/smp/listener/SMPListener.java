@@ -11,7 +11,7 @@ import games.coob.smp.tracking.TrackedTarget;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.WaypointPacketSender;
 import games.coob.smp.util.ColorUtil;
-import games.coob.smp.util.SchedulerUtil;
+import games.coob.smp.SMPPlugin;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import net.kyori.adventure.text.Component;
@@ -24,6 +24,7 @@ import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Egg;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.FishHook;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
@@ -39,7 +40,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.ServerListPingEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Locale;
 import java.util.UUID;
@@ -137,18 +137,20 @@ public final class SMPListener implements Listener {
         if (particle == null)
             return;
 
+        // Only what players shoot: mobs, dispensers, fishing bobbers and rockets would add up to a lot
         final Projectile projectile = event.getEntity();
-        final BukkitTask[] task = new BukkitTask[1];
-        final int[] ticks = { 0 };
+        if (!(projectile.getShooter() instanceof Player) || projectile instanceof FishHook || projectile instanceof Firework)
+            return;
 
-        task[0] = SchedulerUtil.runTimer(1, 1, () -> {
-            if (!projectile.isValid() || ticks[0]++ >= MAX_TRAIL_TICKS
-                    || (projectile instanceof AbstractArrow arrow && arrow.isInBlock())) {
-                task[0].cancel();
+        final int[] ticks = { 0 };
+        // Runs with the projectile and stops by itself when it is removed
+        projectile.getScheduler().runAtFixedRate(SMPPlugin.getInstance(), task -> {
+            if (ticks[0]++ >= MAX_TRAIL_TICKS || (projectile instanceof AbstractArrow arrow && arrow.isInBlock())) {
+                task.cancel();
                 return;
             }
             projectile.getWorld().spawnParticle(particle, projectile.getLocation(), 1, 0, 0, 0, 0);
-        });
+        }, null, 1L, 1L);
     }
 
     private static Particle getTrailParticle(String name) {

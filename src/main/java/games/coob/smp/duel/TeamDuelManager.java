@@ -11,11 +11,14 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,8 +29,10 @@ import java.util.UUID;
  * <ul>
  * <li>New members join the smaller team automatically.</li>
  * <li>"Balance" spreads players by their duel record so teams are fair.</li>
+ * <li>The leader can pick the format (e.g. 1v3) and add mobs that fight for
+ * either team.</li>
  * <li>Anyone in the lobby can invite; only the leader can start, balance, move
- * other players or remove them.</li>
+ * other players, remove them, or change the format and mobs.</li>
  * </ul>
  */
 public final class TeamDuelManager {
@@ -113,10 +118,11 @@ public final class TeamDuelManager {
 		Component decline = Component.text("[DECLINE]", NamedTextColor.RED)
 				.hoverEvent(HoverEvent.showText(Component.text("Decline the invite")))
 				.clickEvent(ClickEvent.runCommand("/duel decline " + leaderName));
+		String what = lobby.hasFixedFormat() ? "a " + lobby.getTargetFormat() + " team duel. "
+				: "a team duel (" + lobby.getFormat() + " so far). ";
 		target.sendMessage(Component.text()
 				.append(Component.text(inviter.getName(), NamedTextColor.YELLOW))
-				.append(Component.text(" invited you to a team duel (" + lobby.getFormat() + " so far). ",
-						NamedTextColor.GOLD))
+				.append(Component.text(" invited you to " + what, NamedTextColor.GOLD))
 				.append(join)
 				.append(Component.text(" "))
 				.append(decline)
@@ -281,13 +287,41 @@ public final class TeamDuelManager {
 		List<UUID> members = new ArrayList<>(lobby.getMembers());
 		DuelStatistics stats = DuelStatistics.getInstance();
 		// Smoothed win rate, so a single win doesn't outrank a long good record
-		members.sort(Comparator.comparingDouble((UUID id) -> -(stats.getWins(id) + 1.0)
-				/ (stats.getWins(id) + stats.getLosses(id) + 2.0)));
+		Map<UUID, Double> rating = new HashMap<>();
+		for (UUID id : members)
+			rating.put(id, (stats.getWins(id) + 1.0) / (stats.getWins(id) + stats.getLosses(id) + 2.0));
+		members.sort(Comparator.comparingDouble((UUID id) -> -rating.get(id)));
 
-		// Snake draft: R B B R R B B R ...
-		for (int i = 0; i < members.size(); i++) {
-			boolean red = (i % 4 == 0) || (i % 4 == 3);
-			lobby.setSide(members.get(i), red ? DuelSide.RED : DuelSide.BLUE);
+		if (lobby.hasFixedFormat()) {
+			// Best players first, each to the weaker team that still has room. On a tie the
+			// smaller team gets the stronger player, so in a 1v3 the best player goes solo.
+			Map<DuelSide, Double> total = new EnumMap<>(DuelSide.class);
+			Map<DuelSide, Integer> count = new EnumMap<>(DuelSide.class);
+			for (DuelSide side : DuelSide.values()) {
+				total.put(side, 0.0);
+				count.put(side, 0);
+			}
+			for (UUID id : members) {
+				DuelSide pick = null;
+				for (DuelSide side : DuelSide.values()) {
+					if (count.get(side) >= lobby.getMaxSize(side))
+						continue;
+					if (pick == null || total.get(side) < total.get(pick)
+							|| (total.get(side).equals(total.get(pick)) && lobby.getMaxSize(side) < lobby.getMaxSize(pick)))
+						pick = side;
+				}
+				if (pick == null)
+					pick = lobby.smallerSide();
+				total.merge(pick, rating.get(id), Double::sum);
+				count.merge(pick, 1, Integer::sum);
+				lobby.setSide(id, pick);
+			}
+		} else {
+			// Snake draft: R B B R R B B R ...
+			for (int i = 0; i < members.size(); i++) {
+				boolean red = (i % 4 == 0) || (i % 4 == 3);
+				lobby.setSide(members.get(i), red ? DuelSide.RED : DuelSide.BLUE);
+			}
 		}
 
 		broadcast(lobby, "&eTeams balanced by duel record. &7(" + lobby.getFormat() + ")");
@@ -315,7 +349,7 @@ public final class TeamDuelManager {
 
 		List<Player> red = onlinePlayers(lobby.getTeam(DuelSide.RED));
 		List<Player> blue = onlinePlayers(lobby.getTeam(DuelSide.BLUE));
-		if (!DuelManager.getInstance().startDuel(red, blue))
+		if (!DuelManager.getInstance().startDuel(red, blue, allowedMobs(lobby)))
 			return;
 
 		for (UUID member : lobby.getMembers()) {
@@ -324,6 +358,121 @@ public final class TeamDuelManager {
 			if (player != null)
 				closeMenu(player, lobby);
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Format and mobs (leader only)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Sets the team sizes, e.g. 1 and 3 for a 1v3. Pass 0 for both to leave the
+	 * sizes open. Players on a team that is now too big move to the other team.
+	 *
+	 * @return whether the format was changed
+	 */
+	public boolean setFormat(Player leader, int redSize, int blueSize) {
+		TeamLobby lobby = leaderLobby(leader, "change the format");
+		if (lobby == null)
+			return false;
+
+		boolean open = redSize <= 0 || blueSize <= 0;
+		int max = Settings.DuelSection.MAX_TEAM_SIZE;
+		if (!open && (redSize > max || blueSize > max)) {
+			ColorUtil.sendMessage(leader, "&cTeams can have at most " + max + " players.");
+			return false;
+		}
+		if (!open && lobby.size() > redSize + blueSize) {
+			ColorUtil.sendMessage(leader, "&cThere are " + lobby.size() + " players in the lobby, too many for a "
+					+ redSize + "v" + blueSize + ". Remove someone first.");
+			return false;
+		}
+
+		lobby.setFormat(open ? 0 : redSize, open ? 0 : blueSize);
+
+		// Latest arrivals move first
+		for (DuelSide side : DuelSide.values()) {
+			List<UUID> team = lobby.getTeam(side);
+			for (int i = team.size() - 1; i >= 0 && lobby.size(side) > lobby.getMaxSize(side); i--)
+				lobby.setSide(team.get(i), side.other());
+		}
+
+		broadcast(lobby, open ? "&eFormat set to open &7(any size up to " + max + "v" + max + ")"
+				: "&eFormat set to &6" + lobby.getTargetFormat() + "&e.");
+		refresh(lobby);
+		return true;
+	}
+
+	/**
+	 * Sets how many of a mob fight for a side (0 removes it).
+	 *
+	 * @return whether anything changed
+	 */
+	public boolean setMobCount(Player leader, DuelSide side, EntityType type, int count) {
+		TeamLobby lobby = leaderLobby(leader, "choose mobs");
+		if (lobby == null)
+			return false;
+		if (!Settings.DuelSection.MOBS_ENABLED || !Settings.DuelSection.ALLOWED_MOBS.contains(type)) {
+			ColorUtil.sendMessage(leader, "&cThat mob can't be used in duels.");
+			return false;
+		}
+
+		int current = lobby.getMobs(side).getOrDefault(type, 0);
+		count = Math.max(0, count);
+		int max = Settings.DuelSection.MAX_MOBS_PER_TEAM;
+		if (count > current && lobby.getMobCount(side) - current + count > max) {
+			ColorUtil.sendMessage(leader, "&cA team can have at most " + max + " mobs.");
+			return false;
+		}
+		if (count == current)
+			return false;
+
+		lobby.setMobs(side, type, count);
+		refresh(lobby);
+		return true;
+	}
+
+	public void clearMobs(Player leader, DuelSide side) {
+		TeamLobby lobby = leaderLobby(leader, "choose mobs");
+		if (lobby == null || lobby.getMobCount(side) == 0)
+			return;
+		lobby.clearMobs(side);
+		refresh(lobby);
+	}
+
+	/** The mobs to spawn: only types that are still allowed, and no more than the limit per team. */
+	private static Map<DuelSide, Map<EntityType, Integer>> allowedMobs(TeamLobby lobby) {
+		Map<DuelSide, Map<EntityType, Integer>> result = new EnumMap<>(DuelSide.class);
+		if (!Settings.DuelSection.MOBS_ENABLED)
+			return result;
+
+		for (DuelSide side : DuelSide.values()) {
+			Map<EntityType, Integer> mobs = new LinkedHashMap<>();
+			int room = Settings.DuelSection.MAX_MOBS_PER_TEAM;
+			for (Map.Entry<EntityType, Integer> entry : lobby.getMobs(side).entrySet()) {
+				int count = Math.min(entry.getValue(), room);
+				if (count > 0 && Settings.DuelSection.ALLOWED_MOBS.contains(entry.getKey())) {
+					mobs.put(entry.getKey(), count);
+					room -= count;
+				}
+			}
+			if (!mobs.isEmpty())
+				result.put(side, mobs);
+		}
+		return result;
+	}
+
+	/** The player's lobby if they lead it, otherwise tells them why not and returns null. */
+	private TeamLobby leaderLobby(Player player, String action) {
+		TeamLobby lobby = lobbyByMember.get(player.getUniqueId());
+		if (lobby == null) {
+			ColorUtil.sendMessage(player, "&cYou are not in a team duel lobby.");
+			return null;
+		}
+		if (!lobby.isLeader(player.getUniqueId())) {
+			ColorUtil.sendMessage(player, "&cOnly the leader can " + action + ".");
+			return null;
+		}
+		return lobby;
 	}
 
 	/** The lobby that invited this player most recently, if the invite is still valid. */

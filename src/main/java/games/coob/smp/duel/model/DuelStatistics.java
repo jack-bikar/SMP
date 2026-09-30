@@ -72,7 +72,8 @@ public class DuelStatistics extends ConfigFile {
 			getConfig().set(path + ".best_streak", streak);
 		}
 
-		save();
+		// Every player of a duel is updated at once: one save covers them all
+		saveLater(20);
 	}
 
 	/**
@@ -85,7 +86,13 @@ public class DuelStatistics extends ConfigFile {
 		getConfig().set(path + ".losses", losses);
 		getConfig().set(path + ".streak", 0); // Reset streak on loss
 
-		save();
+		saveLater(20);
+	}
+
+	/** One file for every player who ever duelled: built in the background. */
+	@Override
+	protected boolean isSerializedInBackground() {
+		return true;
 	}
 
 	/**

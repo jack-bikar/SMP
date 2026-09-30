@@ -135,7 +135,8 @@ public final class NicknameManager extends ConfigFile implements Listener {
 		Nickname nickname = nicknames.get(player.getUniqueId());
 		if (nickname != null && nickname.isEmpty())
 			nicknames.remove(player.getUniqueId());
-		save();
+		// Menu clicks can change it several times a second
+		saveLater(40);
 		apply(player);
 	}
 
@@ -179,6 +180,7 @@ public final class NicknameManager extends ConfigFile implements Listener {
 	// -------------------------------------------------------------------------
 
 	private static final String TEAM_PREFIX = "smp_nick_";
+	private static final Component NAME_TAG_SUFFIX = Component.text(")", NamedTextColor.GRAY);
 
 	private static String teamName(UUID playerId) {
 		return TEAM_PREFIX + playerId.toString().replace("-", "").substring(0, 12);
@@ -189,8 +191,12 @@ public final class NicknameManager extends ConfigFile implements Listener {
 		Team team = scoreboard.getTeam(teamName(player.getUniqueId()));
 		if (team == null)
 			team = scoreboard.registerNewTeam(teamName(player.getUniqueId()));
-		team.prefix(nickname.append(Component.text(" (", NamedTextColor.GRAY)));
-		team.suffix(Component.text(")", NamedTextColor.GRAY));
+		// Each change is sent to every player online: only send real changes
+		Component prefix = nickname.append(Component.text(" (", NamedTextColor.GRAY));
+		if (!prefix.equals(team.prefix()))
+			team.prefix(prefix);
+		if (!NAME_TAG_SUFFIX.equals(team.suffix()))
+			team.suffix(NAME_TAG_SUFFIX);
 		if (!team.hasEntry(player.getName()))
 			team.addEntry(player.getName());
 	}

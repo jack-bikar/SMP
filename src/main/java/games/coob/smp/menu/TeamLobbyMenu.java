@@ -1,6 +1,7 @@
 package games.coob.smp.menu;
 
 import games.coob.smp.duel.DuelManager;
+import games.coob.smp.duel.DuelMobs;
 import games.coob.smp.duel.DuelSide;
 import games.coob.smp.duel.TeamDuelManager;
 import games.coob.smp.duel.TeamLobby;
@@ -11,6 +12,7 @@ import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
@@ -22,18 +24,22 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Team duel setup: red team on the left, blue team on the right, and buttons to
- * invite, balance and start along the bottom.
+ * Team duel setup: red team on the left, blue team on the right, the format and
+ * each team's mobs between them, and buttons to invite, balance and start along
+ * the bottom.
  */
 public final class TeamLobbyMenu extends SimpleMenu {
 
 	/** Head slots per side, 4 columns x 4 rows. */
 	private static final int[] RED_SLOTS = { 0, 1, 2, 3, 9, 10, 11, 12, 18, 19, 20, 21, 27, 28, 29, 30 };
 	private static final int[] BLUE_SLOTS = { 5, 6, 7, 8, 14, 15, 16, 17, 23, 24, 25, 26, 32, 33, 34, 35 };
-	private static final int[] DIVIDER_SLOTS = { 4, 13, 22, 31, 40 };
+	private static final int[] DIVIDER_SLOTS = { 4, 13, 22, 31 };
 
+	private static final int SLOT_RED_MOBS = 37;
 	private static final int SLOT_RED_BANNER = 38;
+	private static final int SLOT_FORMAT = 40;
 	private static final int SLOT_BLUE_BANNER = 42;
+	private static final int SLOT_BLUE_MOBS = 43;
 	private static final int SLOT_INVITE = 45;
 	private static final int SLOT_BALANCE = 47;
 	private static final int SLOT_START = 49;
@@ -55,7 +61,6 @@ public final class TeamLobbyMenu extends SimpleMenu {
 		headSlots.clear();
 
 		boolean leader = lobby.isLeader(viewer.getUniqueId());
-		int max = Settings.DuelSection.MAX_TEAM_SIZE;
 
 		placeTeam(DuelSide.RED, RED_SLOTS, leader);
 		placeTeam(DuelSide.BLUE, BLUE_SLOTS, leader);
@@ -67,11 +72,17 @@ public final class TeamLobbyMenu extends SimpleMenu {
 		for (DuelSide side : DuelSide.values()) {
 			boolean mine = lobby.getSide(viewer.getUniqueId()) == side;
 			inventory.setItem(side == DuelSide.RED ? SLOT_RED_BANNER : SLOT_BLUE_BANNER, ItemCreator.of(side.getBanner(),
-					side.getColorCode() + "&l" + side.getDisplayName() + " team &7(" + lobby.size(side) + "/" + max + ")",
+					side.getColorCode() + "&l" + side.getDisplayName() + " team &7(" + lobby.size(side) + "/"
+							+ lobby.getMaxSize(side) + ")",
 					"",
 					mine ? "&aYou are on this team" : lobby.isTeamFull(side) ? "&cThis team is full" : "&eClick to join this team")
 					.make());
+
+			if (Settings.DuelSection.MOBS_ENABLED)
+				inventory.setItem(side == DuelSide.RED ? SLOT_RED_MOBS : SLOT_BLUE_MOBS, mobsItem(side, leader));
 		}
+
+		inventory.setItem(SLOT_FORMAT, formatItem(leader));
 
 		inventory.setItem(SLOT_INVITE, ItemCreator.of(Material.WRITABLE_BOOK, "&a&lInvite players",
 				"", "&7Pick from everyone online.", "&7They join the smaller team.", "", "&eClick to choose").make());
@@ -107,13 +118,53 @@ public final class TeamLobbyMenu extends SimpleMenu {
 		inventory.setItem(SLOT_LEAVE, ItemCreator.of(Material.BARRIER, "&c&lLeave lobby").make());
 	}
 
+	private ItemStack formatItem(boolean leader) {
+		int max = Settings.DuelSection.MAX_TEAM_SIZE;
+		List<String> lore = new ArrayList<>();
+		lore.add("");
+		if (lobby.hasFixedFormat()) {
+			lore.add("&7Red team: &f" + lobby.getMaxSize(DuelSide.RED) + " player" + (lobby.getMaxSize(DuelSide.RED) != 1 ? "s" : ""));
+			lore.add("&7Blue team: &f" + lobby.getMaxSize(DuelSide.BLUE) + " player" + (lobby.getMaxSize(DuelSide.BLUE) != 1 ? "s" : ""));
+		} else {
+			lore.add("&7Open: any size up to " + max + "v" + max + ".");
+			if (!Settings.DuelSection.ALLOW_UNEVEN_TEAMS)
+				lore.add("&7Teams must be even to start.");
+		}
+		lore.add("");
+		lore.add(leader ? "&eClick to pick a format, like 1v3" : "&7Only the leader can change this.");
+
+		String name = lobby.hasFixedFormat() ? "&f&lFormat: &e" + lobby.getTargetFormat() : "&f&lFormat: &eOpen";
+		return ItemCreator.of(Material.ARMOR_STAND, name, lore.toArray(new String[0])).make();
+	}
+
+	private ItemStack mobsItem(DuelSide side, boolean leader) {
+		List<String> lore = new ArrayList<>();
+		lore.add("");
+		Map<EntityType, Integer> mobs = lobby.getMobs(side);
+		if (mobs.isEmpty()) {
+			lore.add("&7No mobs yet.");
+		} else {
+			for (Map.Entry<EntityType, Integer> entry : mobs.entrySet())
+				lore.add("&7- &f" + entry.getValue() + "x " + DuelMobs.displayName(entry.getKey()));
+		}
+		lore.add("");
+		lore.add("&7Mobs fight for this team. The duel");
+		lore.add("&7ends when the players are out.");
+		lore.add("");
+		lore.add(leader ? "&eClick to choose mobs" : "&7Only the leader can change this.");
+
+		return ItemCreator.of(Material.ZOMBIE_HEAD, side.getColorCode() + "&l" + side.getDisplayName() + " mobs &7("
+				+ lobby.getMobCount(side) + "/" + Settings.DuelSection.MAX_MOBS_PER_TEAM + ")", lore.toArray(new String[0]))
+				.make();
+	}
+
 	private void placeTeam(DuelSide side, int[] slots, boolean viewerIsLeader) {
 		List<UUID> team = lobby.getTeam(side);
 		DuelStatistics stats = DuelStatistics.getInstance();
 
 		for (int i = 0; i < slots.length; i++) {
 			if (i >= team.size()) {
-				if (i < Settings.DuelSection.MAX_TEAM_SIZE)
+				if (i < lobby.getMaxSize(side))
 					inventory.setItem(slots[i], ItemCreator.of(side.getPane(), side.getColorCode() + "Open spot").make());
 				continue;
 			}
@@ -160,6 +211,14 @@ public final class TeamLobbyMenu extends SimpleMenu {
 		switch (slot) {
 			case SLOT_RED_BANNER -> manager.switchSide(player, player.getUniqueId(), DuelSide.RED);
 			case SLOT_BLUE_BANNER -> manager.switchSide(player, player.getUniqueId(), DuelSide.BLUE);
+			case SLOT_FORMAT -> {
+				if (lobby.isLeader(player.getUniqueId()))
+					new DuelFormatMenu(player, lobby).displayTo(player);
+			}
+			case SLOT_RED_MOBS, SLOT_BLUE_MOBS -> {
+				if (Settings.DuelSection.MOBS_ENABLED && lobby.isLeader(player.getUniqueId()))
+					new DuelMobsMenu(player, lobby, slot == SLOT_RED_MOBS ? DuelSide.RED : DuelSide.BLUE).displayTo(player);
+			}
 			case SLOT_INVITE -> new PlayerPickerMenu(player, "&8Invite to team duel",
 					target -> !lobby.isMember(target.getUniqueId())
 							&& !DuelManager.getInstance().isInDuel(target),

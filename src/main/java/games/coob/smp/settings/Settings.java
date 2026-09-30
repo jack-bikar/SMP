@@ -4,6 +4,8 @@ import games.coob.smp.SMPPlugin;
 import games.coob.smp.config.ConfigFile;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Mob;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -310,6 +312,11 @@ public final class Settings extends ConfigFile {
 		public static int TEAM_INVITE_TIMEOUT_SECONDS;
 		public static boolean ALLOW_UNEVEN_TEAMS;
 
+		// Mobs that fight for a team
+		public static boolean MOBS_ENABLED;
+		public static int MAX_MOBS_PER_TEAM;
+		public static List<EntityType> ALLOWED_MOBS;
+
 		// Border settings
 		public static boolean BORDER_ENABLED;
 		public static int BORDER_RADIUS;
@@ -354,6 +361,11 @@ public final class Settings extends ConfigFile {
 			TEAM_INVITE_TIMEOUT_SECONDS = Math.max(5, config.getInt("Duel.Teams.Invite_Timeout_Seconds", 60));
 			ALLOW_UNEVEN_TEAMS = config.getBoolean("Duel.Teams.Allow_Uneven_Teams", false);
 
+			// Team mobs
+			MOBS_ENABLED = config.getBoolean("Duel.Teams.Mobs.Enabled", true);
+			MAX_MOBS_PER_TEAM = Math.clamp(config.getInt("Duel.Teams.Mobs.Max_Per_Team", 8), 1, 30);
+			ALLOWED_MOBS = mobTypes(config.getStringList("Duel.Teams.Mobs.Allowed"));
+
 			// Border
 			BORDER_ENABLED = config.getBoolean("Duel.Border.Enabled", true);
 			BORDER_RADIUS = Math.max(5, config.getInt("Duel.Border.Radius", 30));
@@ -380,6 +392,27 @@ public final class Settings extends ConfigFile {
 			CLEANUP_REMOVE_PLACED_BLOCKS = config.getBoolean("Duel.Cleanup.Remove_Placed_Blocks", true);
 			CLEANUP_REMOVE_DROPPED_ITEMS = config.getBoolean("Duel.Cleanup.Remove_Dropped_Items", true);
 			CLEANUP_REMOVE_ENTITIES = config.getBoolean("Duel.Cleanup.Remove_Entities", true);
+		}
+
+		/** Entity types from the config, skipping (and warning about) anything that isn't a mob. */
+		private static List<EntityType> mobTypes(List<String> names) {
+			List<EntityType> types = new ArrayList<>();
+			for (String name : names) {
+				EntityType type;
+				try {
+					type = EntityType.valueOf(name.trim().toUpperCase(Locale.ROOT));
+				} catch (IllegalArgumentException e) {
+					type = null;
+				}
+				if (type == null || type.getEntityClass() == null || !Mob.class.isAssignableFrom(type.getEntityClass())
+						|| !type.isSpawnable()) {
+					SMPPlugin.getInstance().getLogger().warning("Duel.Teams.Mobs.Allowed: '" + name + "' is not a mob, skipping it.");
+					continue;
+				}
+				if (!types.contains(type))
+					types.add(type);
+			}
+			return List.copyOf(types);
 		}
 
 		private static List<String> upperCase(List<String> values) {

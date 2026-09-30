@@ -23,26 +23,31 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 /**
  * A duel between two sides (one player each for a 1v1, or teams), from preparing
- * the arena to sending everyone home.
+ * the arena to sending everyone home. Each side may also have mobs fighting for
+ * it ({@link DuelMobs}); they never decide the duel, only players do.
  * <p>
  * Each player's location, game mode, health and hunger are saved when the duel
  * is created, before anyone is moved. The return location is also written to
@@ -87,7 +92,11 @@ public final class ActiveDuel {
 	private final Set<UUID> landed = new HashSet<>();
 
 	// Tracked for cleanup
-	/** Block location -> what was there before the duel changed it, and who placed there first. */
+	/**
+	 * Block location -> what was there before the duel changed it, and who placed
+	 * there first (null when the change wasn't a duelist placing a block: lava
+	 * flowing, terrain broken or blown up...).
+	 */
 	private final Map<Location, PlacedBlock> placedBlocks = new HashMap<>();
 
 	private record PlacedBlock(BlockState original, UUID placer) {
@@ -100,9 +109,19 @@ public final class ActiveDuel {
 
 	private final List<BukkitTask> tasks = new ArrayList<>();
 
-	ActiveDuel(List<Player> red, List<Player> blue) {
+	// Restoring the arena after the duel
+	/** Blocks put back per tick. */
+	private static final int RESTORE_PER_TICK = 800;
+	private final ArrayDeque<Map.Entry<Location, PlacedBlock>> restoreQueue = new ArrayDeque<>();
+	/** Blocks in chunks being loaded, by chunk. */
+	private final Map<Long, List<Map.Entry<Location, PlacedBlock>>> waitingForChunk = new HashMap<>();
+	private BukkitTask restoreTask;
+	private final DuelMobs mobs;
+
+	ActiveDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs) {
 		add(red, DuelSide.RED);
 		add(blue, DuelSide.BLUE);
+		this.mobs = new DuelMobs(this, mobs);
 	}
 
 	private void add(List<Player> team, DuelSide side) {
@@ -127,6 +146,8 @@ public final class ActiveDuel {
 			return;
 		this.arena = arena;
 		this.arenaRadius = arena.borderRadius(Settings.DuelSection.BORDER_RADIUS, getLargestTeamSize());
+		// Protected from griefing until every change is undone (see DuelArenaListener)
+		DuelManager.getInstance().protect(this);
 
 		for (DuelSide side : DuelSide.values()) {
 			List<Player> team = getTeam(side);
@@ -161,11 +182,23 @@ public final class ActiveDuel {
 			border.start(() -> state == DuelState.ACTIVE, activePlayers());
 		}
 
+		// Frozen until the fight starts
+		mobs.spawn(arena);
+
 		if (isTeamDuel()) {
 			for (Player player : activePlayers()) {
 				DuelSide side = getSide(player);
 				ColorUtil.sendMessage(player, "&7You are on the " + side.coloredName() + " &7team with: &f"
 						+ names(getTeam(side), player));
+			}
+		}
+		if (!mobs.isEmpty()) {
+			for (Player player : activePlayers()) {
+				DuelSide side = getSide(player);
+				String ours = DuelMobs.describe(mobs.getRequested(side));
+				String theirs = DuelMobs.describe(mobs.getRequested(side.other()));
+				ColorUtil.sendMessage(player, "&7Mobs on your side: " + side.getColorCode() + (ours != null ? ours : "none")
+						+ "&7. Against you: " + side.other().getColorCode() + (theirs != null ? theirs : "none") + "&7.");
 			}
 		}
 
@@ -192,6 +225,14 @@ public final class ActiveDuel {
 		state = DuelState.ACTIVE;
 		showTitle(activePlayers(), Component.text("FIGHT!", NamedTextColor.GREEN), Component.empty(), 0, 1000, 300);
 
+		if (!mobs.isEmpty()) {
+			mobs.activate();
+			tasks.add(SchedulerUtil.runTimer(DuelMobs.TICK_PERIOD, DuelMobs.TICK_PERIOD, () -> {
+				if (state == DuelState.ACTIVE)
+					mobs.tick();
+			}));
+		}
+
 		int minutes = Settings.DuelSection.MAX_FIGHT_MINUTES;
 		if (minutes > 0)
 			tasks.add(SchedulerUtil.runLater(20L * 60 * minutes, () -> {
@@ -202,9 +243,12 @@ public final class ActiveDuel {
 
 	/**
 	 * A player is out of the fight: their hit would have killed them, they died,
-	 * or they left. When a whole side is out, the other side wins.
+	 * or they left. When a whole side's players are out, the other side wins
+	 * (mobs don't count).
+	 *
+	 * @param killer the player or duel mob that dealt the final hit, if any
 	 */
-	void eliminate(Player victim, Player killer) {
+	void eliminate(Player victim, Entity killer) {
 		UUID id = victim.getUniqueId();
 		if (state != DuelState.ACTIVE || eliminated.contains(id))
 			return;
@@ -230,9 +274,9 @@ public final class ActiveDuel {
 		}
 
 		if (isTeamDuel()) {
+			String by = describeKiller(killer);
 			String how = left.contains(id) ? " &7left the duel"
-					: killer != null && getSide(killer) != null
-							? " &7was eliminated by " + getSide(killer).getColorCode() + killer.getName()
+					: by != null ? " &7was eliminated by " + by
 							: " &7was eliminated";
 			broadcast(side.getColorCode() + victim.getName() + how + " &8(" + scoreLine() + "&8)");
 		}
@@ -241,12 +285,23 @@ public final class ActiveDuel {
 			finish(side.other());
 	}
 
+	/** e.g. "&cSteve" or "&cRed Zombie", or null if the killer isn't part of this duel. */
+	private String describeKiller(Entity killer) {
+		if (killer instanceof Player player && getSide(player) != null)
+			return getSide(player).getColorCode() + player.getName();
+		DuelSide mobSide = killer != null ? mobs.getSide(killer) : null;
+		if (mobSide != null)
+			return mobSide.getColorCode() + mobSide.getDisplayName() + " " + DuelMobs.displayName(killer.getType());
+		return null;
+	}
+
 	/**
 	 * One side won: stats, titles and the countdown before everyone is sent back.
 	 */
 	private void finish(DuelSide winners) {
 		state = DuelState.ENDING;
 		winningSide = winners;
+		mobs.removeAll();
 
 		for (Player player : players.values()) {
 			if (getSide(player) == winners) {
@@ -311,6 +366,7 @@ public final class ActiveDuel {
 			task.cancel();
 		tasks.clear();
 
+		mobs.removeAll();
 		if (border != null)
 			border.stop();
 
@@ -321,9 +377,9 @@ public final class ActiveDuel {
 		DuelManager.getInstance().onDuelEnded(this);
 
 		if (shuttingDown) {
-			performCleanup();
+			performCleanup(true);
 		} else {
-			SchedulerUtil.runLater(20, this::performCleanup);
+			SchedulerUtil.runLater(20, () -> performCleanup(false));
 		}
 	}
 
@@ -521,21 +577,118 @@ public final class ActiveDuel {
 	// Cleanup
 	// -------------------------------------------------------------------------
 
-	private void performCleanup() {
-		if (Settings.DuelSection.CLEANUP_REMOVE_PLACED_BLOCKS) {
-			for (Map.Entry<Location, PlacedBlock> entry : placedBlocks.entrySet()) {
-				if (entry.getKey().isChunkLoaded())
-					restoreBlock(entry.getKey().getBlock(), entry.getValue());
-			}
+	private void performCleanup(boolean immediately) {
+		try {
+			if (Settings.DuelSection.CLEANUP_REMOVE_DROPPED_ITEMS)
+				returnDroppedItems();
+			if (Settings.DuelSection.CLEANUP_REMOVE_ENTITIES)
+				removeProjectiles();
+		} catch (RuntimeException e) {
+			SMPPlugin.getInstance().getLogger().log(Level.WARNING, "Problem cleaning up a duel's items", e);
 		}
-		if (Settings.DuelSection.CLEANUP_REMOVE_DROPPED_ITEMS)
-			returnDroppedItems();
-		if (Settings.DuelSection.CLEANUP_REMOVE_ENTITIES)
-			removeProjectiles();
-
-		placedBlocks.clear();
 		droppedItems.clear();
 		spawnedEntities.clear();
+
+		// Always runs, so the arena can't stay protected forever
+		restoreBlocks(immediately);
+	}
+
+	/**
+	 * Undoes every change to the arena: terrain broken or blown up, lava and water
+	 * that flowed, fire, and (if enabled) the blocks duelists placed. Chunks that
+	 * unloaded after everyone left are loaded in the background first. The arena
+	 * stays protected until all of it is back.
+	 */
+	private void restoreBlocks(boolean immediately) {
+		for (Map.Entry<Location, PlacedBlock> entry : placedBlocks.entrySet())
+			restoreQueue.add(Map.entry(entry.getKey(), entry.getValue()));
+		placedBlocks.clear();
+
+		if (immediately) {
+			finishRestore();
+			return;
+		}
+		// A big fight (crystals, TNT) can leave thousands of blocks: spread them over a few ticks
+		restoreTask = SchedulerUtil.runTimer(1, 1, this::restoreSome);
+	}
+
+	private void restoreSome() {
+		for (int i = 0; i < RESTORE_PER_TICK && !restoreQueue.isEmpty(); i++) {
+			Map.Entry<Location, PlacedBlock> entry = restoreQueue.poll();
+			if (entry.getKey().getWorld() == null)
+				continue;
+			if (entry.getKey().isChunkLoaded()) {
+				restoreEntry(entry);
+			} else {
+				waitForChunk(entry);
+			}
+		}
+		checkRestored();
+	}
+
+	/** The chunk unloaded after everyone left: load it in the background and restore it then. */
+	private void waitForChunk(Map.Entry<Location, PlacedBlock> entry) {
+		Location location = entry.getKey();
+		long key = (long) (location.getBlockX() >> 4) << 32 | ((location.getBlockZ() >> 4) & 0xFFFFFFFFL);
+		List<Map.Entry<Location, PlacedBlock>> waiting = waitingForChunk.get(key);
+		if (waiting != null) {
+			waiting.add(entry);
+			return;
+		}
+		waiting = new ArrayList<>();
+		waiting.add(entry);
+		waitingForChunk.put(key, waiting);
+		// Completes on the main thread, with the chunk loaded
+		location.getWorld().getChunkAtAsync(location.getBlockX() >> 4, location.getBlockZ() >> 4)
+				.whenComplete((chunk, error) -> {
+					List<Map.Entry<Location, PlacedBlock>> entries = waitingForChunk.remove(key);
+					if (entries != null) {
+						for (Map.Entry<Location, PlacedBlock> waited : entries)
+							restoreEntry(waited);
+					}
+					checkRestored();
+				});
+	}
+
+	private void restoreEntry(Map.Entry<Location, PlacedBlock> entry) {
+		try {
+			Block block = entry.getKey().getBlock();
+			// Placed blocks may stay if the server wants that, but never lava, water or fire
+			if (entry.getValue().placer() != null && !Settings.DuelSection.CLEANUP_REMOVE_PLACED_BLOCKS
+					&& !isHazard(block.getType()))
+				return;
+			restoreBlock(block, entry.getValue());
+		} catch (RuntimeException e) {
+			SMPPlugin.getInstance().getLogger().log(Level.WARNING, "Could not restore a duel block at " + entry.getKey(), e);
+		}
+	}
+
+	/** Everything is back: the arena is no longer protected. */
+	private void checkRestored() {
+		if (!restoreQueue.isEmpty() || !waitingForChunk.isEmpty())
+			return;
+		if (restoreTask != null) {
+			restoreTask.cancel();
+			restoreTask = null;
+		}
+		DuelManager.getInstance().unprotect(this);
+	}
+
+	/** Puts everything back right now, loading chunks if needed (plugin disable). */
+	void finishRestore() {
+		while (!restoreQueue.isEmpty())
+			restoreEntry(restoreQueue.poll());
+		for (List<Map.Entry<Location, PlacedBlock>> entries : waitingForChunk.values()) {
+			for (Map.Entry<Location, PlacedBlock> entry : entries)
+				restoreEntry(entry);
+		}
+		waitingForChunk.clear();
+		checkRestored();
+	}
+
+	private static boolean isHazard(Material material) {
+		return material == Material.LAVA || material == Material.WATER || material == Material.FIRE
+				|| material == Material.SOUL_FIRE;
 	}
 
 	/**
@@ -543,7 +696,8 @@ public final class ActiveDuel {
 	 * duel (chest, shulker box...) goes back to whoever placed it, with its contents.
 	 */
 	private void restoreBlock(Block block, PlacedBlock placed) {
-		if (block.getType() != placed.original().getType() && block.getState() instanceof Container container) {
+		// The live state (no copy): only containers need a look inside
+		if (block.getType() != placed.original().getType() && block.getState(false) instanceof Container container) {
 			List<ItemStack> items = new ArrayList<>();
 			for (ItemStack item : container.getInventory().getContents()) {
 				if (item != null && !item.isEmpty())
@@ -552,7 +706,7 @@ public final class ActiveDuel {
 			container.getInventory().clear();
 			items.add(new ItemStack(block.getType()));
 
-			Player placer = Bukkit.getPlayer(placed.placer());
+			Player placer = placed.placer() != null ? Bukkit.getPlayer(placed.placer()) : null;
 			for (ItemStack item : items) {
 				if (placer != null) {
 					give(placer, item);
@@ -566,12 +720,19 @@ public final class ActiveDuel {
 
 	/** Arrows and tridents a player shot go back to them (and are removed from the world). */
 	private void returnProjectilesOf(Player player) {
-		for (UUID id : spawnedEntities) {
-			if (Bukkit.getEntity(id) instanceof AbstractArrow arrow && arrow.isValid()
-					&& arrow.getPickupStatus() == AbstractArrow.PickupStatus.ALLOWED
+		Iterator<UUID> iterator = spawnedEntities.iterator();
+		while (iterator.hasNext()) {
+			Entity entity = Bukkit.getEntity(iterator.next());
+			// Gone already (arrows despawn, mob arrows are removed): forget it
+			if (entity == null || !entity.isValid()) {
+				iterator.remove();
+				continue;
+			}
+			if (entity instanceof AbstractArrow arrow && arrow.getPickupStatus() == AbstractArrow.PickupStatus.ALLOWED
 					&& arrow.getShooter() instanceof Player shooter && shooter.equals(player)) {
 				give(player, arrow.getItemStack());
 				arrow.remove();
+				iterator.remove();
 			}
 		}
 	}
@@ -620,16 +781,53 @@ public final class ActiveDuel {
 			placedBlocks.putIfAbsent(location, new PlacedBlock(original, placer.getUniqueId()));
 	}
 
-	public boolean isPlacedBlock(Location location) {
-		return placedBlocks.containsKey(location.toBlockLocation());
+	/**
+	 * Remembers what a block was before something other than a duelist placing
+	 * it changed it (lava flowing, fire, a block broken or blown up), so cleanup
+	 * can put it back. Only the first change counts, and only inside the arena.
+	 */
+	public void trackChangedBlock(BlockState original) {
+		Location location = original.getLocation().toBlockLocation();
+		if (arenaContains(location))
+			placedBlocks.putIfAbsent(location, new PlacedBlock(original, null));
+	}
+
+	/** {@link #trackChangedBlock(BlockState)}, taking the block's snapshot only the first time it changes. */
+	public void trackChangedBlock(Block block) {
+		if (!arenaContains(block.getWorld(), block.getX() + 0.5, block.getZ() + 0.5))
+			return;
+		Location location = block.getLocation();
+		if (!placedBlocks.containsKey(location))
+			placedBlocks.put(location, new PlacedBlock(block.getState(), null));
+	}
+
+	/**
+	 * Whether the block here was made during the duel (a duelist placed it, or
+	 * lava or water flowed there), rather than being part of the arena.
+	 */
+	public boolean isDuelMade(Location location) {
+		PlacedBlock placed = placedBlocks.get(location.toBlockLocation());
+		return placed != null && location.getBlock().getType() != placed.original().getType();
 	}
 
 	/** Whether a location is inside this duel's arena (works with the border turned off too). */
 	public boolean arenaContains(Location location) {
-		if (arena == null || location.getWorld() == null || !location.getWorld().equals(arena.center().getWorld()))
+		return arenaContains(location.getWorld(), location.getX(), location.getZ());
+	}
+
+	public boolean arenaContains(org.bukkit.World world, double x, double z) {
+		if (arena == null || world == null || !world.equals(arena.center().getWorld()))
 			return false;
-		return Math.abs(location.getX() - arena.center().getX()) <= arenaRadius
-				&& Math.abs(location.getZ() - arena.center().getZ()) <= arenaRadius;
+		return Math.abs(x - arena.center().getX()) <= arenaRadius && Math.abs(z - arena.center().getZ()) <= arenaRadius;
+	}
+
+	/** Whether the arena overlaps the square from (minX, minZ) to (maxX, maxZ). */
+	public boolean arenaOverlaps(org.bukkit.World world, double minX, double minZ, double maxX, double maxZ) {
+		if (arena == null || world == null || !world.equals(arena.center().getWorld()))
+			return false;
+		double cx = arena.center().getX();
+		double cz = arena.center().getZ();
+		return maxX >= cx - arenaRadius && minX <= cx + arenaRadius && maxZ >= cz - arenaRadius && minZ <= cz + arenaRadius;
 	}
 
 	public void trackDroppedItem(UUID itemId) {
@@ -676,6 +874,27 @@ public final class ActiveDuel {
 
 	public boolean isEliminated(Player player) {
 		return eliminated.contains(player.getUniqueId());
+	}
+
+	/** Whether this player is one of the duelists and still in the fight. */
+	boolean isFightingPlayer(Player player) {
+		UUID id = player.getUniqueId();
+		return players.containsKey(id) && player.isOnline() && !eliminated.contains(id) && !left.contains(id)
+				&& player.getGameMode() != GameMode.SPECTATOR;
+	}
+
+	boolean hasMobs() {
+		return !mobs.isEmpty();
+	}
+
+	/** The side a mob fights for in this duel, or null if it isn't one of this duel's mobs. */
+	public DuelSide getMobSide(Entity entity) {
+		return mobs.getSide(entity);
+	}
+
+	/** Whether a mob of {@code side} may attack this entity (an enemy player still fighting, or an enemy mob). */
+	public boolean isMobEnemy(DuelSide side, Entity entity) {
+		return mobs.isEnemy(side, entity);
 	}
 
 	/** Online players who haven't left. */

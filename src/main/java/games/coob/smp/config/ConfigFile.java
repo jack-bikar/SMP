@@ -1,6 +1,8 @@
 package games.coob.smp.config;
 
 import games.coob.smp.SMPPlugin;
+import games.coob.smp.util.SchedulerUtil;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -19,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
@@ -26,7 +29,9 @@ import java.util.logging.Level;
  * <p>
  * Saving serializes the YAML on the calling (main) thread and writes the file
  * on a single background thread, so disk IO never blocks the server tick and
- * writes to the same file always happen in order.
+ * writes to the same file always happen in order. Big files without comments
+ * can also be serialized in the background ({@link #isSerializedInBackground()}),
+ * and a queued write is skipped when a newer save of the same file follows it.
  */
 public abstract class ConfigFile {
 
@@ -41,10 +46,28 @@ public abstract class ConfigFile {
 	 * file that is re-opened in the meantime (e.g. a player rejoining right away)
 	 * reads the newest data instead of the old file.
 	 */
-	private static final Map<String, String> PENDING = new ConcurrentHashMap<>();
+	private static final Map<String, PendingWrite> PENDING = new ConcurrentHashMap<>();
 
 	protected final File file;
 	protected FileConfiguration config;
+	/** A {@link #saveLater} is already scheduled. */
+	private boolean saveScheduled;
+
+	/** Content waiting to be written. The YAML is built once, by whichever thread needs it first. */
+	private static final class PendingWrite {
+		private final Supplier<String> source;
+		private String data;
+
+		PendingWrite(Supplier<String> source) {
+			this.source = source;
+		}
+
+		synchronized String data() {
+			if (data == null)
+				data = source.get();
+			return data;
+		}
+	}
 
 	protected ConfigFile(String fileName) {
 		this.file = new File(SMPPlugin.getInstance().getDataFolder(), fileName);
@@ -66,10 +89,10 @@ public abstract class ConfigFile {
 
 	private YamlConfiguration read() {
 		YamlConfiguration yaml = new YamlConfiguration();
-		String pending = PENDING.get(file.getAbsolutePath());
+		PendingWrite pending = PENDING.get(file.getAbsolutePath());
 		try {
 			if (pending != null) {
-				yaml.loadFromString(pending);
+				yaml.loadFromString(pending.data());
 			} else if (file.exists()) {
 				yaml.load(file);
 			}
@@ -131,18 +154,64 @@ public abstract class ConfigFile {
 	 * Save the configuration file (file IO happens off the main thread)
 	 */
 	public void save() {
+		saveScheduled = false;
 		onSave();
-		final String data = config.saveToString();
+		final Supplier<String> source;
+		if (isSerializedInBackground()) {
+			// A copy of the values is cheap; turning them into YAML text is the slow part
+			final YamlConfiguration snapshot = copyOf(config);
+			source = snapshot::saveToString;
+		} else {
+			final String data = config.saveToString();
+			source = () -> data;
+		}
+
+		final PendingWrite pending = new PendingWrite(source);
 		if (WRITER.isShutdown()) {
-			write(data);
+			write(pending.data());
 			return;
 		}
 		final String key = file.getAbsolutePath();
-		PENDING.put(key, data);
+		PENDING.put(key, pending);
 		WRITER.execute(() -> {
-			write(data);
-			PENDING.remove(key, data);
+			// A newer save of this file is queued after this one and will write instead
+			if (PENDING.get(key) != pending)
+				return;
+			write(pending.data());
+			PENDING.remove(key, pending);
 		});
+	}
+
+	/**
+	 * Saves in a moment instead of right away, so many changes in a short time
+	 * (a duel ending for 8 players, clicks in a menu) cost one save.
+	 */
+	public void saveLater(long delayTicks) {
+		if (saveScheduled)
+			return;
+		saveScheduled = true;
+		SchedulerUtil.runLater(delayTicks, () -> {
+			if (saveScheduled)
+				save();
+		});
+	}
+
+	/**
+	 * Whether the YAML text may be built on the writer thread. Only for files
+	 * whose comments don't matter (a copy of the values loses them), and whose
+	 * values are plain strings, numbers and lists.
+	 */
+	protected boolean isSerializedInBackground() {
+		return false;
+	}
+
+	private static YamlConfiguration copyOf(FileConfiguration source) {
+		YamlConfiguration copy = new YamlConfiguration();
+		for (Map.Entry<String, Object> entry : source.getValues(true).entrySet()) {
+			if (!(entry.getValue() instanceof ConfigurationSection))
+				copy.set(entry.getKey(), entry.getValue());
+		}
+		return copy;
 	}
 
 	/**
@@ -150,6 +219,7 @@ public abstract class ConfigFile {
 	 * Use on plugin disable.
 	 */
 	public void saveNow() {
+		saveScheduled = false;
 		onSave();
 		write(config.saveToString());
 	}

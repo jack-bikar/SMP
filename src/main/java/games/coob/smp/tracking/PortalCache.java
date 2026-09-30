@@ -76,8 +76,9 @@ public final class PortalCache {
 
         List<Location> portals = getPortalList(world.getUID(), type);
         if (portals == null || portals.isEmpty()) {
-            // Fallback: do a small area scan and cache the result
-            return scanAndCache(world, from, type);
+            // Portals are registered when they are made or used. A scan of the area was tried here
+            // before, but it sampled too sparsely to find portals and cost thousands of block reads.
+            return null;
         }
 
         Location best = null;
@@ -143,48 +144,6 @@ public final class PortalCache {
             return END_PORTALS.get(worldId);
         }
         return null;
-    }
-
-    /**
-     * Scan a small area for a portal and cache it if found.
-     * This is only called when we have no cached portals, and only looks at
-     * chunks that are already loaded.
-     */
-    private static Location scanAndCache(World world, Location from, Material type) {
-        int cx = from.getBlockX();
-        int cy = from.getBlockY();
-        int cz = from.getBlockZ();
-        int minY = Math.max(world.getMinHeight(), cy - 32);
-        int maxY = Math.min(world.getMaxHeight() - 1, cy + 32);
-
-        Location best = null;
-        double bestDistSq = Double.MAX_VALUE;
-
-        for (int dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx += SEARCH_STEP) {
-            for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz += SEARCH_STEP) {
-                // Never load chunks just to look for a portal
-                if (!world.isChunkLoaded((cx + dx) >> 4, (cz + dz) >> 4))
-                    continue;
-                for (int y = minY; y <= maxY; y += SEARCH_STEP) {
-                    Block block = world.getBlockAt(cx + dx, y, cz + dz);
-                    if (block.getType() == type) {
-                        Location loc = block.getLocation().add(0.5, 0.5, 0.5);
-                        double distSq = from.distanceSquared(loc);
-                        if (distSq < bestDistSq) {
-                            bestDistSq = distSq;
-                            best = loc;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cache the found portal
-        if (best != null) {
-            register(best, type);
-        }
-
-        return best;
     }
 
     /**

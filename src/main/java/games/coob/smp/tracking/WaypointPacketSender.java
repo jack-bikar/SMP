@@ -41,6 +41,19 @@ public final class WaypointPacketSender {
     private static Method connectionSendMethod;
     private static boolean initialized = false;
     private static boolean available = false;
+    private static java.lang.reflect.Constructor<?> vec3iConstructor;
+
+    /**
+     * Something about the packets doesn't work on this server version: stop
+     * trying (it would fail and log every few ticks) and say so once.
+     */
+    private static void disableAfterFailure(Exception e) {
+        if (!available)
+            return;
+        available = false;
+        games.coob.smp.SMPPlugin.getInstance().getLogger().log(java.util.logging.Level.WARNING,
+                "Locator waypoints stopped working on this server version and were turned off", e);
+    }
 
     private WaypointPacketSender() {
     }
@@ -242,8 +255,7 @@ public final class WaypointPacketSender {
             return true;
 
         } catch (Exception e) {
-            debug("Error sending waypoint: " + e.getMessage());
-            e.printStackTrace();
+            disableAfterFailure(e);
             return false;
         }
     }
@@ -319,8 +331,9 @@ public final class WaypointPacketSender {
 
     private static Object createVec3i(Location location) {
         try {
-            return vec3iClass.getConstructor(int.class, int.class, int.class)
-                    .newInstance(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+            if (vec3iConstructor == null)
+                vec3iConstructor = vec3iClass.getConstructor(int.class, int.class, int.class);
+            return vec3iConstructor.newInstance(location.getBlockX(), location.getBlockY(), location.getBlockZ());
         } catch (Exception e) {
             debug("Error creating Vec3i: " + e.getMessage());
             return null;
@@ -360,8 +373,7 @@ public final class WaypointPacketSender {
                 }
             }
         } catch (Exception e) {
-            debug("Error sending packet: " + e.getMessage());
-            e.printStackTrace();
+            disableAfterFailure(e);
         }
     }
 

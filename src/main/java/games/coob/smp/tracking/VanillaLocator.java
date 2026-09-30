@@ -7,6 +7,7 @@ import games.coob.smp.util.ColorUtil;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -48,6 +49,8 @@ public final class VanillaLocator implements Listener, Runnable {
 	private static final double FOCUS_DEGREES = 6.0;
 	/** The action bar fades after ~2s, so the name is re-sent at least this often (ticks). */
 	private static final int RESEND_TICKS = 30;
+	/** Soonest the distance shown is updated again while it changes (ticks). */
+	private static final int DISTANCE_TICKS = 8;
 	private static final double DEATH_REACHED_DISTANCE = 4.0;
 	private static final UUID DEATH_TARGET = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
@@ -59,7 +62,7 @@ public final class VanillaLocator implements Listener, Runnable {
 	private final Set<UUID> deathWaypointSent = new HashSet<>();
 	private int ticks;
 
-	private record Shown(String key, int sentAt) {
+	private record Shown(UUID target, int distance, int sentAt) {
 	}
 
 	public static VanillaLocator getInstance() {
@@ -133,21 +136,38 @@ public final class VanillaLocator implements Listener, Runnable {
 
 			boolean barEnabled = !Boolean.FALSE.equals(world.getGameRuleValue(GameRules.LOCATOR_BAR))
 					&& LocatorBarManager.isAllowedIn(world);
-			for (Player viewer : players) {
+			if (!barEnabled) {
+				for (Player viewer : players)
+					clear(viewer);
+				continue;
+			}
+
+			// Every player's position and range once, instead of once for every other player
+			int count = players.size();
+			Location[] locations = new Location[count];
+			double[] transmit = new double[count];
+			for (int i = 0; i < count; i++) {
+				Player player = players.get(i);
+				locations[i] = player.getLocation();
+				transmit[i] = player.getGameMode() == GameMode.SPECTATOR ? 0 : LocatorBarManager.getTransmitRange(player);
+			}
+
+			for (int i = 0; i < count; i++) {
+				Player viewer = players.get(i);
 				// Duels use the action bar for their own messages
-				if (!barEnabled || viewer.getGameMode() == GameMode.SPECTATOR
-						|| DuelManager.getInstance().isInDuel(viewer)
-						|| LocatorBarManager.getReceiveRange(viewer) <= 0) {
+				double receive = viewer.getGameMode() == GameMode.SPECTATOR || DuelManager.getInstance().isInDuel(viewer)
+						? 0 : LocatorBarManager.getReceiveRange(viewer);
+				if (receive <= 0) {
 					clear(viewer);
 					continue;
 				}
-				updateDeathWaypoint(viewer);
-				updateFocus(viewer, players);
+				updateDeathWaypoint(viewer, locations[i]);
+				updateFocus(viewer, i, receive, players, locations, transmit);
 			}
 		}
 	}
 
-	private void updateDeathWaypoint(Player viewer) {
+	private void updateDeathWaypoint(Player viewer, Location at) {
 		PlayerCache cache = PlayerCache.from(viewer);
 		if (!cache.isTrackingDeath())
 			return;
@@ -160,7 +180,7 @@ public final class VanillaLocator implements Listener, Runnable {
 		if (!death.getWorld().equals(viewer.getWorld()))
 			return;
 
-		if (death.distanceSquared(viewer.getLocation()) <= DEATH_REACHED_DISTANCE * DEATH_REACHED_DISTANCE) {
+		if (death.distanceSquared(at) <= DEATH_REACHED_DISTANCE * DEATH_REACHED_DISTANCE) {
 			cache.stopTrackingDeath();
 			refreshDeathWaypoint(viewer);
 			ColorUtil.sendMessage(viewer, "&aYou reached your death location.");
@@ -172,50 +192,69 @@ public final class VanillaLocator implements Listener, Runnable {
 			deathWaypointSent.add(viewer.getUniqueId());
 	}
 
-	private void updateFocus(Player viewer, List<Player> candidates) {
-		Location eye = viewer.getLocation();
-		double receiveRange = LocatorBarManager.getReceiveRange(viewer);
-
-		String bestKey = null;
-		Component bestText = null;
+	private void updateFocus(Player viewer, int self, double receiveRange, List<Player> players, Location[] locations,
+			double[] transmit) {
+		Location eye = locations[self];
+		Player best = null;
+		int bestIndex = -1;
 		double bestAngle = FOCUS_DEGREES;
 
-		// Same visibility rules as the game uses for the locator bar
-		for (Player target : candidates) {
-			if (target == viewer || target.getGameMode() == GameMode.SPECTATOR || !viewer.canSee(target))
+		// Same visibility rules as the game uses for the locator bar; cheap checks first
+		for (int j = 0; j < players.size(); j++) {
+			if (j == self || transmit[j] <= 0)
 				continue;
-			double range = Math.min(receiveRange, LocatorBarManager.getTransmitRange(target));
-			if (range <= 0 || target.getLocation().distanceSquared(eye) > range * range)
+			double range = Math.min(receiveRange, transmit[j]);
+			if (locations[j].distanceSquared(eye) > range * range)
 				continue;
-
-			double angle = angleTo(eye, target.getLocation());
-			if (angle <= bestAngle) {
-				bestAngle = angle;
-				bestKey = target.getUniqueId().toString();
-				String name = PlainTextComponentSerializer.plainText().serialize(target.displayName());
-				bestText = Component.text(name, TextColor.color(WaypointColors.of(target)));
-			}
+			double angle = angleTo(eye, locations[j]);
+			if (angle > bestAngle || !viewer.canSee(players.get(j)))
+				continue;
+			bestAngle = angle;
+			best = players.get(j);
+			bestIndex = j;
 		}
 
+		UUID target = null;
+		int distance = 0;
+		if (best != null) {
+			target = best.getUniqueId();
+			distance = (int) eye.distance(locations[bestIndex]);
+		}
 		if (deathWaypointSent.contains(viewer.getUniqueId())) {
 			Location death = PlayerCache.from(viewer).getDeathLocation();
 			if (death != null && death.getWorld() == viewer.getWorld() && angleTo(eye, death) <= bestAngle) {
-				bestKey = "death";
-				bestText = Component.text("Death location",
-						TextColor.color(WaypointColors.defaultColor(deathWaypointId(viewer))));
+				target = DEATH_TARGET;
+				distance = (int) eye.distance(death);
+				best = null;
 			}
 		}
-
-		if (bestKey == null) {
+		if (target == null) {
 			clear(viewer);
 			return;
 		}
 
+		// Re-sent when the target changes, to follow the distance (not faster than DISTANCE_TICKS),
+		// and before the action bar fades
 		Shown previous = shown.get(viewer.getUniqueId());
-		if (previous == null || !previous.key().equals(bestKey) || ticks - previous.sentAt() >= RESEND_TICKS) {
-			viewer.sendActionBar(bestText);
-			shown.put(viewer.getUniqueId(), new Shown(bestKey, ticks));
-		}
+		boolean send = previous == null || !previous.target().equals(target) || ticks - previous.sentAt() >= RESEND_TICKS
+				|| (previous.distance() != distance && ticks - previous.sentAt() >= DISTANCE_TICKS);
+		if (!send)
+			return;
+
+		// Only built when it is sent
+		Component text = best != null
+				? label(PlainTextComponentSerializer.plainText().serialize(best.displayName()),
+						TextColor.color(WaypointColors.of(best)), distance)
+				: label("Death location", TextColor.color(WaypointColors.defaultColor(deathWaypointId(viewer))), distance);
+		viewer.sendActionBar(text);
+		shown.put(viewer.getUniqueId(), new Shown(target, distance, ticks));
+	}
+
+	/** "Name - 123m", styled like the tracking boss bar. */
+	private static Component label(String name, TextColor color, int distance) {
+		return Component.text(name, color)
+				.append(Component.text(" - ", NamedTextColor.DARK_GRAY))
+				.append(Component.text(distance + "m", NamedTextColor.GOLD));
 	}
 
 	/** Horizontal angle between where the player looks and the target, in degrees. */

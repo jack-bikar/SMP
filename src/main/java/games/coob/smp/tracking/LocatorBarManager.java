@@ -166,19 +166,32 @@ public final class LocatorBarManager {
      * Whether the locator bar is allowed in this world (Allowed_Environements setting).
      */
     public static boolean isAllowedIn(World world) {
-        // One value or several separated by commas, e.g. "normal, nether"
-        for (String allowed : Settings.LocatorSection.ALLOWED_ENVIRONEMENTS.toLowerCase(Locale.ROOT).split(",")) {
-            boolean match = switch (allowed.trim()) {
-                case "all" -> true;
-                case "normal", "overworld" -> world.getEnvironment() == World.Environment.NORMAL;
-                case "nether" -> world.getEnvironment() == World.Environment.NETHER;
-                case "the end", "the_end", "end" -> world.getEnvironment() == World.Environment.THE_END;
-                default -> false;
-            };
-            if (match)
-                return true;
+        // Asked every few ticks: parsed again only when the setting changes (/smp reload)
+        String setting = Settings.LocatorSection.ALLOWED_ENVIRONEMENTS;
+        if (!setting.equals(parsedSetting)) {
+            allowedEnvironments = parseEnvironments(setting);
+            parsedSetting = setting;
         }
-        return false;
+        return allowedEnvironments.contains(world.getEnvironment());
+    }
+
+    private static String parsedSetting;
+    private static java.util.Set<World.Environment> allowedEnvironments = java.util.EnumSet.noneOf(World.Environment.class);
+
+    /** One value or several separated by commas, e.g. "normal, nether". */
+    private static java.util.Set<World.Environment> parseEnvironments(String setting) {
+        java.util.Set<World.Environment> allowed = java.util.EnumSet.noneOf(World.Environment.class);
+        for (String value : setting.toLowerCase(Locale.ROOT).split(",")) {
+            switch (value.trim()) {
+                case "all" -> allowed.addAll(java.util.EnumSet.allOf(World.Environment.class));
+                case "normal", "overworld" -> allowed.add(World.Environment.NORMAL);
+                case "nether" -> allowed.add(World.Environment.NETHER);
+                case "the end", "the_end", "end" -> allowed.add(World.Environment.THE_END);
+                default -> {
+                }
+            }
+        }
+        return allowed;
     }
 
     /**

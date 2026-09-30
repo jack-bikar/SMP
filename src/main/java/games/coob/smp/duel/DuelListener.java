@@ -17,16 +17,16 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -35,7 +35,6 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
-import java.util.List;
 
 /**
  * Handles duel-related events.
@@ -121,7 +120,7 @@ public final class DuelListener implements Listener {
 			return;
 
 		event.setCancelled(true);
-		Player killer = event instanceof EntityDamageByEntityEvent byEntity ? getAttacker(byEntity.getDamager()) : null;
+		Entity killer = event instanceof EntityDamageByEntityEvent byEntity ? getKiller(byEntity.getDamager()) : null;
 		DuelManager.getInstance().handlePlayerDeath(victim, killer);
 	}
 
@@ -239,6 +238,54 @@ public final class DuelListener implements Listener {
 	// Arena tracking (for cleanup)
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Duelists only build inside their arena, and nobody else can build in an
+	 * arena while a duel uses it.
+	 */
+	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+	public void onBlockPlaceGuard(final BlockPlaceEvent event) {
+		if (!canChange(event.getPlayer(), event.getBlock().getLocation()))
+			event.setCancelled(true);
+	}
+
+	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+	public void onBucketEmptyGuard(final PlayerBucketEmptyEvent event) {
+		if (!canChange(event.getPlayer(), event.getBlock().getLocation()))
+			event.setCancelled(true);
+	}
+
+	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+	public void onBucketFillGuard(final PlayerBucketFillEvent event) {
+		if (!canChange(event.getPlayer(), event.getBlock().getLocation()))
+			event.setCancelled(true);
+	}
+
+	/** Water or lava scooped up from the arena is put back afterwards. */
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onBucketFill(final PlayerBucketFillEvent event) {
+		ActiveDuel duel = DuelManager.getInstance().getDuelAt(event.getBlock().getLocation());
+		if (duel != null)
+			duel.trackChangedBlock(event.getBlock());
+	}
+
+	/**
+	 * Whether a player may change the block here, telling them why not.
+	 * Players outside a duel can't touch its arena; duelists can't build outside it.
+	 */
+	private static boolean canChange(Player player, Location location) {
+		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
+		ActiveDuel here = DuelManager.getInstance().getDuelAt(location.getWorld(), location.getX(), location.getZ());
+		if (here != null && here != duel) {
+			ColorUtil.sendMessage(player, "&cA duel is taking place here.");
+			return false;
+		}
+		if (duel != null && duel.isInArena() && !duel.arenaContains(location)) {
+			ColorUtil.sendMessage(player, "&cYou can only change blocks inside the arena.");
+			return false;
+		}
+		return true;
+	}
+
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onBlockPlace(final BlockPlaceEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
@@ -265,40 +312,42 @@ public final class DuelListener implements Listener {
 	}
 
 	/**
-	 * Explosions (TNT, crystals, anchors) can't damage admin-built arenas while
-	 * a duel is using them; blocks placed during the duel can still be blown up.
-	 */
-	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-	public void onEntityExplode(final EntityExplodeEvent event) {
-		protectArenas(event.blockList());
-	}
-
-	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-	public void onBlockExplode(final BlockExplodeEvent event) {
-		protectArenas(event.blockList());
-	}
-
-	private static void protectArenas(List<Block> blocks) {
-		for (ActiveDuel duel : DuelManager.getInstance().getActiveDuels()) {
-			if (duel.getArena() == null || !duel.getArena().created())
-				continue;
-			blocks.removeIf(block -> duel.arenaContains(block.getLocation()) && !duel.isPlacedBlock(block.getLocation()));
-		}
-	}
-
-	/**
-	 * In admin-built arenas, only blocks placed during the duel can be broken.
+	 * Breaking blocks during a duel:
+	 * <ul>
+	 * <li>Blocks made during the duel break normally.</li>
+	 * <li>In admin-built arenas nothing else can be broken.</li>
+	 * <li>In natural arenas terrain can be broken, but drops nothing and comes
+	 * back after the duel. Chests and other block entities can't be broken.</li>
+	 * </ul>
 	 */
 	@EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
 	public void onBlockBreak(final BlockBreakEvent event) {
 		Player player = event.getPlayer();
-		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
+		Block block = event.getBlock();
+		if (!canChange(player, block.getLocation())) {
+			event.setCancelled(true);
+			return;
+		}
 
-		if (duel != null && duel.getArena() != null && duel.getArena().created()
-				&& !duel.isPlacedBlock(event.getBlock().getLocation())) {
+		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
+		if (duel == null || duel.getArena() == null || !duel.arenaContains(block.getLocation())
+				|| duel.isDuelMade(block.getLocation()))
+			return;
+
+		if (duel.getArena().created()) {
 			event.setCancelled(true);
 			ColorUtil.sendMessage(player, "&cYou cannot break arena blocks!");
+			return;
 		}
+		if (block.getState(false) instanceof TileState) {
+			event.setCancelled(true);
+			ColorUtil.sendMessage(player, "&cYou can't break that during a duel.");
+			return;
+		}
+
+		duel.trackChangedBlock(block);
+		event.setDropItems(false);
+		event.setExpToDrop(0);
 	}
 
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -316,6 +365,17 @@ public final class DuelListener implements Listener {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
 		if (duel != null && duel.isInArena())
 			duel.trackSpawnedEntity(event.getEntity().getUniqueId());
+	}
+
+	/** The player behind a hit, or the duel mob (or the duel mob that shot the arrow). */
+	private static Entity getKiller(Entity damager) {
+		Player player = getAttacker(damager);
+		if (player != null)
+			return player;
+		Entity mob = damager instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter
+				? shooter
+				: damager;
+		return DuelManager.getInstance().getDuelOfMob(mob) != null ? mob : null;
 	}
 
 	private static Player getAttacker(Entity damager) {

@@ -9,6 +9,7 @@ import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
@@ -20,14 +21,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Vector;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -41,6 +44,8 @@ public final class DeathChestRegistry extends ConfigFile {
 	public static final String BODY = "BODY";
 
 	private Map<String, DeathChest> chests;
+	/** How many entries are chest blocks rather than bodies. */
+	private int chestBlocks;
 
 	private DeathChestRegistry() {
 		super("death-chests.yml");
@@ -49,6 +54,7 @@ public final class DeathChestRegistry extends ConfigFile {
 	@Override
 	protected void onLoad() {
 		chests = new HashMap<>();
+		chestBlocks = 0;
 
 		ConfigurationSection section = getConfig().getConfigurationSection("Chests");
 		if (section != null) {
@@ -57,16 +63,20 @@ public final class DeathChestRegistry extends ConfigFile {
 				if (data == null)
 					continue;
 				try {
+					String items = data.getString("Items");
 					DeathChest chest = new DeathChest(
 							data.getString("World"),
 							data.getInt("X"), data.getInt("Y"), data.getInt("Z"),
 							UUID.fromString(data.getString("Owner")),
 							data.getString("Owner_Name", "Unknown"),
 							materialOr(data.getString("Material")),
-							InventorySerialization.fromBase64(data.getString("Items")),
+							InventorySerialization.fromBase64(items),
 							data.getString("Skin.Value"), data.getString("Skin.Signature"),
-							(float) data.getDouble("Yaw"), poseOr(data.getString("Pose")));
+							(float) data.getDouble("Yaw"), poseOr(data.getString("Pose")), placementOf(data));
+					chest.primeSavedItems(items);
 					chests.put(chest.getKey(), chest);
+					if (!chest.isBody())
+						chestBlocks++;
 				} catch (Exception e) {
 					SMPPlugin.getInstance().getLogger().log(Level.WARNING, "Skipping unreadable death chest " + id, e);
 				}
@@ -94,6 +104,12 @@ public final class DeathChestRegistry extends ConfigFile {
 				getConfig().set(path + "Skin.Signature", chest.getSkinSignature());
 				getConfig().set(path + "Yaw", chest.getYaw());
 				getConfig().set(path + "Pose", chest.getPose().name());
+				BodyPlacement placement = chest.getPlacement();
+				getConfig().set(path + "Body.X", placement.x());
+				getConfig().set(path + "Body.Y", placement.y());
+				getConfig().set(path + "Body.Z", placement.z());
+				getConfig().set(path + "Body.Body_Yaw", placement.bodyYaw());
+				getConfig().set(path + "Body.Pitch", placement.pitch());
 			}
 			getConfig().set(path + "Items", chest.encodedItems());
 		}
@@ -112,13 +128,15 @@ public final class DeathChestRegistry extends ConfigFile {
 		}
 
 		return register(new DeathChest(block.getWorld().getName(), block.getX(), block.getY(), block.getZ(),
-				ownerId, ownerName, material, items, null, null, 0, Pose.STANDING));
+				ownerId, ownerName, material, items, null, null, 0, Pose.STANDING, null));
 	}
 
 	/**
-	 * Lays the player's body down at the block (no block is placed) holding the items.
+	 * Lays the player's body down (no block is placed) holding the items.
+	 *
+	 * @param placement where and how the body lies, from {@link BodyPlacer}
 	 */
-	public DeathChest createBody(Block spot, Player owner, ItemStack[] items) {
+	public DeathChest createBody(World world, BodyPlacement placement, Player owner, ItemStack[] items) {
 		String skinValue = null;
 		String skinSignature = null;
 		for (ProfileProperty property : owner.getPlayerProfile().getProperties()) {
@@ -128,17 +146,60 @@ public final class DeathChestRegistry extends ConfigFile {
 			}
 		}
 
-		ThreadLocalRandom random = ThreadLocalRandom.current();
-		Pose pose = random.nextBoolean() ? Pose.SLEEPING : Pose.SWIMMING;
-		return register(new DeathChest(spot.getWorld().getName(), spot.getX(), spot.getY(), spot.getZ(),
-				owner.getUniqueId(), owner.getName(), null, items, skinValue, skinSignature,
-				random.nextFloat() * 360f - 180f, pose));
+		// The body's middle names the spot (two bodies can't share one)
+		Vector center = placement.center();
+		int x = (int) Math.floor(center.getX());
+		int y = (int) Math.floor(center.getY() + 0.01);
+		int z = (int) Math.floor(center.getZ());
+		return register(new DeathChest(world.getName(), x, y, z, owner.getUniqueId(), owner.getName(), null, items,
+				skinValue, skinSignature, placement.bodyYaw(), placement.pose(), placement));
+	}
+
+	/**
+	 * A check for whether a new body near {@code death} would lie on another
+	 * one, or its spot is already used. Only bodies close by are compared.
+	 */
+	public Predicate<BodyPlacement> takenNear(Location death) {
+		World world = death.getWorld();
+		// Worked out once: thousands of placements may be checked against them
+		List<Vector[]> nearby = new ArrayList<>();
+		for (DeathChest chest : chests.values()) {
+			if (chest.getPlacement() == null || !chest.getWorldName().equals(world.getName()))
+				continue;
+			Vector center = chest.getPlacement().center();
+			if (Math.abs(center.getX() - death.getX()) < 6 && Math.abs(center.getZ() - death.getZ()) < 6
+					&& Math.abs(center.getY() - death.getY()) < 6)
+				nearby.add(chest.getPlacement().axis());
+		}
+		return placement -> {
+			Vector[] axis = placement.axis();
+			if (!nearby.isEmpty()) {
+				for (Vector[] other : nearby) {
+					if (BodyPlacement.axesOverlap(axis, other))
+						return true;
+				}
+			}
+			Vector center = placement.center();
+			return chests.containsKey(DeathChest.key(world.getName(), (int) Math.floor(center.getX()),
+					(int) Math.floor(center.getY() + 0.01), (int) Math.floor(center.getZ())));
+		};
+	}
+
+	/** Saved exact body position, or null for bodies saved before it existed. */
+	private static BodyPlacement placementOf(ConfigurationSection data) {
+		if (!data.isSet("Body.X"))
+			return null;
+		return new BodyPlacement(data.getDouble("Body.X"), data.getDouble("Body.Y"), data.getDouble("Body.Z"),
+				(float) data.getDouble("Body.Body_Yaw", data.getDouble("Yaw")),
+				(float) data.getDouble("Body.Pitch"), poseOr(data.getString("Pose")));
 	}
 
 	/** Null if that spot is already taken (the caller lets the items drop normally). */
 	private DeathChest register(DeathChest chest) {
 		if (chests.putIfAbsent(chest.getKey(), chest) != null)
 			return null;
+		if (!chest.isBody())
+			chestBlocks++;
 		try {
 			chest.ensureEntities();
 		} catch (RuntimeException e) {
@@ -172,9 +233,17 @@ public final class DeathChestRegistry extends ConfigFile {
 	 * @param dropItems drop what is still inside at the chest location
 	 */
 	public void remove(DeathChest chest, boolean dropItems) {
+		if (removeWithoutSaving(chest, dropItems))
+			save();
+	}
+
+	/** {@link #remove} without the save, for removing several at once. */
+	private boolean removeWithoutSaving(DeathChest chest, boolean dropItems) {
 		// Already removed (e.g. two viewers closed it at once)
 		if (!chests.remove(chest.getKey(), chest))
-			return;
+			return false;
+		if (!chest.isBody())
+			chestBlocks--;
 		chest.removeEntities();
 
 		for (HumanEntity viewer : new ArrayList<>(chest.getInventory().getViewers()))
@@ -192,8 +261,7 @@ public final class DeathChestRegistry extends ConfigFile {
 		Block block = chest.isBody() ? null : chest.getBlock();
 		if (block != null && chest.isLoaded() && block.getType() == chest.getMaterial())
 			block.setType(Material.AIR);
-
-		save();
+		return true;
 	}
 
 	public DeathChest get(Block block) {
@@ -228,14 +296,17 @@ public final class DeathChestRegistry extends ConfigFile {
 	 * whose block was removed by something other than a player (e.g. WorldEdit).
 	 */
 	public void tick() {
+		boolean removed = false;
 		for (DeathChest chest : getChests()) {
 			// One bad entry mustn't stop the others from showing
 			try {
-				if (!chest.isLoaded())
+				if (!chest.isLoaded()) {
+					chest.forgetUnloadedEntities();
 					continue;
+				}
 
 				if (!chest.isBody() && chest.getBlock().getType() != chest.getMaterial()) {
-					remove(chest, true);
+					removed |= removeWithoutSaving(chest, true);
 					continue;
 				}
 				chest.ensureEntities();
@@ -243,6 +314,19 @@ public final class DeathChestRegistry extends ConfigFile {
 				SMPPlugin.getInstance().getLogger().log(Level.WARNING, "Problem with death chest " + chest.getKey(), e);
 			}
 		}
+		if (removed)
+			save();
+	}
+
+	/** Chests (not bodies) that are real blocks: explosions only need checking when there are some. */
+	public boolean hasChestBlocks() {
+		return chestBlocks > 0;
+	}
+
+	/** Every chest's items in one file: built in the background, it can be megabytes after a while. */
+	@Override
+	protected boolean isSerializedInBackground() {
+		return true;
 	}
 
 	/**
@@ -294,9 +378,10 @@ public final class DeathChestRegistry extends ConfigFile {
 
 				DeathChest chest = new DeathChest(location.getWorld().getName(), location.getBlockX(),
 						location.getBlockY(), location.getBlockZ(), owner, ownerName != null ? ownerName : "Unknown",
-						Material.CHEST, items, null, null, 0, Pose.STANDING);
+						Material.CHEST, items, null, null, 0, Pose.STANDING, null);
 				if (!chest.isEmpty()) {
 					chests.put(chest.getKey(), chest);
+					chestBlocks++;
 					imported++;
 				}
 			} catch (Exception ignored) {

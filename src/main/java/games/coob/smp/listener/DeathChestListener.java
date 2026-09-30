@@ -1,6 +1,8 @@
 package games.coob.smp.listener;
 
 import games.coob.smp.duel.DuelManager;
+import games.coob.smp.model.BodyPlacement;
+import games.coob.smp.model.BodyPlacer;
 import games.coob.smp.model.DeathChest;
 import games.coob.smp.model.DeathChestRegistry;
 import games.coob.smp.settings.Settings;
@@ -34,7 +36,9 @@ import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntityTeleportEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -53,9 +57,6 @@ public final class DeathChestListener implements Listener {
 
 	/** How far up from the death spot we look for room to place the chest. */
 	private static final int MAX_SEARCH_UP = 8;
-	/** Spots tried for a body, the death spot first. */
-	private static final int[][] NEARBY = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, -1 },
-			{ 1, -1 }, { -1, 1 } };
 
 	public static DeathChestListener getInstance() {
 		return instance;
@@ -82,16 +83,21 @@ public final class DeathChestListener implements Listener {
 
 		final Player player = event.getEntity();
 		final boolean useBody = Settings.DeathStorageSection.USE_BODY;
-		final Block block = useBody ? findBodySpot(player.getLocation()) : findChestSpot(player.getLocation());
-		if (block == null)
-			return; // No room (or fell into the void), items drop normally
+		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
+		final World world = player.getWorld();
+		// The body comes to rest in the most natural way the spot allows (lying, sitting, floating)
+		final BodyPlacement placement = useBody
+				? BodyPlacer.find(player.getLocation(), registry.takenNear(player.getLocation()))
+				: null;
+		final Block block = useBody ? null : findChestSpot(player.getLocation());
+		if (useBody ? placement == null : block == null)
+			return; // Fell into the void, or no room for a chest: items drop normally
 
 		// A chest holds at most 54 stacks; anything beyond that drops normally
 		final int stored = Math.min(items.size(), 54);
 		final ItemStack[] storedItems = items.subList(0, stored).toArray(new ItemStack[0]);
-		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
 		final DeathChest chest = useBody
-				? registry.createBody(block, player, storedItems)
+				? registry.createBody(world, placement, player, storedItems)
 				: registry.create(block, player.getUniqueId(), player.getName(), storedItems);
 		if (chest == null)
 			return; // Spot taken after all: items drop normally
@@ -126,57 +132,6 @@ public final class DeathChestListener implements Listener {
 				return block;
 		}
 		return null;
-	}
-
-	/**
-	 * Where the body lies: on the ground below the death spot (never inside a
-	 * wall, and floating on top of lava rather than in it). Null for deaths in
-	 * the void.
-	 */
-	private Block findBodySpot(final Location location) {
-		final World world = location.getWorld();
-		final int minY = world.getMinHeight();
-		final int maxY = world.getMaxHeight() - 2;
-		if (location.getY() < minY)
-			return null;
-
-		final int x = location.getBlockX();
-		final int z = location.getBlockZ();
-		int y = Math.clamp(location.getBlockY(), minY, maxY);
-
-		// Out of walls, lava and portals
-		for (int i = 0; i < MAX_SEARCH_UP && y < maxY; i++) {
-			Block block = world.getBlockAt(x, y, z);
-			if (!block.getType().isSolid() && block.getType() != Material.LAVA && !blocksBody(block))
-				break;
-			y++;
-		}
-		// Down to the ground (or the surface of water/lava); the column is in a loaded chunk
-		final int fallStart = y;
-		while (y > minY) {
-			Block below = world.getBlockAt(x, y - 1, z);
-			if (below.getType().isSolid() || below.isLiquid())
-				break;
-			y--;
-		}
-		if (y <= minY)
-			y = fallStart; // Nothing below (e.g. over the void in the End): stay where they died
-
-		// Two bodies can't share a spot, and bodies stay off portals and pressure plates
-		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-		for (int[] offset : NEARBY) {
-			Block spot = world.getBlockAt(x + offset[0], y, z + offset[1]);
-			if (!registry.isDeathChest(spot) && !blocksBody(spot))
-				return spot;
-		}
-		return null; // No room: items drop normally
-	}
-
-	/** Blocks a body must not lie in: portals would carry it away, plates and tripwires would stay pressed. */
-	private static boolean blocksBody(Block block) {
-		Material type = block.getType();
-		return type == Material.NETHER_PORTAL || type == Material.END_PORTAL || type == Material.END_GATEWAY
-				|| type == Material.TRIPWIRE || org.bukkit.Tag.PRESSURE_PLATES.isTagged(type);
 	}
 
 	// -------------------------------------------------------------------------
@@ -314,9 +269,25 @@ public final class DeathChestListener implements Listener {
 		return item == null || item.isEmpty();
 	}
 
+	/** Anything done in an open death chest may change it (taking, moving, shift-clicking items in). */
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onChestClick(final InventoryClickEvent event) {
+		if (event.getView().getTopInventory().getHolder(false) instanceof DeathChest chest)
+			chest.markTouched();
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onChestDrag(final InventoryDragEvent event) {
+		if (event.getView().getTopInventory().getHolder(false) instanceof DeathChest chest)
+			chest.markTouched();
+	}
+
 	@EventHandler
 	public void onInventoryClose(final InventoryCloseEvent event) {
 		if (!(event.getInventory().getHolder(false) instanceof DeathChest chest))
+			return;
+		// Only looked: nothing to save
+		if (!chest.takeTouched())
 			return;
 
 		chest.markDirty();
@@ -404,14 +375,14 @@ public final class DeathChestListener implements Listener {
 	@EventHandler(ignoreCancelled = true)
 	public void onEntityExplode(final EntityExplodeEvent event) {
 		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-		if (!registry.isEmpty())
+		if (registry.hasChestBlocks())
 			event.blockList().removeIf(registry::isChestBlock);
 	}
 
 	@EventHandler(ignoreCancelled = true)
 	public void onBlockExplode(final BlockExplodeEvent event) {
 		final DeathChestRegistry registry = DeathChestRegistry.getInstance();
-		if (!registry.isEmpty())
+		if (registry.hasChestBlocks())
 			event.blockList().removeIf(registry::isChestBlock);
 	}
 }

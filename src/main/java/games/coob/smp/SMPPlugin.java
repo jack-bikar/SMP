@@ -12,9 +12,11 @@ import games.coob.smp.command.TpCommand;
 import games.coob.smp.command.TrackCommand;
 import games.coob.smp.config.ConfigFile;
 import games.coob.smp.duel.ArenaCommand;
+import games.coob.smp.duel.DuelArenaListener;
 import games.coob.smp.duel.DuelCommand;
 import games.coob.smp.duel.DuelListener;
 import games.coob.smp.duel.DuelManager;
+import games.coob.smp.duel.DuelMobListener;
 import games.coob.smp.duel.DuelQueueManager;
 import games.coob.smp.duel.TeamDuelManager;
 import games.coob.smp.duel.model.ArenaRegistry;
@@ -91,6 +93,8 @@ public final class SMPPlugin extends JavaPlugin {
                 DeathChestListener.getInstance(),
                 CombatListener.getInstance(),
                 DuelListener.getInstance(),
+                DuelMobListener.getInstance(),
+                DuelArenaListener.getInstance(),
                 MenuListener.getInstance(),
                 VanillaLocator.getInstance(),
                 NicknameManager.getInstance(),

@@ -61,12 +61,12 @@ public final class NickCommand implements CommandExecutor, TabCompleter {
 		}
 
 		NicknameManager manager = NicknameManager.getInstance();
-		Nickname nickname = manager.get(player);
-
 		if (args.length == 0) {
 			new NickMenu(player).displayTo(player);
 			return true;
 		}
+		// Only now: get() creates an entry, which a plain /nick shouldn't
+		Nickname nickname = manager.get(player);
 
 		switch (args[0].toLowerCase(Locale.ROOT)) {
 			case "color", "colour" -> {

@@ -15,6 +15,7 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.TextDisplay;
@@ -23,6 +24,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Vector;
 import org.jspecify.annotations.NonNull;
 
 import java.util.UUID;
@@ -42,6 +44,7 @@ public final class DeathChest implements InventoryHolder {
 	/** The body's click box: lying bodies have a tiny hitbox of their own. */
 	private static final float CLICK_BOX_WIDTH = 2.4f;
 	private static final float CLICK_BOX_HEIGHT = 0.7f;
+	private static final float SITTING_CLICK_BOX_WIDTH = 1.4f;
 
 	private final String worldName;
 	private final int x;
@@ -58,18 +61,26 @@ public final class DeathChest implements InventoryHolder {
 	private final String skinSignature;
 	private final float yaw;
 	private final Pose pose;
+	/** Exactly where and how the body lies; null for chests and bodies saved before placements existed. */
+	private final BodyPlacement placement;
 
 	/** Encoded contents from the last save; re-encoded only after the contents change. */
 	private String savedItems;
 	private boolean dirty = true;
+	/** Clicked in since it was last closed (so closing without taking anything needs no save). */
+	private boolean touched;
+	/** When mounting the seat last failed (another plugin cancelled it): don't retry every tick. */
+	private long seatFailedAt;
 
 	// Non-persistent entities; respawned whenever the chunk is loaded
 	private TextDisplay hologram;
 	private Mannequin body;
+	/** Invisible entity a sitting body rides on. */
+	private ItemDisplay seat;
 	private Interaction clickBox;
 
 	DeathChest(String worldName, int x, int y, int z, UUID ownerId, String ownerName, Material material,
-			ItemStack[] items, String skinValue, String skinSignature, float yaw, Pose pose) {
+			ItemStack[] items, String skinValue, String skinSignature, float yaw, Pose pose, BodyPlacement placement) {
 		this.worldName = worldName;
 		this.x = x;
 		this.y = y;
@@ -81,6 +92,7 @@ public final class DeathChest implements InventoryHolder {
 		this.skinSignature = skinSignature;
 		this.yaw = yaw;
 		this.pose = pose;
+		this.placement = placement != null || material != null ? placement : legacyPlacement(x, y, z, yaw, pose);
 
 		int size = Math.clamp((items.length + 8) / 9 * 9, 9, 54);
 		this.inventory = Bukkit.createInventory(this, size,
@@ -125,7 +137,23 @@ public final class DeathChest implements InventoryHolder {
 	}
 
 	public Location getDropLocation() {
+		if (placement != null) {
+			Vector center = placement.center();
+			return new Location(getWorld(), center.getX(), center.getY() + 0.5, center.getZ());
+		}
 		return new Location(getWorld(), x + 0.5, y + 0.5, z + 0.5);
+	}
+
+	/** Middle of the body at ground level, or null for a chest. */
+	public Vector getBodyCenter() {
+		return placement != null ? placement.center() : null;
+	}
+
+	/** Bodies from before placements were worked out: on the back or face down at the block's centre. */
+	private static BodyPlacement legacyPlacement(int x, int y, int z, float yaw, Pose pose) {
+		Pose lying = pose == Pose.SWIMMING ? Pose.SWIMMING : Pose.SLEEPING;
+		double lift = lying == Pose.SLEEPING ? 0.12 : 0.0;
+		return new BodyPlacement(x + 0.5, y + lift, z + 0.5, yaw, 0, lying);
 	}
 
 	public boolean isEmpty() {
@@ -135,6 +163,36 @@ public final class DeathChest implements InventoryHolder {
 	/** Call after the contents changed (claimed, looted). */
 	public void markDirty() {
 		dirty = true;
+	}
+
+	/** The encoded contents it was loaded from: no need to encode them again until they change. */
+	void primeSavedItems(String encoded) {
+		savedItems = encoded;
+		dirty = encoded == null;
+	}
+
+	/** Someone clicked in the open chest (maybe took or moved something). */
+	public void markTouched() {
+		touched = true;
+	}
+
+	/** Whether anyone clicked in it since the last call. */
+	public boolean takeTouched() {
+		boolean was = touched;
+		touched = false;
+		return was;
+	}
+
+	/** Drops references to entities that went away with an unloaded chunk, so they can be freed. */
+	void forgetUnloadedEntities() {
+		if (hologram != null && !hologram.isValid())
+			hologram = null;
+		if (body != null && !body.isValid())
+			body = null;
+		if (seat != null && !seat.isValid())
+			seat = null;
+		if (clickBox != null && !clickBox.isValid())
+			clickBox = null;
 	}
 
 	/** The contents for saving; encoding every item is slow, so it is cached until something changes. */
@@ -160,8 +218,12 @@ public final class DeathChest implements InventoryHolder {
 			spawnHologram(world);
 
 		if (isBody()) {
-			if (body == null || !body.isValid())
+			boolean seated = !placement.isSitting() || (seat != null && seat.isValid() && seat.getPassengers().contains(body))
+					|| System.currentTimeMillis() - seatFailedAt < 30_000;
+			if (body == null || !body.isValid() || !seated) {
+				removeBody();
 				spawnBody(world);
+			}
 			if (clickBox == null || !clickBox.isValid())
 				spawnClickBox(world);
 		}
@@ -169,8 +231,14 @@ public final class DeathChest implements InventoryHolder {
 
 	private void spawnHologram(World world) {
 		String text = Settings.DeathStorageSection.HOLOGRAM_TEXT.replace("{player}", ownerName);
-		double height = isBody() ? 0.9 : 1.3;
-		hologram = world.spawn(new Location(world, x + 0.5, y + height, z + 0.5), TextDisplay.class, display -> {
+		Location location;
+		if (isBody()) {
+			Vector center = placement.center();
+			location = new Location(world, center.getX(), center.getY() + placement.topAboveCenter() + 0.5, center.getZ());
+		} else {
+			location = new Location(world, x + 0.5, y + 1.3, z + 0.5);
+		}
+		hologram = world.spawn(location, TextDisplay.class, display -> {
 			display.text(ColorUtil.toComponent(text));
 			display.setBillboard(Display.Billboard.CENTER);
 			display.setPersistent(false);
@@ -181,14 +249,14 @@ public final class DeathChest implements InventoryHolder {
 	}
 
 	private void spawnBody(World world) {
-		// Lying on the back sits slightly above the ground, like a player in bed
-		double lift = pose == Pose.SLEEPING ? 0.12 : 0.0;
-		Location location = new Location(world, x + 0.5, y + lift, z + 0.5, yaw, 0);
+		Location location = placement.location(world);
+		// A sitting body rides an invisible seat; standing is the pose that looks seated while riding
+		Pose modelPose = placement.isSitting() ? Pose.STANDING : placement.pose();
 
+		// Spawned facing its body yaw: clients take the body's direction from the yaw it appears with
 		body = world.spawn(location, Mannequin.class, mannequin -> {
 			mannequin.setProfile(buildProfile());
-			mannequin.setPose(pose, true);
-			mannequin.setRotation(yaw, 0);
+			mannequin.setPose(modelPose, true);
 			mannequin.setDescription(null);
 			mannequin.setImmovable(true);
 			mannequin.setGravity(false);
@@ -201,14 +269,35 @@ public final class DeathChest implements InventoryHolder {
 			mannequin.setPortalCooldown(Integer.MAX_VALUE);
 			mannequin.getPersistentDataContainer().set(ENTITY_KEY, PersistentDataType.STRING, getKey());
 		});
+
+		if (placement.isSitting()) {
+			seat = world.spawn(new Location(world, placement.x(), placement.y(), placement.z(), placement.bodyYaw(), 0),
+					ItemDisplay.class, display -> {
+						display.setPersistent(false);
+						display.getPersistentDataContainer().set(ENTITY_KEY, PersistentDataType.STRING, getKey());
+					});
+			if (!seat.addPassenger(body))
+				seatFailedAt = System.currentTimeMillis();
+		}
 		updateBodyArmour();
 	}
 
+	private void removeBody() {
+		if (body != null)
+			body.remove();
+		if (seat != null)
+			seat.remove();
+		body = null;
+		seat = null;
+	}
+
 	private void spawnClickBox(World world) {
-		Location location = new Location(world, x + 0.5, y, z + 0.5);
+		Vector center = placement.center();
+		Location location = new Location(world, center.getX(), center.getY(), center.getZ());
+		boolean sitting = placement.isSitting();
 		clickBox = world.spawn(location, Interaction.class, interaction -> {
-			interaction.setInteractionWidth(CLICK_BOX_WIDTH);
-			interaction.setInteractionHeight(CLICK_BOX_HEIGHT);
+			interaction.setInteractionWidth(sitting ? SITTING_CLICK_BOX_WIDTH : CLICK_BOX_WIDTH);
+			interaction.setInteractionHeight(sitting ? (float) BodyShape.SIT_HEIGHT : CLICK_BOX_HEIGHT);
 			interaction.setResponsive(true);
 			interaction.setPersistent(false);
 			interaction.getPersistentDataContainer().set(ENTITY_KEY, PersistentDataType.STRING, getKey());
@@ -254,12 +343,13 @@ public final class DeathChest implements InventoryHolder {
 	}
 
 	void removeEntities() {
-		for (Entity entity : new Entity[] { hologram, body, clickBox }) {
+		for (Entity entity : new Entity[] { hologram, body, seat, clickBox }) {
 			if (entity != null)
 				entity.remove();
 		}
 		hologram = null;
 		body = null;
+		seat = null;
 		clickBox = null;
 	}
 }

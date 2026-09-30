@@ -169,14 +169,43 @@ Duel:
   Arena_Mode: "RANDOM"
 
   # Team duels (2v2, 3v3, ...). Open the setup menu with /duel team, or /duel and click Team Duel.
+  # The lobby leader can pick a format (e.g. 1v3 or 2v4) and add mobs to either team.
   Teams:
     Enabled: true
     # Largest team allowed (4 means up to 4v4)
     Max_Team_Size: 4
     # How long an invitation to a team duel stays valid
     Invite_Timeout_Seconds: 60
-    # Allow starting with uneven teams, e.g. 2v1
+    # Allow starting an open lobby with uneven teams, e.g. 2v1.
+    # A format the leader picked (like 1v3) can always start once both teams are full.
     Allow_Uneven_Teams: false
+
+    # Mobs that fight for a team. They attack the other team (players and mobs), never their own.
+    # The duel still ends when all players of a team are out, whatever mobs are left.
+    Mobs:
+      Enabled: true
+      # Most mobs one team can have
+      Max_Per_Team: 8
+      # Mobs the leader can choose from (entity names, e.g. ZOMBIE or IRON_GOLEM)
+      Allowed:
+        - "ZOMBIE"
+        - "HUSK"
+        - "DROWNED"
+        - "SKELETON"
+        - "STRAY"
+        - "BOGGED"
+        - "SPIDER"
+        - "CAVE_SPIDER"
+        - "CREEPER"
+        - "WITCH"
+        - "VINDICATOR"
+        - "PILLAGER"
+        - "PIGLIN_BRUTE"
+        - "WITHER_SKELETON"
+        - "RAVAGER"
+        - "IRON_GOLEM"
+        - "SNOW_GOLEM"
+        - "WOLF"
 
   # Arena border: a fixed square vanilla world border that only the duelists see.
   # Players who get outside are pushed back in and take damage.
@@ -224,8 +253,11 @@ Duel:
   Max_Fight_Minutes: 10
 
   # Cleanup settings (what happens after duel ends)
+  # Duels can't grief the world: fire doesn't spread or burn, lava and water can't flow out of
+  # the arena, and explosions don't reach outside it. Terrain broken, blown up or flooded during a
+  # duel drops nothing and is always put back afterwards, whatever the settings below say.
   Cleanup:
-    # Remove blocks placed during the duel
+    # Remove blocks placed during the duel (lava, water and fire are always removed)
     Remove_Placed_Blocks: true
     # Give items thrown on the ground during the fight back to whoever threw them
     Remove_Dropped_Items: true

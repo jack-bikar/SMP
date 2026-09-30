@@ -21,6 +21,8 @@ public record DuelArena(Location center, Location spawn1, Location spawn2, Strin
 	private static final int TEAMMATE_SPACING = 2;
 	/** Teammate positions along the line, nearest first in both directions. */
 	private static final int[] OFFSETS = { 3, -3, 6, -6, 2, -2, 4, -4, 5, -5, 7, -7, 8, -8, 1, -1 };
+	/** How far behind its team a side's mobs line up. */
+	private static final int MOB_DISTANCE_BEHIND = 3;
 
 	public DuelArena {
 		center = center.clone();
@@ -43,12 +45,44 @@ public record DuelArena(Location center, Location spawn1, Location spawn2, Strin
 	 */
 	public List<Location> spots(DuelSide side, int count) {
 		Location base = spawn(side);
+		List<Location> spots = line(base, across(side), count);
+		while (spots.size() < count)
+			spots.add(base.clone());
+		return spots;
+	}
+
+	/**
+	 * Spots for a side's mobs: a line a few blocks behind the team, facing the
+	 * other team. When there aren't enough safe spots, mobs share them.
+	 */
+	public List<Location> mobSpots(DuelSide side, int count) {
+		Location base = spawn(side);
+		Vector back = base.toVector().subtract(spawn(side.other()).toVector()).setY(0);
+		if (back.lengthSquared() > 1.0E-6) {
+			Location behind = safeSpot(base.clone().add(back.normalize().multiply(MOB_DISTANCE_BEHIND)));
+			if (behind != null)
+				base = behind;
+		}
+
+		List<Location> line = line(base, across(side), count);
+		List<Location> spots = new ArrayList<>(count);
+		for (int i = 0; i < count; i++)
+			spots.add(line.get(i % line.size()).clone());
+		return spots;
+	}
+
+	/** Horizontal direction along a side's line, at right angles to the other team. */
+	private Vector across(DuelSide side) {
+		Location base = spawn(side);
 		Location other = spawn(side.other());
 		Vector across = new Vector(-(other.getZ() - base.getZ()), 0, other.getX() - base.getX());
 		if (across.lengthSquared() < 1.0E-6)
 			across = new Vector(1, 0, 0);
-		across.normalize();
+		return across.normalize();
+	}
 
+	/** Up to {@code count} safe spots on a line through {@code base}, starting with base itself. */
+	private static List<Location> line(Location base, Vector across, int count) {
 		List<Location> spots = new ArrayList<>(count);
 		spots.add(base.clone());
 		Set<Long> used = new HashSet<>();
@@ -61,8 +95,6 @@ public record DuelArena(Location center, Location spawn1, Location spawn2, Strin
 			if (spot != null && used.add(blockKey(spot)))
 				spots.add(spot);
 		}
-		while (spots.size() < count)
-			spots.add(base.clone());
 		return spots;
 	}
 
