@@ -47,6 +47,13 @@ public abstract class ConfigFile {
 	 * reads the newest data instead of the old file.
 	 */
 	private static final Map<String, PendingWrite> PENDING = new ConcurrentHashMap<>();
+	/**
+	 * One lock per file (not per object: a player's file can have a new cache
+	 * object while an old write is still queued). Deciding whether a queued
+	 * write is still the newest and writing it happen under it, so an older
+	 * background write can never land after a newer {@link #saveNow()}.
+	 */
+	private static final Map<String, Object> FILE_LOCKS = new ConcurrentHashMap<>();
 
 	protected final File file;
 	protected FileConfiguration config;
@@ -174,12 +181,18 @@ public abstract class ConfigFile {
 		final String key = file.getAbsolutePath();
 		PENDING.put(key, pending);
 		WRITER.execute(() -> {
-			// A newer save of this file is queued after this one and will write instead
-			if (PENDING.get(key) != pending)
-				return;
-			write(pending.data());
-			PENDING.remove(key, pending);
+			synchronized (lockFor(key)) {
+				// A newer save of this file came after this one and writes (or wrote) instead
+				if (PENDING.get(key) != pending)
+					return;
+				write(pending.data());
+				PENDING.remove(key, pending);
+			}
 		});
+	}
+
+	private static Object lockFor(String key) {
+		return FILE_LOCKS.computeIfAbsent(key, k -> new Object());
 	}
 
 	/**
@@ -221,7 +234,15 @@ public abstract class ConfigFile {
 	public void saveNow() {
 		saveScheduled = false;
 		onSave();
-		write(config.saveToString());
+		final String key = file.getAbsolutePath();
+		final String data = config.saveToString();
+		final PendingWrite newest = new PendingWrite(() -> data);
+		synchronized (lockFor(key)) {
+			// Makes any older save still queued for this file skip itself
+			PENDING.put(key, newest);
+			write(data);
+			PENDING.remove(key, newest);
+		}
 	}
 
 	/**

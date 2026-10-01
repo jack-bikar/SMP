@@ -31,6 +31,10 @@ public final class TeamLobby {
 	/** Team sizes the leader picked, e.g. 1 and 3 for a 1v3. 0 means open: any size up to the max. */
 	private int redSize;
 	private int blueSize;
+	/** Everyone fights with a kit instead of their own gear. */
+	@Getter
+	@Setter
+	private boolean kits;
 	/** Mobs that fight for each side: type -> how many, in the order they were added. */
 	private final Map<DuelSide, Map<EntityType, Integer>> mobs = new EnumMap<>(DuelSide.class);
 
@@ -90,6 +94,11 @@ public final class TeamLobby {
 
 	public boolean isFull() {
 		return isTeamFull(DuelSide.RED) && isTeamFull(DuelSide.BLUE);
+	}
+
+	/** Free spots on both teams together. */
+	public int openSpots() {
+		return Math.max(0, getMaxSize(DuelSide.RED) - size(DuelSide.RED)) + Math.max(0, getMaxSize(DuelSide.BLUE) - size(DuelSide.BLUE));
 	}
 
 	/** The side a new player should join: the one with the most open spots (red on a tie). */

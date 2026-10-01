@@ -1,0 +1,150 @@
+# -------------------------------------------------------------------------------------------------
+# Duel kits
+#
+# When a duel has kits turned on (the lobby leader or the challenger turns them on in /duel),
+# every player picks one of these while the duel is being prepared. Anyone who hasn't picked in
+# time (Duel.Kits.Choose_Seconds in settings.yml) gets a random kit.
+#
+# Players' own items, XP and effects are stored and given back after the duel. Kit items never
+# leave the duel: containers can't be used during a kit duel, and kit items found anywhere else
+# are removed.
+#
+# The kits are balanced like rock-paper-scissors: each is strong against some and weak against
+# others, and none is better overall.
+#
+# Items:   "<item> [amount] [enchantment:level ...] [potion:<type>]"
+#          e.g. "iron_sword 1 sharpness:1", "arrow 24", "splash_potion 2 potion:strong_healing"
+# Effects: "<effect>:<level>:<seconds>" given when the fight starts, e.g. "speed:1:30"
+# Names use the Minecraft ids (the ones used in commands).
+# /smp reload reloads this file.
+# -------------------------------------------------------------------------------------------------
+Kits:
+
+  # Sword and shield. The shield stops arrows, but an axe hit disables it, and fire gets past it.
+  # Strong against: Archer, Scout.  Weak against: Berserker, Alchemist, Pyromancer.
+  knight:
+    Name: "&f&lKnight"
+    Icon: shield
+    Description:
+      - "&7Sword and shield, full iron."
+      - "&aStrong vs: &7Archer, Scout"
+      - "&cWeak vs: &7Berserker, Alchemist, Pyromancer"
+    Helmet: iron_helmet
+    Chestplate: iron_chestplate
+    Leggings: iron_leggings
+    Boots: iron_boots
+    Offhand: shield
+    Items:
+      - "iron_sword 1 sharpness:1"
+      - "golden_apple 1"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+  # Hits hard and breaks shields, but has lighter armour and no shield of its own.
+  # Strong against: Knight, Scout.  Weak against: Archer, Alchemist, Pyromancer.
+  berserker:
+    Name: "&c&lBerserker"
+    Icon: diamond_axe
+    Description:
+      - "&7Heavy axe that disables shields."
+      - "&aStrong vs: &7Knight, Scout"
+      - "&cWeak vs: &7Archer, Alchemist, Pyromancer"
+    Helmet: iron_helmet
+    Chestplate: chainmail_chestplate
+    Leggings: iron_leggings
+    Boots: iron_boots
+    Items:
+      - "diamond_axe 1 sharpness:1"
+      - "golden_apple 2"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+  # Fights from range; weak up close.
+  # Strong against: Berserker, Alchemist, Pyromancer.  Weak against: Knight, Scout.
+  archer:
+    Name: "&a&lArcher"
+    Icon: bow
+    Description:
+      - "&7Bow and arrows, keeps its distance."
+      - "&aStrong vs: &7Berserker, Alchemist, Pyromancer"
+      - "&cWeak vs: &7Knight, Scout"
+    Helmet: chainmail_helmet
+    Chestplate: iron_chestplate
+    Leggings: chainmail_leggings
+    Boots: chainmail_boots
+    Items:
+      - "bow 1 power:1"
+      - "arrow 24"
+      - "stone_sword 1"
+      - "golden_apple 1"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+  # Weakens and slows melee fighters, heals itself with potions instead of golden apples.
+  # Strong against: Knight, Berserker.  Weak against: Archer, Scout.
+  alchemist:
+    Name: "&d&lAlchemist"
+    Icon: splash_potion
+    Description:
+      - "&7Healing, weakness and slowness potions."
+      - "&aStrong vs: &7Knight, Berserker"
+      - "&cWeak vs: &7Archer, Scout"
+    Helmet: golden_helmet
+    Chestplate: iron_chestplate
+    Leggings: iron_leggings
+    Boots: golden_boots
+    Items:
+      - "iron_sword 1"
+      - "splash_potion 2 potion:strong_healing"
+      - "splash_potion 1 potion:weakness"
+      - "splash_potion 1 potion:slowness"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+  # Fast and hard to pin down: speed, ender pearls and a fishing rod to pull enemies close.
+  # Strong against: Archer, Alchemist, Pyromancer.  Weak against: Knight, Berserker.
+  scout:
+    Name: "&b&lScout"
+    Icon: ender_pearl
+    Description:
+      - "&7Speed potion, pearls and a fishing rod."
+      - "&aStrong vs: &7Archer, Alchemist, Pyromancer"
+      - "&cWeak vs: &7Knight, Berserker"
+    Helmet: leather_helmet
+    Chestplate: iron_chestplate
+    Leggings: chainmail_leggings
+    Boots: iron_boots 1 feather_falling:2
+    Items:
+      - "iron_sword 1 sharpness:1"
+      - "ender_pearl 3"
+      - "potion 1 potion:swiftness"
+      - "fishing_rod 1"
+      - "golden_apple 1"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+  # Takes space with lava and flint and steel; a fire resistance potion keeps it safe in its own
+  # flames. Light armour and a plain sword: it loses when it can't make enemies come to it.
+  # Strong against: Knight, Berserker.  Weak against: Archer, Scout.  Even with: Alchemist.
+  pyromancer:
+    Name: "&6&lPyromancer"
+    Icon: lava_bucket
+    Description:
+      - "&7Lava bucket, flint and steel, fire resistance."
+      - "&aStrong vs: &7Knight, Berserker"
+      - "&cWeak vs: &7Archer, Scout"
+    Helmet: golden_helmet
+    Chestplate: chainmail_chestplate
+    Leggings: chainmail_leggings
+    Boots: golden_boots
+    Items:
+      - "iron_sword 1"
+      - "lava_bucket 1"
+      - "flint_and_steel 1"
+      - "potion 1 potion:fire_resistance"
+      - "golden_apple 1"
+      - "cooked_beef 16"
+      - "cobblestone 16"
+
+# Do not change this value.
+Version: 2

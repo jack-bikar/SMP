@@ -211,6 +211,14 @@ Duel:
         - "SNOW_GOLEM"
         - "WOLF"
 
+  # Kit duels: everyone fights with a kit from duel-kits.yml instead of their own gear. The lobby
+  # leader (or, for a 1v1 challenge, the challenger) turns kits on in /duel. Players' own items are
+  # kept safe and given back after the duel.
+  Kits:
+    Enabled: true
+    # Time to pick a kit when the duel starts; anyone who hasn't picked by then gets a random one
+    Choose_Seconds: 15
+
   # Arena border: a fixed square vanilla world border that only the duelists see.
   # Players who get outside are pushed back in and take damage.
   Border:

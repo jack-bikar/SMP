@@ -31,6 +31,7 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 			boolean locatorBar = Settings.LocatorSection.ENABLE_LOCATOR_BAR;
 			Settings.loadSettings();
 			DeathMessages.getInstance().reload();
+			games.coob.smp.duel.kit.DuelKits.getInstance().reload();
 			if (Settings.LocatorSection.ENABLE_LOCATOR_BAR != locatorBar) {
 				// Switching between the vanilla bar and custom tracking needs a clean start for every player
 				Settings.LocatorSection.ENABLE_LOCATOR_BAR = locatorBar;

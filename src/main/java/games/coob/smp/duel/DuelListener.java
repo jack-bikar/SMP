@@ -1,6 +1,7 @@
 package games.coob.smp.duel;
 
 import games.coob.smp.PlayerCache;
+import games.coob.smp.duel.kit.KitStash;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
 import games.coob.smp.util.SchedulerUtil;
@@ -69,7 +70,20 @@ public final class DuelListener implements Listener {
 	public void onPlayerJoin(final PlayerJoinEvent event) {
 		Player player = event.getPlayer();
 		PlayerCache cache = PlayerCache.from(player);
-		if (!cache.hasDuelReturn() || DuelManager.getInstance().isInDuel(player))
+		if (DuelManager.getInstance().isInDuel(player))
+			return;
+
+		// Left (or the server crashed) during a kit duel: their own gear instead of the kit,
+		// and no kit item may stay anywhere on them
+		SchedulerUtil.runLater(1, () -> {
+			if (!player.isOnline() || DuelManager.getInstance().isInDuel(player))
+				return;
+			KitStash.restore(player);
+			KitStash.removeKitItems(player.getInventory());
+			KitStash.removeKitItems(player.getEnderChest());
+		});
+
+		if (!cache.hasDuelReturn())
 			return;
 
 		Location location = cache.getDuelReturnLocation();
@@ -161,7 +175,8 @@ public final class DuelListener implements Listener {
 		if (duel == null)
 			return;
 
-		if (!duel.isFighting() || Settings.DuelSection.LOOT_MODE == Settings.DuelSection.LootMode.KEEP_INVENTORY) {
+		// Kit duels never drop anything: it's only the kit, and their own gear is stored
+		if (!duel.isFighting() || duel.isKits() || Settings.DuelSection.LOOT_MODE == Settings.DuelSection.LootMode.KEEP_INVENTORY) {
 			event.setKeepInventory(true);
 			event.setKeepLevel(true);
 			event.getDrops().clear();
@@ -191,6 +206,11 @@ public final class DuelListener implements Listener {
 		cache.setDuelReturn(null, null);
 		if (duel != null)
 			duel.markReturned(player);
+		// Their own gear instead of the kit
+		SchedulerUtil.runLater(1, () -> {
+			if (player.isOnline() && !DuelManager.getInstance().isInDuel(player))
+				KitStash.restore(player);
+		});
 
 		if (gameMode != null) {
 			SchedulerUtil.runLater(1, () -> {
@@ -207,7 +227,8 @@ public final class DuelListener implements Listener {
 	public void onPlayerTeleport(final PlayerTeleportEvent event) {
 		Player player = event.getPlayer();
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
-		if (duel == null || !duel.isInArena())
+		// Also while landed and waiting (for the others, or for kits)
+		if (duel == null || !duel.hasArrived(player))
 			return;
 
 		switch (event.getCause()) {
@@ -279,7 +300,7 @@ public final class DuelListener implements Listener {
 			ColorUtil.sendMessage(player, "&cA duel is taking place here.");
 			return false;
 		}
-		if (duel != null && duel.isInArena() && !duel.arenaContains(location)) {
+		if (duel != null && duel.hasArrived(player) && !duel.arenaContains(location)) {
 			ColorUtil.sendMessage(player, "&cYou can only change blocks inside the arena.");
 			return false;
 		}
@@ -289,7 +310,7 @@ public final class DuelListener implements Listener {
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onBlockPlace(final BlockPlaceEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
-		if (duel != null && duel.isInArena())
+		if (duel != null && duel.hasArrived(event.getPlayer()))
 			duel.trackPlacedBlock(event.getBlockReplacedState(), event.getPlayer());
 	}
 
@@ -297,7 +318,7 @@ public final class DuelListener implements Listener {
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onBucketEmpty(final PlayerBucketEmptyEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
-		if (duel != null && duel.isInArena())
+		if (duel != null && duel.hasArrived(event.getPlayer()))
 			duel.trackPlacedBlock(event.getBlock().getState(), event.getPlayer());
 	}
 
@@ -307,7 +328,7 @@ public final class DuelListener implements Listener {
 		if (event.getPlayer() == null)
 			return;
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
-		if (duel != null && duel.isInArena())
+		if (duel != null && duel.hasArrived(event.getPlayer()))
 			duel.trackSpawnedEntity(event.getEntity().getUniqueId());
 	}
 
@@ -353,7 +374,8 @@ public final class DuelListener implements Listener {
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onItemDrop(final PlayerDropItemEvent event) {
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(event.getPlayer());
-		if (duel != null && duel.isFighting())
+		// Kit items are tracked from the moment the kits are given, so none are left behind
+		if (duel != null && (duel.isFighting() || (duel.isKits() && duel.isInArena())))
 			duel.trackDroppedItem(event.getItemDrop().getUniqueId());
 	}
 
@@ -363,7 +385,7 @@ public final class DuelListener implements Listener {
 			return;
 
 		ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
-		if (duel != null && duel.isInArena())
+		if (duel != null && duel.hasArrived(player))
 			duel.trackSpawnedEntity(event.getEntity().getUniqueId());
 	}
 

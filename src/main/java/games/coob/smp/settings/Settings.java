@@ -316,6 +316,10 @@ public final class Settings extends ConfigFile {
 		public static int TEAM_INVITE_TIMEOUT_SECONDS;
 		public static boolean ALLOW_UNEVEN_TEAMS;
 
+		// Kit duels
+		public static boolean KITS_ENABLED;
+		public static int KIT_CHOOSE_SECONDS;
+
 		// Mobs that fight for a team
 		public static boolean MOBS_ENABLED;
 		public static int MAX_MOBS_PER_TEAM;
@@ -364,6 +368,10 @@ public final class Settings extends ConfigFile {
 			MAX_TEAM_SIZE = Math.clamp(config.getInt("Duel.Teams.Max_Team_Size", 4), 1, 10);
 			TEAM_INVITE_TIMEOUT_SECONDS = Math.max(5, config.getInt("Duel.Teams.Invite_Timeout_Seconds", 60));
 			ALLOW_UNEVEN_TEAMS = config.getBoolean("Duel.Teams.Allow_Uneven_Teams", false);
+
+			// Kits
+			KITS_ENABLED = config.getBoolean("Duel.Kits.Enabled", true);
+			KIT_CHOOSE_SECONDS = Math.clamp(config.getInt("Duel.Kits.Choose_Seconds", 15), 5, 120);
 
 			// Team mobs
 			MOBS_ENABLED = config.getBoolean("Duel.Teams.Mobs.Enabled", true);

@@ -16,8 +16,12 @@ public class DuelRequest {
 	private final String targetName;
 	private final long timestamp;
 	private final long expiryTime;
+	/** Both players fight with a kit instead of their own gear. */
+	private final boolean kits;
 
-	public DuelRequest(UUID challengerId, String challengerName, UUID targetId, String targetName, int timeoutSeconds) {
+	public DuelRequest(UUID challengerId, String challengerName, UUID targetId, String targetName, int timeoutSeconds,
+			boolean kits) {
+		this.kits = kits;
 		this.challengerId = challengerId;
 		this.challengerName = challengerName;
 		this.targetId = targetId;

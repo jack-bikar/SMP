@@ -1,5 +1,6 @@
 package games.coob.smp.duel;
 
+import games.coob.smp.PlayerCache;
 import games.coob.smp.SMPPlugin;
 import games.coob.smp.combat.CombatPunishmentManager;
 import games.coob.smp.combat.CombatTracker;
@@ -62,6 +63,8 @@ public final class DuelManager {
 	private final Set<ActiveDuel> protectedArenas = ConcurrentHashMap.newKeySet();
 	/** Team mobs of every duel -> their duel. */
 	private final Map<UUID, ActiveDuel> duelMobs = new ConcurrentHashMap<>();
+	/** Players who send their 1v1 challenges with kits. */
+	private final Set<UUID> kitChallengers = ConcurrentHashMap.newKeySet();
 
 	private DuelManager() {
 	}
@@ -70,6 +73,11 @@ public final class DuelManager {
 	 * Sends a duel request from challenger to target.
 	 */
 	public void sendRequest(Player challenger, Player target) {
+		sendRequest(challenger, target, wantsKits(challenger));
+	}
+
+	/** Sends a duel request, with kits if {@code kits}. */
+	public void sendRequest(Player challenger, Player target, boolean kits) {
 		if (!Settings.DuelSection.ENABLE_DUELS) {
 			ColorUtil.sendMessage(challenger, "&cDuels are currently disabled.");
 			return;
@@ -101,10 +109,11 @@ public final class DuelManager {
 		}
 
 		DuelRequest request = new DuelRequest(challengerId, challenger.getName(), targetId, target.getName(),
-				Settings.DuelSection.REQUEST_TIMEOUT_SECONDS);
+				Settings.DuelSection.REQUEST_TIMEOUT_SECONDS, kits && kitsAvailable());
 		pendingRequests.put(targetId, request);
 
-		ColorUtil.sendMessage(challenger, "&aYou sent a duel request to &e" + target.getName() + "&a.");
+		ColorUtil.sendMessage(challenger, "&aYou sent a " + (request.isKits() ? "kit " : "") + "duel request to &e"
+				+ target.getName() + "&a.");
 
 		Component acceptButton = Component.text("[ACCEPT]", NamedTextColor.GREEN)
 				.hoverEvent(HoverEvent.showText(Component.text("Click to accept the duel")))
@@ -114,7 +123,8 @@ public final class DuelManager {
 				.clickEvent(ClickEvent.runCommand("/duel deny " + challenger.getName()));
 		target.sendMessage(Component.text()
 				.append(Component.text(challenger.getName(), NamedTextColor.YELLOW))
-				.append(Component.text(" has challenged you to a duel! ", NamedTextColor.GOLD))
+				.append(Component.text(" has challenged you to a " + (request.isKits() ? "kit duel" : "duel") + "! ",
+						NamedTextColor.GOLD))
 				.append(acceptButton)
 				.append(Component.text(" "))
 				.append(denyButton)
@@ -158,8 +168,14 @@ public final class DuelManager {
 			ColorUtil.sendMessage(accepter, "&cThe challenger is no longer online.");
 			return;
 		}
+		// Accepted as a kit duel ("your own items are kept safe"): never start it without kits
+		if (request.isKits() && !kitsAvailable()) {
+			ColorUtil.sendMessage(accepter, "&cKit duels are turned off right now, so this kit duel can't start.");
+			ColorUtil.sendMessage(challenger, "&c" + accepter.getName() + " accepted, but kit duels are turned off right now.");
+			return;
+		}
 
-		startDuel(challenger, accepter);
+		startDuel(challenger, accepter, request.isKits());
 	}
 
 	/**
@@ -188,7 +204,12 @@ public final class DuelManager {
 	 * Starts a 1v1 duel (from an accepted request or the queue).
 	 */
 	public void startDuel(Player challenger, Player opponent) {
-		startDuel(List.of(challenger), List.of(opponent));
+		startDuel(challenger, opponent, false);
+	}
+
+	/** A 1v1, with kits if {@code kits} (and kits are enabled). */
+	public void startDuel(Player challenger, Player opponent, boolean kits) {
+		startDuel(List.of(challenger), List.of(opponent), Map.of(), kits);
 	}
 
 	/**
@@ -209,6 +230,17 @@ public final class DuelManager {
 	 * @return false if the duel couldn't start (players were told why)
 	 */
 	public boolean startDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs) {
+		return startDuel(red, blue, mobs, false);
+	}
+
+	/**
+	 * Starts a duel between two teams, with mobs fighting for either side, and
+	 * kits if {@code kits} (and kits are enabled and there are any).
+	 *
+	 * @return false if the duel couldn't start (players were told why)
+	 */
+	public boolean startDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs,
+			boolean kits) {
 		List<Player> everyone = new ArrayList<>(red);
 		everyone.addAll(blue);
 
@@ -217,6 +249,8 @@ public final class DuelManager {
 					: isInDuel(player) ? player.getName() + " is already in a duel."
 							: player.isDead() ? player.getName() + " needs to respawn first."
 									: CombatTracker.isInCombat(player) ? player.getName() + " is in combat right now."
+											: kits && PlayerCache.from(player).hasKitStash()
+													? player.getName() + " still has items waiting from an earlier kit duel (an admin can help)."
 											: CombatPunishmentManager.isPvpLocked(player) ? player.getName() + " is locked out of PvP."
 													: player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR
 															? player.getName() + " needs to be in survival mode."
@@ -234,12 +268,14 @@ public final class DuelManager {
 			removeRequestsInvolving(player.getUniqueId());
 		}
 
-		ActiveDuel duel = new ActiveDuel(red, blue, mobs);
+		ActiveDuel duel = new ActiveDuel(red, blue, mobs, kits && kitsAvailable());
 		activeDuels.put(duel.getDuelId(), duel);
 		for (Player player : everyone) {
 			playerToDuel.put(player.getUniqueId(), duel.getDuelId());
 			ColorUtil.sendMessage(player, "&aDuel starting! Preparing the arena...");
 		}
+		// Kit duels: everyone picks while the arena is prepared
+		duel.startKitSelection();
 
 		CompletableFuture<DuelArena> search;
 		try {
@@ -427,6 +463,24 @@ public final class DuelManager {
 	/** Duels whose arena is still protected (including ones waiting for cleanup). */
 	public Collection<ActiveDuel> getProtectedDuels() {
 		return Collections.unmodifiableCollection(protectedArenas);
+	}
+
+	/** Kit duels can be played (turned on in settings.yml and duel-kits.yml has kits). */
+	public static boolean kitsAvailable() {
+		return Settings.DuelSection.KITS_ENABLED && !games.coob.smp.duel.kit.DuelKits.getInstance().isEmpty();
+	}
+
+	/** Whether this player's 1v1 challenges come with kits (their choice in /duel). */
+	public boolean wantsKits(Player player) {
+		return kitsAvailable() && kitChallengers.contains(player.getUniqueId());
+	}
+
+	public void setWantsKits(Player player, boolean kits) {
+		if (kits) {
+			kitChallengers.add(player.getUniqueId());
+		} else {
+			kitChallengers.remove(player.getUniqueId());
+		}
 	}
 
 	/** Whether any arena is protected right now (most events can stop here). */

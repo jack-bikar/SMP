@@ -67,6 +67,15 @@ public final class PlayerCache extends ConfigFile {
 
 	private GameMode duelReturnGameMode;
 
+	/**
+	 * The player's own items, XP and effects while a duel kit replaces them. Kept
+	 * on disk until they are given back, so a disconnect or crash can't lose them.
+	 */
+	private String kitStashItems;
+	private int kitStashLevel;
+	private float kitStashExp;
+	private List<Map<String, Object>> kitStashEffects = new ArrayList<>();
+
 	private PlayerCache(final String name, final UUID uniqueId) {
 		super("players/" + uniqueId + ".yml");
 
@@ -126,6 +135,17 @@ public final class PlayerCache extends ConfigFile {
 			}
 		}
 
+		this.kitStashItems = section.getString("Duel_Kit_Stash.Items");
+		this.kitStashLevel = section.getInt("Duel_Kit_Stash.Level");
+		this.kitStashExp = (float) section.getDouble("Duel_Kit_Stash.Exp");
+		this.kitStashEffects = new ArrayList<>();
+		for (Map<?, ?> effect : section.getMapList("Duel_Kit_Stash.Effects")) {
+			Map<String, Object> copy = new java.util.LinkedHashMap<>();
+			for (Map.Entry<?, ?> entry : effect.entrySet())
+				copy.put(String.valueOf(entry.getKey()), entry.getValue());
+			kitStashEffects.add(copy);
+		}
+
 		if (migrated)
 			save();
 	}
@@ -170,6 +190,14 @@ public final class PlayerCache extends ConfigFile {
 		long now = System.currentTimeMillis();
 		getConfig().set("PvP_Lockout_Expiry", pvpLockoutExpiry < 0 || pvpLockoutExpiry > now ? pvpLockoutExpiry : null);
 		getConfig().set("Debuff_Expiry", debuffExpiry < 0 || debuffExpiry > now ? debuffExpiry : null);
+
+		getConfig().set("Duel_Kit_Stash", null);
+		if (kitStashItems != null) {
+			getConfig().set("Duel_Kit_Stash.Items", kitStashItems);
+			getConfig().set("Duel_Kit_Stash.Level", kitStashLevel);
+			getConfig().set("Duel_Kit_Stash.Exp", kitStashExp);
+			getConfig().set("Duel_Kit_Stash.Effects", kitStashEffects);
+		}
 
 		getConfig().set("Duel_Return", null);
 		if (duelReturnLocation != null) {
@@ -221,6 +249,44 @@ public final class PlayerCache extends ConfigFile {
 
 	public boolean hasDuelReturn() {
 		return duelReturnLocation != null;
+	}
+
+	/** Whether the player's own gear is stored because a duel kit replaced it. */
+	public boolean hasKitStash() {
+		return kitStashItems != null;
+	}
+
+	public String getKitStashItems() {
+		return kitStashItems;
+	}
+
+	public int getKitStashLevel() {
+		return kitStashLevel;
+	}
+
+	public float getKitStashExp() {
+		return kitStashExp;
+	}
+
+	public List<Map<String, Object>> getKitStashEffects() {
+		return kitStashEffects;
+	}
+
+	/** Stores the player's own gear, written to disk before this returns. */
+	public void setKitStash(String items, int level, float exp, List<Map<String, Object>> effects) {
+		this.kitStashItems = items;
+		this.kitStashLevel = level;
+		this.kitStashExp = exp;
+		this.kitStashEffects = new ArrayList<>(effects);
+		saveNow();
+	}
+
+	public void clearKitStash() {
+		this.kitStashItems = null;
+		this.kitStashLevel = 0;
+		this.kitStashExp = 0;
+		this.kitStashEffects = new ArrayList<>();
+		saveNow();
 	}
 
 	// -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 package games.coob.smp.duel;
 
 import games.coob.smp.duel.model.DuelStatistics;
+import games.coob.smp.menu.DuelKitMenu;
 import games.coob.smp.menu.DuelMenu;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.util.ColorUtil;
@@ -120,6 +121,14 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 					ColorUtil.sendMessage(player, "&cYou are not in a duel return countdown.");
 				}
 			}
+			case "kit", "kits" -> {
+				ActiveDuel duel = DuelManager.getInstance().getActiveDuel(player);
+				if (duel == null || !duel.isChoosingKits()) {
+					ColorUtil.sendMessage(player, "&cYou can only pick a kit while a kit duel is starting.");
+				} else {
+					new DuelKitMenu(player, duel).displayTo(player);
+				}
+			}
 			case "stats", "statistics" -> {
 				if (args.length < 2) {
 					showStats(player, player);
@@ -176,6 +185,7 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 		ColorUtil.sendMessage(player, "&e/duel start &7- Start your team duel (leader)");
 		ColorUtil.sendMessage(player, "&e/duel leave &7- Leave the queue or your team lobby");
 		ColorUtil.sendMessage(player, "&e/duel return &7- Teleport back now (after duel ends)");
+		ColorUtil.sendMessage(player, "&e/duel kit &7- Pick your kit again (kit duels)");
 		ColorUtil.sendMessage(player, "&e/duel stats [player] &7- View duel statistics");
 	}
 
@@ -246,6 +256,8 @@ public class DuelCommand implements CommandExecutor, TabCompleter {
 				completions.add("return");
 			if ("stats".startsWith(input))
 				completions.add("stats");
+			if ("kit".startsWith(input))
+				completions.add("kit");
 			if ("team".startsWith(input))
 				completions.add("team");
 			if ("invite".startsWith(input))

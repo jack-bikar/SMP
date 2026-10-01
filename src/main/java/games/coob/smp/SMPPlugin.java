@@ -19,6 +19,8 @@ import games.coob.smp.duel.DuelManager;
 import games.coob.smp.duel.DuelMobListener;
 import games.coob.smp.duel.DuelQueueManager;
 import games.coob.smp.duel.TeamDuelManager;
+import games.coob.smp.duel.kit.DuelKitListener;
+import games.coob.smp.duel.kit.DuelKits;
 import games.coob.smp.duel.model.ArenaRegistry;
 import games.coob.smp.duel.model.DuelStatistics;
 import games.coob.smp.listener.DeathChestListener;
@@ -76,6 +78,7 @@ public final class SMPPlugin extends JavaPlugin {
         NicknameManager.removeAllNameTags();
         ArenaRegistry.getInstance();
         DuelStatistics.getInstance();
+        DuelKits.getInstance();
 
         registerCommand("smp", new SMPCommand());
         InvEditCommand invEditCommand = new InvEditCommand();
@@ -94,6 +97,7 @@ public final class SMPPlugin extends JavaPlugin {
                 CombatListener.getInstance(),
                 DuelListener.getInstance(),
                 DuelMobListener.getInstance(),
+                DuelKitListener.getInstance(),
                 DuelArenaListener.getInstance(),
                 MenuListener.getInstance(),
                 VanillaLocator.getInstance(),

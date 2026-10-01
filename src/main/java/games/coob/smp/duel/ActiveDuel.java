@@ -30,6 +30,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
+import games.coob.smp.duel.kit.DuelKit;
+import games.coob.smp.duel.kit.DuelKits;
+import games.coob.smp.duel.kit.KitStash;
+import games.coob.smp.menu.DuelKitMenu;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -118,10 +122,19 @@ public final class ActiveDuel {
 	private BukkitTask restoreTask;
 	private final DuelMobs mobs;
 
-	ActiveDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs) {
+	// Kits
+	/** Everyone fights with a kit (duel-kits.yml) instead of their own gear. */
+	@Getter
+	private final boolean kits;
+	private final Map<UUID, DuelKit> kitChoices = new HashMap<>();
+	/** The time to pick is up, or everyone picked: kits can't change any more. */
+	private boolean kitsLocked;
+
+	ActiveDuel(List<Player> red, List<Player> blue, Map<DuelSide, Map<EntityType, Integer>> mobs, boolean kits) {
 		add(red, DuelSide.RED);
 		add(blue, DuelSide.BLUE);
 		this.mobs = new DuelMobs(this, mobs);
+		this.kits = kits;
 	}
 
 	private void add(List<Player> team, DuelSide side) {
@@ -158,6 +171,10 @@ public final class ActiveDuel {
 					continue;
 				tasks.add(DuelFlyDownTeleporter.descend(player, spots.get(i), () -> {
 					landed.add(player.getUniqueId());
+					// Still choosing and no kit yet (the menu may have been closed): show it again
+					if (isChoosingKits() && !kitChoices.containsKey(player.getUniqueId()) && player.isOnline()
+							&& !(player.getOpenInventory().getTopInventory().getHolder(false) instanceof DuelKitMenu))
+						new DuelKitMenu(player, this).displayTo(player);
 					checkEveryoneLanded();
 				}));
 			}
@@ -171,11 +188,116 @@ public final class ActiveDuel {
 			if (!left.contains(id) && !landed.contains(id))
 				return;
 		}
+		// Still picking kits: the countdown starts once everyone picked or the time is up
+		if (kits && !kitsLocked)
+			return;
 		startCountdown();
+	}
+
+	// -------------------------------------------------------------------------
+	// Kits
+	// -------------------------------------------------------------------------
+
+	/** Opens the kit menu for everyone and starts the time to pick (right when the duel is created). */
+	void startKitSelection() {
+		if (!kits)
+			return;
+		int seconds = Settings.DuelSection.KIT_CHOOSE_SECONDS;
+		Component reopen = Component.text("[Pick kit]", NamedTextColor.GREEN)
+				.hoverEvent(HoverEvent.showText(Component.text("Open the kit menu again")))
+				.clickEvent(ClickEvent.runCommand("/duel kit"));
+		for (Player player : onlinePlayers()) {
+			new DuelKitMenu(player, this).displayTo(player);
+			ColorUtil.sendMessage(player, "&eThis is a kit duel: pick your kit within &6" + seconds
+					+ " &eseconds, or you get a random one. Your own items are kept safe.");
+			player.sendMessage(reopen);
+		}
+		tasks.add(SchedulerUtil.runLater(20L * seconds, this::lockKits));
+	}
+
+	/** Whether players can still pick (or change) their kit. */
+	public boolean isChoosingKits() {
+		return kits && !kitsLocked && state == DuelState.PREPARING;
+	}
+
+	public DuelKit getKitChoice(Player player) {
+		return kitChoices.get(player.getUniqueId());
+	}
+
+	/** @return whether the pick counted (the time to pick may be over) */
+	public boolean chooseKit(Player player, DuelKit kit) {
+		if (!isChoosingKits() || !players.containsKey(player.getUniqueId()) || kit == null)
+			return false;
+		kitChoices.put(player.getUniqueId(), kit);
+		ColorUtil.sendMessage(player, "&aYour kit: " + kit.getDisplayName() + "&a.");
+		// Called from a menu click: closing menus and handing out kits must wait for the next tick
+		if (everyoneChoseKit())
+			SchedulerUtil.runTask(this::lockKits);
+		return true;
+	}
+
+	private boolean everyoneChoseKit() {
+		for (UUID id : players.keySet()) {
+			if (!left.contains(id) && !kitChoices.containsKey(id))
+				return false;
+		}
+		return true;
+	}
+
+	/** Everyone picked, or the time is up: whoever hasn't picked gets a random kit. */
+	private void lockKits() {
+		if (!kits || kitsLocked || state != DuelState.PREPARING)
+			return;
+		kitsLocked = true;
+		for (Player player : onlinePlayers()) {
+			if (kitChoices.containsKey(player.getUniqueId()))
+				continue;
+			DuelKit kit = DuelKits.getInstance().random();
+			if (kit == null)
+				continue;
+			kitChoices.put(player.getUniqueId(), kit);
+			ColorUtil.sendMessage(player, "&eYou didn't pick a kit in time, so you get " + kit.getDisplayName() + "&e.");
+		}
+		for (Player player : onlinePlayers()) {
+			if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof DuelKitMenu menu
+					&& menu.getDuel() == this)
+				player.closeInventory();
+		}
+		checkEveryoneLanded();
+	}
+
+	/**
+	 * Stores everyone's own gear and hands out the kits, with full health and
+	 * hunger so everyone starts even.
+	 */
+	private boolean giveKits() {
+		for (Player player : activePlayers()) {
+			DuelKit kit = kitChoices.get(player.getUniqueId());
+			if (kit == null)
+				kit = DuelKits.getInstance().random();
+			if (kit == null)
+				continue;
+			kitChoices.put(player.getUniqueId(), kit);
+			// An older copy of their gear is still waiting to be given back: a kit would wipe what they have now
+			if (!KitStash.store(player)) {
+				cancel("&cThe duel couldn't start: " + player.getName() + " still has items waiting to be given back"
+						+ " from an earlier kit duel (an admin can help).");
+				return false;
+			}
+			kit.apply(player);
+			player.setHealth(maxHealth(player));
+			player.setFoodLevel(20);
+			player.setSaturation(5);
+			player.setFireTicks(0);
+			ColorUtil.sendMessage(player, "&7You fight as " + kit.getDisplayName() + "&7.");
+		}
+		return true;
 	}
 
 	private void startCountdown() {
 		state = DuelState.COUNTDOWN;
+		if (kits && !giveKits())
+			return;
 
 		if (Settings.DuelSection.BORDER_ENABLED) {
 			border = new DuelBorder(arena.center(), arenaRadius);
@@ -224,6 +346,13 @@ public final class ActiveDuel {
 	private void startFight() {
 		state = DuelState.ACTIVE;
 		showTitle(activePlayers(), Component.text("FIGHT!", NamedTextColor.GREEN), Component.empty(), 0, 1000, 300);
+		if (kits) {
+			for (Player player : activePlayers()) {
+				DuelKit kit = kitChoices.get(player.getUniqueId());
+				if (kit != null)
+					kit.giveEffects(player);
+			}
+		}
 
 		if (!mobs.isEmpty()) {
 			mobs.activate();
@@ -254,8 +383,9 @@ public final class ActiveDuel {
 			return;
 		eliminated.add(id);
 
-		// A player who actually died already dropped their items through the death event
-		if (Settings.DuelSection.LOOT_MODE == Settings.DuelSection.LootMode.DROP_ITEMS && !victim.isDead())
+		// A player who actually died already dropped their items through the death event.
+		// Kit duels never drop anything: the items are only the kit.
+		if (!kits && Settings.DuelSection.LOOT_MODE == Settings.DuelSection.LootMode.DROP_ITEMS && !victim.isDead())
 			dropInventory(victim);
 
 		// Knocked-out players stay inside the border (as spectators) until they are sent back
@@ -405,6 +535,9 @@ public final class ActiveDuel {
 					// Counts as out, so their team can still lose once the others are knocked out
 					eliminated.add(id);
 					broadcast("&c" + player.getName() + " left the duel.");
+					// They may have been the last one still picking a kit
+					if (isChoosingKits() && everyoneChoseKit())
+						lockKits();
 					checkEveryoneLanded();
 				}
 			}
@@ -478,6 +611,9 @@ public final class ActiveDuel {
 		// Dead players are sent back when they respawn, using the saved return location
 		if (player.isDead())
 			return;
+
+		// Their own gear instead of the kit
+		KitStash.restore(player);
 
 		SavedState saved = savedStates.get(player.getUniqueId());
 		if (saved == null)
@@ -579,9 +715,10 @@ public final class ActiveDuel {
 
 	private void performCleanup(boolean immediately) {
 		try {
-			if (Settings.DuelSection.CLEANUP_REMOVE_DROPPED_ITEMS)
+			// A kit duel always cleans up: nothing from a kit may stay in the world
+			if (kits || Settings.DuelSection.CLEANUP_REMOVE_DROPPED_ITEMS)
 				returnDroppedItems();
-			if (Settings.DuelSection.CLEANUP_REMOVE_ENTITIES)
+			if (kits || Settings.DuelSection.CLEANUP_REMOVE_ENTITIES)
 				removeProjectiles();
 		} catch (RuntimeException e) {
 			SMPPlugin.getInstance().getLogger().log(Level.WARNING, "Problem cleaning up a duel's items", e);
@@ -653,8 +790,9 @@ public final class ActiveDuel {
 	private void restoreEntry(Map.Entry<Location, PlacedBlock> entry) {
 		try {
 			Block block = entry.getKey().getBlock();
-			// Placed blocks may stay if the server wants that, but never lava, water or fire
-			if (entry.getValue().placer() != null && !Settings.DuelSection.CLEANUP_REMOVE_PLACED_BLOCKS
+			// Placed blocks may stay if the server wants that, but never lava, water or fire,
+			// and nothing from a kit duel (kit blocks could be mined and kept)
+			if (entry.getValue().placer() != null && !kits && !Settings.DuelSection.CLEANUP_REMOVE_PLACED_BLOCKS
 					&& !isHazard(block.getType()))
 				return;
 			restoreBlock(block, entry.getValue());
@@ -705,6 +843,9 @@ public final class ActiveDuel {
 			}
 			container.getInventory().clear();
 			items.add(new ItemStack(block.getType()));
+			// In a kit duel everything came from the kits: nothing is handed out
+			if (kits)
+				items.clear();
 
 			Player placer = placed.placer() != null ? Bukkit.getPlayer(placed.placer()) : null;
 			for (ItemStack item : items) {
@@ -740,6 +881,12 @@ public final class ActiveDuel {
 	/** Items thrown on the ground during the fight go back to whoever threw them. */
 	private void returnDroppedItems() {
 		for (UUID id : droppedItems) {
+			// Kit items stay in the duel
+			if (kits) {
+				if (Bukkit.getEntity(id) instanceof Item item)
+					item.remove();
+				continue;
+			}
 			if (Bukkit.getEntity(id) instanceof Item item && item.isValid() && item.getThrower() != null) {
 				Player owner = Bukkit.getPlayer(item.getThrower());
 				if (owner != null) {
@@ -759,7 +906,8 @@ public final class ActiveDuel {
 			Entity entity = Bukkit.getEntity(id);
 			if (entity == null || entity instanceof Player || !entity.isValid())
 				continue;
-			if (entity instanceof AbstractArrow arrow && arrow.getPickupStatus() == AbstractArrow.PickupStatus.ALLOWED
+			// Kit arrows stay in the duel
+			if (!kits && entity instanceof AbstractArrow arrow && arrow.getPickupStatus() == AbstractArrow.PickupStatus.ALLOWED
 					&& arrow.getShooter() instanceof Player shooter && shooter.isOnline())
 				give(shooter, arrow.getItemStack());
 			entity.remove();
@@ -832,6 +980,11 @@ public final class ActiveDuel {
 
 	public void trackDroppedItem(UUID itemId) {
 		droppedItems.add(itemId);
+	}
+
+	/** Whether this item on the ground was dropped in this duel. */
+	public boolean isDroppedHere(UUID itemId) {
+		return droppedItems.contains(itemId);
 	}
 
 	public void trackSpawnedEntity(UUID entityId) {
@@ -912,6 +1065,14 @@ public final class ActiveDuel {
 		List<Player> active = onlinePlayers();
 		active.removeIf(p -> eliminated.contains(p.getUniqueId()));
 		return active;
+	}
+
+	/**
+	 * The player is at the arena: landed (maybe still waiting for the others or
+	 * for kits), or the countdown or fight is on.
+	 */
+	public boolean hasArrived(Player player) {
+		return isInArena() || (state == DuelState.PREPARING && landed.contains(player.getUniqueId()));
 	}
 
 	/** Players are building/fighting (blocks and projectiles are tracked for cleanup). */

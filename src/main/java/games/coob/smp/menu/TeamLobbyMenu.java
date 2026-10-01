@@ -42,6 +42,7 @@ public final class TeamLobbyMenu extends SimpleMenu {
 	private static final int SLOT_BLUE_MOBS = 43;
 	private static final int SLOT_INVITE = 45;
 	private static final int SLOT_BALANCE = 47;
+	private static final int SLOT_KITS = 48;
 	private static final int SLOT_START = 49;
 	private static final int SLOT_INVITES = 51;
 	private static final int SLOT_LEAVE = 53;
@@ -87,6 +88,10 @@ public final class TeamLobbyMenu extends SimpleMenu {
 		inventory.setItem(SLOT_INVITE, ItemCreator.of(Material.WRITABLE_BOOK, "&a&lInvite players",
 				"", "&7Pick from everyone online.", "&7They join the smaller team.", "", "&eClick to choose").make());
 
+		// Also shown when kits are on but no longer available, so the leader can turn them off
+		if (DuelManager.kitsAvailable() || lobby.isKits())
+			inventory.setItem(SLOT_KITS, kitsItem(leader));
+
 		inventory.setItem(SLOT_BALANCE, leader
 				? ItemCreator.of(Material.COMPARATOR, "&e&lBalance teams", "",
 						"&7Splits players by duel record", "&7so both teams are fair.", "", "&eClick to balance").make()
@@ -116,6 +121,23 @@ public final class TeamLobbyMenu extends SimpleMenu {
 				invited.toArray(new String[0])).make());
 
 		inventory.setItem(SLOT_LEAVE, ItemCreator.of(Material.BARRIER, "&c&lLeave lobby").make());
+	}
+
+	private ItemStack kitsItem(boolean leader) {
+		boolean on = lobby.isKits();
+		List<String> lore = new ArrayList<>();
+		lore.add("");
+		if (on) {
+			lore.add("&7Everyone picks a kit when the");
+			lore.add("&7duel starts (random if too slow).");
+			lore.add("&7Your own items are kept safe.");
+		} else {
+			lore.add("&7Everyone fights with their own gear.");
+		}
+		lore.add("");
+		lore.add(leader ? "&eClick to turn " + (on ? "off" : "on") : "&7Only the leader can change this.");
+		return ItemCreator.of(on ? Material.IRON_CHESTPLATE : Material.LEATHER_CHESTPLATE,
+				on ? "&a&lKits: On" : "&7&lKits: Off", lore.toArray(new String[0])).make();
 	}
 
 	private ItemStack formatItem(boolean leader) {
@@ -219,6 +241,7 @@ public final class TeamLobbyMenu extends SimpleMenu {
 				if (Settings.DuelSection.MOBS_ENABLED && lobby.isLeader(player.getUniqueId()))
 					new DuelMobsMenu(player, lobby, slot == SLOT_RED_MOBS ? DuelSide.RED : DuelSide.BLUE).displayTo(player);
 			}
+			// Stays open: invite as many players as you like, then go back
 			case SLOT_INVITE -> new PlayerPickerMenu(player, "&8Invite to team duel",
 					target -> !lobby.isMember(target.getUniqueId())
 							&& !DuelManager.getInstance().isInDuel(target),
@@ -230,9 +253,15 @@ public final class TeamLobbyMenu extends SimpleMenu {
 							return;
 						}
 						manager.invite(player, target);
-						new TeamLobbyMenu(player, lobby).displayTo(player);
 					},
-					() -> new TeamLobbyMenu(player, lobby).displayTo(player)).displayTo(player);
+					() -> new TeamLobbyMenu(player, lobby).displayTo(player))
+					.stayOpen(target -> lobby.hasInvite(target.getUniqueId()) ? "&aInvited, waiting for an answer" : null,
+							"Invite everyone", () -> lobby.getPendingInvites().size() >= lobby.openSpots())
+					.displayTo(player);
+			case SLOT_KITS -> {
+				if ((DuelManager.kitsAvailable() || lobby.isKits()) && lobby.isLeader(player.getUniqueId()))
+					manager.setKits(player, !lobby.isKits());
+			}
 			case SLOT_BALANCE -> manager.balance(player);
 			case SLOT_START -> manager.start(player);
 			case SLOT_LEAVE -> manager.leave(player, false);

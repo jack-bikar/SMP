@@ -118,8 +118,9 @@ public final class TeamDuelManager {
 		Component decline = Component.text("[DECLINE]", NamedTextColor.RED)
 				.hoverEvent(HoverEvent.showText(Component.text("Decline the invite")))
 				.clickEvent(ClickEvent.runCommand("/duel decline " + leaderName));
-		String what = lobby.hasFixedFormat() ? "a " + lobby.getTargetFormat() + " team duel. "
-				: "a team duel (" + lobby.getFormat() + " so far). ";
+		String kind = lobby.isKits() && DuelManager.kitsAvailable() ? "kit duel" : "team duel";
+		String what = lobby.hasFixedFormat() ? "a " + lobby.getTargetFormat() + " " + kind + ". "
+				: "a " + kind + " (" + lobby.getFormat() + " so far). ";
 		target.sendMessage(Component.text()
 				.append(Component.text(inviter.getName(), NamedTextColor.YELLOW))
 				.append(Component.text(" invited you to " + what, NamedTextColor.GOLD))
@@ -347,9 +348,18 @@ public final class TeamDuelManager {
 			return;
 		}
 
+		// Everyone joined a kit duel: if kits went away (turned off, duel-kits.yml emptied), say so
+		if (lobby.isKits() && !DuelManager.kitsAvailable()) {
+			lobby.setKits(false);
+			broadcast(lobby, "&cKit duels are turned off right now, so kits were turned off for this lobby."
+					+ " Start again to fight with your own gear.");
+			refresh(lobby);
+			return;
+		}
+
 		List<Player> red = onlinePlayers(lobby.getTeam(DuelSide.RED));
 		List<Player> blue = onlinePlayers(lobby.getTeam(DuelSide.BLUE));
-		if (!DuelManager.getInstance().startDuel(red, blue, allowedMobs(lobby)))
+		if (!DuelManager.getInstance().startDuel(red, blue, allowedMobs(lobby), lobby.isKits()))
 			return;
 
 		for (UUID member : lobby.getMembers()) {
@@ -363,6 +373,23 @@ public final class TeamDuelManager {
 	// -------------------------------------------------------------------------
 	// Format and mobs (leader only)
 	// -------------------------------------------------------------------------
+
+	/** Turns kits on or off for the lobby's duel. */
+	public void setKits(Player leader, boolean kits) {
+		TeamLobby lobby = leaderLobby(leader, "change the kits");
+		if (lobby == null)
+			return;
+		if (kits && !DuelManager.kitsAvailable()) {
+			ColorUtil.sendMessage(leader, "&cKit duels are turned off on this server.");
+			return;
+		}
+		if (lobby.isKits() == kits)
+			return;
+		lobby.setKits(kits);
+		broadcast(lobby, kits ? "&eKits are &aon&e: everyone picks a kit, your own items are kept safe."
+				: "&eKits are &coff&e: everyone fights with their own gear.");
+		refresh(lobby);
+	}
 
 	/**
 	 * Sets the team sizes, e.g. 1 and 3 for a 1v3. Pass 0 for both to leave the

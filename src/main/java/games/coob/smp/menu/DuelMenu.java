@@ -22,6 +22,8 @@ public final class DuelMenu extends SimpleMenu {
 	private static final int SLOT_TEAM = 12;
 	private static final int SLOT_QUEUE = 14;
 	private static final int SLOT_STATS = 16;
+	/** Kits for the 1v1 challenges this player sends. */
+	private static final int SLOT_KITS = 19;
 
 	private TeamLobby pendingInvite;
 
@@ -41,8 +43,16 @@ public final class DuelMenu extends SimpleMenu {
 					"", "&eClick to join").make());
 		}
 
+		boolean kits = DuelManager.getInstance().wantsKits(viewer);
 		inventory.setItem(SLOT_ONE_V_ONE, ItemCreator.of(Material.IRON_SWORD, "&c&l1v1 Duel",
-				"", "&7Challenge an online player.", "", "&eClick to choose").make());
+				"", "&7Challenge an online player.", kits ? "&7With kits." : "&7With your own gear.",
+				"", "&eClick to choose").make());
+		if (DuelManager.kitsAvailable())
+			inventory.setItem(SLOT_KITS, ItemCreator.of(kits ? Material.IRON_CHESTPLATE : Material.LEATHER_CHESTPLATE,
+					kits ? "&a&lKits: On" : "&7&lKits: Off",
+					"", "&7For the 1v1 challenges you send:", kits ? "&7both of you pick a kit," : "&7you both fight with",
+					kits ? "&7your own items are kept safe." : "&7your own gear.",
+					"", "&eClick to turn " + (kits ? "off" : "on")).make());
 
 		if (Settings.DuelSection.TEAMS_ENABLED) {
 			boolean inLobby = TeamDuelManager.getInstance().getLobby(viewer) != null;
@@ -91,6 +101,12 @@ public final class DuelMenu extends SimpleMenu {
 					DuelQueueManager.getInstance().leaveQueue(player);
 				} else {
 					player.performCommand("duel queue");
+				}
+			}
+			case SLOT_KITS -> {
+				if (DuelManager.kitsAvailable()) {
+					DuelManager.getInstance().setWantsKits(player, !DuelManager.getInstance().wantsKits(player));
+					render();
 				}
 			}
 			case SLOT_STATS -> {
