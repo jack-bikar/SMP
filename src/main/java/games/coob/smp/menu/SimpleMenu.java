@@ -16,8 +16,13 @@ import org.jspecify.annotations.NonNull;
  */
 public abstract class SimpleMenu implements InventoryHolder {
 
+	/** Longest gap between the two clicks of a double-click, with room for network delay. */
+	private static final long DOUBLE_CLICK_MILLIS = 350;
+
 	protected final Inventory inventory;
 	protected final Player viewer;
+	private int lastClickSlot = -1;
+	private long lastClickTime;
 
 	public SimpleMenu(Player viewer, int size, String title) {
 		this.viewer = viewer;
@@ -50,6 +55,29 @@ public abstract class SimpleMenu implements InventoryHolder {
 	}
 
 	protected abstract void onMenuClick(Player player, int slot, ItemStack clicked, ClickType clickType);
+
+	/**
+	 * Whether this left click repeats the last one on the same slot within a
+	 * double-click. The client sends a double-click as two separate clicks, so
+	 * buttons whose second press does something else (confirm, toggle back,
+	 * take the next item) ignore it. Call it on every click to keep track.
+	 */
+	protected boolean isDoubleClick(int slot, ClickType clickType) {
+		if (clickType != ClickType.LEFT)
+			return false;
+		long now = System.currentTimeMillis();
+		boolean repeat = slot == lastClickSlot && now - lastClickTime < DOUBLE_CLICK_MILLIS;
+		lastClickSlot = slot;
+		lastClickTime = now;
+		return repeat;
+	}
+
+	/**
+	 * For button menus: a click in the player's own inventory below the menu
+	 * (already cancelled). {@code slot} is the slot in the player's inventory.
+	 */
+	protected void onPlayerInventoryClick(Player player, int slot, ItemStack clicked, ClickType clickType) {
+	}
 
 	protected void onMenuClose(Player player, Inventory inventory) {
 	}

@@ -89,6 +89,8 @@ public final class Settings extends ConfigFile {
 		CombatSection.load(config);
 		TpSection.load(config);
 		DuelSection.load(config);
+		TradeSection.load(config);
+		AuctionSection.load(config);
 	}
 
 	private static boolean replaceOldDefault(FileConfiguration config, String path, Object oldDefault, Object newDefault) {
@@ -300,6 +302,40 @@ public final class Settings extends ConfigFile {
 
 		public static void load(FileConfiguration config) {
 			ENABLE_TP = config.getBoolean("TP.Enable_TP", false);
+		}
+	}
+
+	// Trading between two players
+	public static class TradeSection {
+		public static boolean ENABLED;
+		public static int REQUEST_TIMEOUT_SECONDS;
+		/** Countdown once both players are ready; 0 = swap right away. */
+		public static int CONFIRM_SECONDS;
+		/** 0 = any distance, any world. */
+		public static int MAX_DISTANCE;
+
+		public static void load(FileConfiguration config) {
+			ENABLED = config.getBoolean("Trade.Enabled", true);
+			REQUEST_TIMEOUT_SECONDS = Math.max(5, config.getInt("Trade.Request_Timeout_Seconds", 60));
+			CONFIRM_SECONDS = Math.clamp(config.getInt("Trade.Confirm_Seconds", 3), 0, 30);
+			MAX_DISTANCE = Math.max(0, config.getInt("Trade.Max_Distance", 0));
+		}
+	}
+
+	// Auction house
+	public static class AuctionSection {
+		public static boolean ENABLED;
+		/** How long a listing stays up, in milliseconds. */
+		public static long LISTING_MILLIS;
+		public static int MAX_LISTINGS_PER_PLAYER;
+		public static boolean ANNOUNCE_NEW_LISTINGS;
+
+		public static void load(FileConfiguration config) {
+			ENABLED = config.getBoolean("Auction.Enabled", true);
+			double hours = config.getDouble("Auction.Listing_Hours", 48);
+			LISTING_MILLIS = (long) (Math.max(0.1, hours) * 3_600_000L);
+			MAX_LISTINGS_PER_PLAYER = Math.clamp(config.getInt("Auction.Max_Listings_Per_Player", 5), 1, 50);
+			ANNOUNCE_NEW_LISTINGS = config.getBoolean("Auction.Announce_New_Listings", true);
 		}
 	}
 

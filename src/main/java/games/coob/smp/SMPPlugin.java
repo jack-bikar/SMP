@@ -1,5 +1,9 @@
 package games.coob.smp;
 
+import games.coob.smp.auction.AuctionCommand;
+import games.coob.smp.auction.AuctionHouse;
+import games.coob.smp.auction.AuctionListener;
+import games.coob.smp.auction.CollectionBox;
 import games.coob.smp.combat.CombatListener;
 import games.coob.smp.combat.CombatNPC;
 import games.coob.smp.combat.CombatPunishmentManager;
@@ -36,6 +40,9 @@ import games.coob.smp.model.Effects;
 import games.coob.smp.settings.Settings;
 import games.coob.smp.task.HologramTask;
 import games.coob.smp.task.LocatorTask;
+import games.coob.smp.trade.TradeCommand;
+import games.coob.smp.trade.TradeListener;
+import games.coob.smp.trade.TradeManager;
 import games.coob.smp.tracking.PortalCache;
 import games.coob.smp.tracking.TrackingRegistry;
 import games.coob.smp.tracking.VanillaLocator;
@@ -79,6 +86,7 @@ public final class SMPPlugin extends JavaPlugin {
         ArenaRegistry.getInstance();
         DuelStatistics.getInstance();
         DuelKits.getInstance();
+        AuctionHouse.getInstance();
 
         registerCommand("smp", new SMPCommand());
         InvEditCommand invEditCommand = new InvEditCommand();
@@ -89,6 +97,8 @@ public final class SMPPlugin extends JavaPlugin {
         registerCommand("duel", new DuelCommand());
         registerCommand("arena", new ArenaCommand());
         registerCommand("nick", new NickCommand());
+        registerCommand("trade", new TradeCommand());
+        registerCommand("auction", new AuctionCommand());
 
         registerEvents(
                 SMPListener.getInstance(),
@@ -102,6 +112,8 @@ public final class SMPPlugin extends JavaPlugin {
                 MenuListener.getInstance(),
                 VanillaLocator.getInstance(),
                 NicknameManager.getInstance(),
+                TradeListener.getInstance(),
+                AuctionListener.getInstance(),
                 invEditCommand);
 
         // Locator updates every 2 seconds, death chest holograms every 2 seconds
@@ -109,11 +121,16 @@ public final class SMPPlugin extends JavaPlugin {
         SchedulerUtil.runTimer(20, 40, new HologramTask());
         // Vanilla locator bar: name of the player you are facing
         SchedulerUtil.runTimer(VanillaLocator.PERIOD_TICKS, VanillaLocator.PERIOD_TICKS, VanillaLocator.getInstance());
+        // Auction listings that ran out of time give everything back
+        SchedulerUtil.runTimer(20 * 30, 20 * 30, () -> AuctionHouse.getInstance().tick());
     }
 
     @Override
     public void onDisable() {
         // Each step is guarded, so one failure can't skip the saves after it
+
+        // Nothing has moved in a running trade yet, so ending it is all it takes
+        safely("cancelling trades", () -> TradeManager.getInstance().cancelAll());
 
         // Close plugin menus first, so admin edits of offline inventories are saved
         safely("closing menus", () -> {
@@ -154,6 +171,8 @@ public final class SMPPlugin extends JavaPlugin {
         safely("saving duel stats", () -> DuelStatistics.getInstance().saveNow());
         safely("saving nicknames", () -> NicknameManager.getInstance().saveNow());
         safely("saving ghost loot", () -> GhostLootStore.getInstance().saveNow());
+        safely("saving auction house", () -> AuctionHouse.getInstance().saveNow());
+        safely("saving collection boxes", CollectionBox::saveUnsaved);
         safely("saving player data", PlayerCache::saveAllNow);
     }
 

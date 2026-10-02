@@ -277,6 +277,37 @@ Duel:
     Remove_Entities: true
 
 # -------------------------------------------------------------------------------------------------
+# Trading: /trade <player> sends a trade request. Both players click items in their inventory to
+# offer them and press Ready; the items swap only when both agree. No money, only items.
+# Offered items stay in each player's inventory until the swap, so nothing is lost if a trade is
+# cancelled or the server stops. Trading is blocked during duels and combat.
+# -------------------------------------------------------------------------------------------------
+Trade:
+  Enabled: true
+  # How long a trade request stays valid, in seconds
+  Request_Timeout_Seconds: 60
+  # Once both players are ready, wait this many seconds before swapping, so nobody can be caught
+  # out by a last-second change. Any change to either offer cancels it. 0 = swap right away.
+  Confirm_Seconds: 3
+  # Players must be in the same world and within this many blocks to trade (0 = any distance)
+  Max_Distance: 0
+
+# -------------------------------------------------------------------------------------------------
+# Auction house: /auction (or /ah). Anyone can put items up, optionally saying what they want in
+# return (/ah sell <what you want>). Anyone can make an offer of items; the seller takes the offer
+# they like best and every other offer goes back. Offered items are held safely until then.
+# Items that come back or are won wait in each player's collection box (/ah collect).
+# -------------------------------------------------------------------------------------------------
+Auction:
+  Enabled: true
+  # How long a listing stays up, in hours. When it ends, the items and all offers go back.
+  Listing_Hours: 48
+  # Most listings one player can have up at once
+  Max_Listings_Per_Player: 5
+  # Tell everyone online in chat when something new is put up
+  Announce_New_Listings: true
+
+# -------------------------------------------------------------------------------------------------
 # Do not change this value.
 # -------------------------------------------------------------------------------------------------
 Version: 4

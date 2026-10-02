@@ -39,6 +39,12 @@ public final class ItemCreator {
 		return creator;
 	}
 
+	/** Adds lines that need components (e.g. item names) under the lore given to {@link #of}. */
+	public ItemCreator lore(List<Component> lines) {
+		lore.addAll(lines);
+		return this;
+	}
+
 	public ItemCreator skullOwner(OfflinePlayer owner) {
 		this.skullOwner = owner;
 		return this;

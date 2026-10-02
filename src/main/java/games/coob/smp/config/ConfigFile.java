@@ -228,10 +228,12 @@ public abstract class ConfigFile {
 	}
 
 	/**
-	 * Save the configuration file immediately on the calling thread.
-	 * Use on plugin disable.
+	 * Save the configuration file immediately on the calling thread: on plugin
+	 * disable, or when the data must be on disk before going on.
+	 *
+	 * @return whether the file was written (a failure is logged)
 	 */
-	public void saveNow() {
+	public boolean saveNow() {
 		saveScheduled = false;
 		onSave();
 		final String key = file.getAbsolutePath();
@@ -240,8 +242,9 @@ public abstract class ConfigFile {
 		synchronized (lockFor(key)) {
 			// Makes any older save still queued for this file skip itself
 			PENDING.put(key, newest);
-			write(data);
+			boolean written = write(data);
 			PENDING.remove(key, newest);
+			return written;
 		}
 	}
 
@@ -249,7 +252,7 @@ public abstract class ConfigFile {
 	 * Writes to a temporary file and swaps it in, so a crash mid-write never
 	 * leaves a half-written (truncated) file behind.
 	 */
-	private synchronized void write(String data) {
+	private synchronized boolean write(String data) {
 		try {
 			file.getParentFile().mkdirs();
 			Path target = file.toPath();
@@ -260,8 +263,10 @@ public abstract class ConfigFile {
 			} catch (AtomicMoveNotSupportedException e) {
 				Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
 			}
+			return true;
 		} catch (IOException e) {
 			SMPPlugin.getInstance().getLogger().log(Level.SEVERE, "Could not save config: " + file.getName(), e);
+			return false;
 		}
 	}
 

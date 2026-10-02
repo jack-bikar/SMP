@@ -37,6 +37,15 @@ commands:
     aliases: [nickname]
     permission: smp.nick
     permission-message: You don't have permission to use nicknames.
+  trade:
+    description: Trade items with another player
+    permission: smp.trade
+    permission-message: You don't have permission to trade.
+  auction:
+    description: Auction house - put items up and make offers with items
+    aliases: [ah, auctions]
+    permission: smp.auction
+    permission-message: You don't have permission to use the auction house.
   arena:
     description: Arena management commands
     permission: smp.admin.arena
@@ -52,6 +61,8 @@ permissions:
       smp.duel.*: true
       smp.nick: true
       smp.tp.bypass: true
+      smp.trade: true
+      smp.auction: true
   smp.command.*:
     description: All SMP command permissions
     default: op
@@ -78,12 +89,16 @@ permissions:
       smp.admin.arena: true
       smp.admin.reload: true
       smp.admin.duel: true
+      smp.admin.auction: true
       smp.nick.others: true
   smp.admin.arena:
     description: Manage duel arenas
     default: op
   smp.admin.duel:
     description: End any duel with /duel cancel <player>
+    default: op
+  smp.admin.auction:
+    description: Take down anyone's auction listing (everything goes back to its owners)
     default: op
   smp.admin.reload:
     description: Reload the SMP settings with /smp reload
@@ -100,6 +115,12 @@ permissions:
   smp.nick.others:
     description: Reset other players' nicknames with /nick reset <player>
     default: op
+  smp.trade:
+    description: Trade items with other players
+    default: true
+  smp.auction:
+    description: Use the auction house
+    default: true
   smp.tp.bypass:
     description: Teleport to players without sending a request
     default: op

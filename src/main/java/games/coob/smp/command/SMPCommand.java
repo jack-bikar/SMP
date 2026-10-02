@@ -100,6 +100,19 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 			ColorUtil.sendMessage(sender, "&7  /nick reset &7- Back to your normal name");
 			ColorUtil.sendMessage(sender, "");
 		}
+		if (Settings.TradeSection.ENABLED) {
+			ColorUtil.sendMessage(sender, "&e/trade &7- Pick a player to trade items with");
+			ColorUtil.sendMessage(sender, "&7  /trade <player> &7- Send a trade request");
+			ColorUtil.sendMessage(sender, "&7  /trade accept|deny <player> &7- Answer a trade request");
+			ColorUtil.sendMessage(sender, "");
+		}
+		if (Settings.AuctionSection.ENABLED) {
+			ColorUtil.sendMessage(sender, "&e/auction &7- Auction house: offers are made with items (alias: /ah)");
+			ColorUtil.sendMessage(sender, "&7  /ah sell [what you want] &7- Put items up");
+			ColorUtil.sendMessage(sender, "&7  /ah mine &7- Your listings and their offers");
+			ColorUtil.sendMessage(sender, "&7  /ah collect &7- Items waiting for you");
+			ColorUtil.sendMessage(sender, "");
+		}
 		ColorUtil.sendMessage(sender, "&e/inv <inv|enderchest|armour|clear> <player> &7- Edit inventories (admin)");
 		ColorUtil.sendMessage(sender, "");
 
@@ -112,6 +125,8 @@ public class SMPCommand implements CommandExecutor, TabCompleter {
 			ColorUtil.sendMessage(sender, "&7- &eLocator Bar Tracking &7- Track players and your death spot");
 		if (Settings.DuelSection.ENABLE_DUELS)
 			ColorUtil.sendMessage(sender, "&7- &eDuels &7- 1v1 and team fights in the wild or in arenas");
+		if (Settings.TradeSection.ENABLED || Settings.AuctionSection.ENABLED)
+			ColorUtil.sendMessage(sender, "&7- &eTrading &7- Swap items safely, or auction them for offers");
 		ColorUtil.sendMessage(sender, "&6&l=== === ===");
 		return true;
 	}

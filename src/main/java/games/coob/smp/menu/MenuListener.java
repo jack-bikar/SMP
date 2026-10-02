@@ -9,6 +9,7 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.inventory.PlayerInventory;
 
 /**
  * Routes inventory events to the {@link SimpleMenu} that owns the inventory.
@@ -31,11 +32,14 @@ public final class MenuListener implements Listener {
 
 		if (!menu.isEditable()) {
 			event.setCancelled(true);
-			// Only react to clicks in the menu itself, not the player's own inventory
-			if (event.getClickedInventory() != menu.getInventory())
-				return;
 			// A double-click also sends single clicks; hotbar keys aren't button presses
 			if (event.getClick() == ClickType.DOUBLE_CLICK || event.getClick() == ClickType.NUMBER_KEY)
+				return;
+			if (event.getClickedInventory() instanceof PlayerInventory) {
+				menu.onPlayerInventoryClick(player, event.getSlot(), event.getCurrentItem(), event.getClick());
+				return;
+			}
+			if (event.getClickedInventory() != menu.getInventory())
 				return;
 		} else if (event.getClickedInventory() == menu.getInventory() && menu.isLockedSlot(event.getSlot())) {
 			event.setCancelled(true);
